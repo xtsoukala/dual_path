@@ -42,7 +42,7 @@ roles_size = len(roles)
 hidden_size = 20
 context_size = hidden_size
 compress_size = 10 # is it coincidence that it's hidden/2?
-# I guess compress_size and c_compress_size need to have the same size?
+# I guess compress_size and c_compress_size need to have the same size
 c_compress_size = compress_size 
 
 #sent_pos

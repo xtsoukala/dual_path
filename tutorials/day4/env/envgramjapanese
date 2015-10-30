@@ -1,0 +1,58 @@
+categories{  # these are the semantic categories that are used for selecting words for messages
+DET 	    DET the a 
+LIVING      NOUN man woman cat dog boy girl father mother sister brother nurse teacher 
+NONLIVING   NOUN ball stick toy kite
+INTRANSVERB VERB sleep jump walk run
+TRANSVERB   VERB push hit kick carry
+DATIVEVERB  VERB give throw show present
+NOVEL	    VERB glorp
+GA	    GA ga
+NI	    NI ni
+WO	    WO wo
+TA	    TA ta
+TE	    TE te
+ITA	    ITA ita
+IRU	    IRU iru
+PERIOD	    PER .
+#event semantics
+TENSE	    PRES PAST
+ASPECT	    SIMP PROG
+XX	    XX
+YY	    YY
+ZZ	    ZZ
+CC	    CC
+DD	    DD
+#roles:	    A X Y Z B C
+}
+
+constructions{  ## these are the message-sentence pairs.  
+
+mess: A=INTRANSVERB Y=LIVING,DET E=TENSE,ASPECT,YY
+sent: Y0 ga A0 E0 E1 .
+#     the cat sleep -s -> cat-ga sleep
+
+mess: A=TRANSVERB X=LIVING,DET Y=NONLIVING,DET  E=TENSE,ASPECT,XX,YY
+sent: X0 ga Y0 wo A0 E0 E1 .
+#     the dog throw -s the stick -> dog ga stick wo throw
+
+mess: A=TRANSVERB X=LIVING,DET Y=NONLIVING,DET  E=TENSE,ASPECT,YY,-1,XX 
+sent: Y0 wo X0 ga A0 E0 E1 .
+#     the stick is throw -par by the dog -> stick wo dog ga throw
+
+mess: A=DATIVEVERB X=LIVING,DET Y=NONLIVING,DET Z=LIVING,DET E=TENSE,ASPECT,XX,YY,-1,ZZ
+sent: X0 ga Y0 wo Z0 ni A0 E0 E1 .
+#     the girl throw -s the stick to the dog -> girl ga stick wo dog ni throw
+
+mess: A=DATIVEVERB X=LIVING,DET Y=NONLIVING,DET Z=LIVING,DET E=TENSE,ASPECT,XX,ZZ,YY
+sent: X0 ga Z0 ni Y0 wo A0 E0 E1 .
+#     the girl throw -s the dog the stick -> girl ga dog ni stick wo throw 
+
+}
+
+# language-specific rewrite rules
+sent-rewrite{ 
+s/ PRES PROG/ te iru/;
+s/ PAST PROG/ te ita/;
+s/ PRES SIMP//;
+s/ PAST SIMP/ ta/;
+}
