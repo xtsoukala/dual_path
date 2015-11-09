@@ -80,5 +80,13 @@ def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 
 
-def sigmoid_prime(x):
+def sigmoid_derivative(x):
     return sigmoid(x)*(1-sigmoid(x))
+
+''' in case we use them instead of sigmoid
+def tanh(x):
+    return np.tanh(x)
+
+def tanh_prime(x):
+    return 1.0 - x**2 '''
+
