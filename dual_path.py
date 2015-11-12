@@ -36,6 +36,7 @@ extra_messages_lab = ["THROW(BOY,BOX,DOG)",
 # 4 input layers
 event_sem_size = len(event_sem)
 
+# if we want to define :det etc, we can convert the lexicon into a dict of lists, e.g. 'det': ['the', 'a']
 lexicon_size = len(lexicon)
 concept_size = len(concepts)
 roles_size = len(roles)
