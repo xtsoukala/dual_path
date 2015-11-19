@@ -1,22 +1,20 @@
-import math
-#import numpy as np
+from nn import NeuralNetwork
+import os
 
-# lexicon_str = "dog cat chases bites the a is are"
-# lexicon = lexicon_str.split()
-# It's better to load from file. Keep the lexicon string as toy
+infolder = 'chang_input'
 fname = 'lexicon.in'
-lexicon = [line.rstrip('\n') for line in open(fname)]
+lexicon = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
 # Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
 # "where" is renamed to "role" and "what" to concept 
 fname = 'roles.in'
-roles = [line.rstrip('\n') for line in open(fname)]
+roles = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
 fname = 'concepts.in'
-concepts = [line.rstrip('\n') for line in open(fname)]
+concepts = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
 fname = 'event-sem.in'
-event_sem = [line.rstrip('\n') for line in open(fname)]
+event_sem = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
 ''' taken from the Processing code
 syntactic_categories = "N N N N N N V V V D D P S"
@@ -35,8 +33,7 @@ extra_messages_lab = ["THROW(BOY,BOX,DOG)",
 
 # 4 input layers
 event_sem_size = len(event_sem)
-
-# if we want to define :det etc, we can convert the lexicon into a dict of lists, e.g. 'det': ['the', 'a']
+# if we want to define :det etc later, we can convert the lexicon into a dict of lists, e.g. 'det': ['the', 'a']
 lexicon_size = len(lexicon)
 concept_size = len(concepts)
 roles_size = len(roles)
@@ -73,21 +70,20 @@ context_size = hidden_size
 compress_size = 10  # is it coincidence that it's hidden/2?
 c_compress_size = compress_size
 
-# check the paper to see what the learning rate is
-learn_rate = 0.1
+# Learning rate started at 0.2 and was reduced linearly until it reached 0.05 at 2000 epochs,
+#  where it was fixed for the rest of training
+learn_rate = 0.2
+epochs = 2000
+doug_momentum = 0.9
+# batch size = len(training_set) , 501 in Chang 2002
+
+# all other units except context have bias
+# context units are elman units that were initialized to 0.5 at the beginning of a sentence.
+context = 0.5
 
 
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
-
-
-def sigmoid_derivative(x):
-    return sigmoid(x)*(1-sigmoid(x))
-
-''' in case we use them instead of sigmoid
-def tanh(x):
-    return np.tanh(x)
-
-def tanh_prime(x):
-    return 1.0 - x**2 '''
-
+nn = NeuralNetwork(2, 2, 2, hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
+                   output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
+for i in range(10000):
+    nn.train([0.05, 0.1], [0.01, 0.99])
+    print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
