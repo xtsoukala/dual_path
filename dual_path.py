@@ -1,6 +1,21 @@
 from nn import NeuralNetwork
 import os
 
+''' From Chang F., 2002:
+    Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
+    doug momentum: similar to standard momentum descent with the exception that the pre-momentum weight step
+    vector is bounded so that its length cannot exceed 1.0 (Rohde, 1999).
+
+    Batch size was set to be the size of the training set
+
+    The cwhere and word units used the soft-max activation function.
+    Soft-max units caused the output to be passed through an exponential function, which magnified small differences,
+    and the result was then normalized (leaving only the most activated unit, and squashing the activation of all
+    the weaker competitors). Because soft-max units were used for the word output units, the error function for these
+    units was the divergence function (sum over all units: target × log(target/output)).
+    All other units used the logistic activation function.
+'''
+
 infolder = 'chang_input'
 fname = 'lexicon.in'
 lexicon = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
@@ -16,22 +31,11 @@ concepts = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 fname = 'event-sem.in'
 event_sem = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
-''' taken from the Processing code
-syntactic_categories = "N N N N N N V V V D D P S"
-code_message = "ACTION CHASE AGENT DOG PATIENT CAT"  
-basic_sentence = "the boy threw the box to the dog ."
-basic_message = "THROW(BOY,BOX,DOG)"
-prime_sentence = "a girl showed a cat a ball ."
-basic_roles_list = "_ AGENT ACTION _ PATIENT _ _ GOAL _ _ _"
-basic_concept_list = "_ BOY THROW _ BOX _ _ DOG _ _ _"
-extra_messages = ["ACTION THROW AGENT BOY PATIENT BOX GOAL DOG",
-                 "ACTION SHOW AGENT GIRL PATIENT BALL GOAL BOY",
-                 "ACTION PUSH AGENT DOG PATIENT BALL GOAL BOX"]
-extra_messages_lab = ["THROW(BOY,BOX,DOG)",
-                      "SHOW(GIRL,BALL,BOY)",
-                      "PUSH(DOG, BALL, BOX)"]'''
-
 # 4 input layers
+
+# the event-semantics unit is the only unit that provides information about the target sentence order
+# e.g. for the dative sentence "A man bake a cake for the cafe| there are 3 event-sem units:
+# CAUSE, CREATE, TRANSFER
 event_sem_size = len(event_sem)
 # if we want to define :det etc later, we can convert the lexicon into a dict of lists, e.g. 'det': ['the', 'a']
 lexicon_size = len(lexicon)
@@ -71,7 +75,7 @@ compress_size = 10  # is it coincidence that it's hidden/2?
 c_compress_size = compress_size
 
 # Learning rate started at 0.2 and was reduced linearly until it reached 0.05 at 2000 epochs,
-#  where it was fixed for the rest of training
+#  where it was fixed for the rest of training. Values taken from Chang F., 2002
 learn_rate = 0.2
 epochs = 2000
 doug_momentum = 0.9
@@ -81,6 +85,15 @@ doug_momentum = 0.9
 # context units are elman units that were initialized to 0.5 at the beginning of a sentence.
 context = 0.5
 
+# role-concept and c_role-c_concept links are used to store the message.
+#
+
+
+def clear_message():
+    # TODO: before the production of each sentence, the links between role and concept units are set to 0
+    # initially, and then individual links between roles and concepts were made by setting the weight to 6 (why 6?)
+    # Same weight for c_role, c_concept
+    initialize = True
 
 nn = NeuralNetwork(2, 2, 2, hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
                    output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
