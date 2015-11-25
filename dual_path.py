@@ -1,5 +1,6 @@
-from nn import NeuralNetwork
 import os
+from nn import NeuralNetwork
+from collections import defaultdict
 
 ''' From Chang F., 2002:
     Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
@@ -19,14 +20,19 @@ import os
 infolder = 'chang_input'
 fname = 'lexicon.in'
 lexicon = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
+# TODO: Change concept/lexicon to ignore 1st line (header) and lines that start with colon.
+# TODO: Then create list of ranges, eg. l = {'noun': range(0,3), 'verb':range(4,6)}. Cannot be one liner :(
 
 # Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
-# "where" is renamed to "role" and "what" to concept 
+# "where" is renamed to "role" and "what" to concept
+
+# if lexicon-concepts are always mapped 1-to-1 we can simply take lexicon and uppercase it
+# concepts = [x.upper() for x in lexicon], otherwise:
+fname = 'concepts.in'
+concepts = [line.rstrip('\n') for line in open(os.path.join(infolder, fname)) if not line.startswith(":")]
+
 fname = 'roles.in'
 roles = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
-
-fname = 'concepts.in'
-concepts = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 
 fname = 'event-sem.in'
 event_sem = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
@@ -95,8 +101,16 @@ def clear_message():
     # Same weight for c_role, c_concept
     initialize = True
 
+# TRAIN model
+
 nn = NeuralNetwork(2, 2, 2, hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
                    output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
-for i in range(10000):
-    nn.train([0.05, 0.1], [0.01, 0.99])
-    print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
+
+trainfile = 'train.en'
+with open(os.path.join(infolder, trainfile)) as f:
+    for line in f:
+        nn.train([0.05, 0.1], [0.01, 0.99])
+        print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
+
+
+l = {'noun': range(0,3), 'verb':range(4,6)}

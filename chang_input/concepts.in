@@ -1,3 +1,4 @@
+:lines that start with colon are ignored. We use them to keep the categories seperated  (det, noun, verb etc)
 :DET
 THE
 A
