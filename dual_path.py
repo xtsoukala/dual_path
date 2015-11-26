@@ -23,6 +23,27 @@ lexicon = [line.rstrip('\n') for line in open(os.path.join(infolder, fname))]
 # TODO: Change concept/lexicon to ignore 1st line (header) and lines that start with colon.
 # TODO: Then create list of ranges, eg. l = {'noun': range(0,3), 'verb':range(4,6)}. Cannot be one liner :(
 
+
+pos = dict()
+lexicon = []
+prev_pos = ''
+pos_start = pos_end = 0
+with open(os.path.join(infolder, fname)) as f:
+    # skip first line (header)
+    next(f)
+    for line in f:
+        line = line.rstrip('\n')
+        print line
+        if line.startswith(":"):
+            if prev_pos:
+                pos[prev_pos] = range(pos_start, pos_end)
+                pos_start = pos_end
+            prev_pos = line[1:]
+        else:
+            lexicon.append(line)
+            pos_end += 1
+
+
 # Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
 # "where" is renamed to "role" and "what" to concept
 
@@ -92,7 +113,16 @@ doug_momentum = 0.9
 context = 0.5
 
 # role-concept and c_role-c_concept links are used to store the message.
-#
+
+
+def pos_lookup(pos_list, index):
+    pos_list = {'noun': range(0, 3), 'verb': range(4, 6)}
+    # l will be part of the class, so self.pos
+    for pos, idx in pos_list.iteritems():
+        if index in idx:
+            return pos
+    # in (rare) case index not available
+    return False
 
 
 def clear_message():
@@ -111,6 +141,3 @@ with open(os.path.join(infolder, trainfile)) as f:
     for line in f:
         nn.train([0.05, 0.1], [0.01, 0.99])
         print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
-
-
-l = {'noun': range(0,3), 'verb':range(4,6)}
