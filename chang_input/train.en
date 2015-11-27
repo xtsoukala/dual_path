@@ -1,7 +1,3 @@
-#roles: A X Y Z B C
-#semantics: :DET THE A :NOUN MAN WOMAN CAT DOG BOY GIRL FATHER MOTHER SISTER BROTHER NURSE TEACHER BALL STICK TOY KITE :VERB SLEEP JUMP WALK RUN PUSH HIT KICK CARRY GIVE THROW SHOW PRESENT GLORP :AUX IS ARE WAS WERE :BY BY :THAT THAT :TO TO :PER . :PAR -PAR :ING -ING :SS -S :ED -ED :BEING BEING
-#lexicon: :det the a :noun man woman cat dog boy girl father mother sister brother nurse teacher ball stick toy kite :verb sleep jump walk run push hit kick carry give throw show present glorp :aux is are was were :by by :that that :to to :per . :par -par :ing -ing :ss -s :ed -ed :being being
-#eventsemantics: PRES PAST SIMP PROG XX YY ZZ CC DD
 name:{ the father is throw -ing the woman a kite . . }
 #mess:   A=THROW X=FATHER,THE Y=KITE,A Z=WOMAN,THE E=PRES,PROG,XX,ZZ,YY  
 proc:{ clear ;link 0 28 ;link 1 9 1 ;link 2 18 2 ;link 3 4 1 ;tlink 0 3 4 6 5;} 
