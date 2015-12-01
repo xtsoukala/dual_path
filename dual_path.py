@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 import os
 from nn import NeuralNetwork
 
-''' From Chang F., 2002:
+""" From Chang F., 2002:
     Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
     doug momentum: similar to standard momentum descent with the exception that the pre-momentum weight step
     vector is bounded so that its length cannot exceed 1.0 (Rohde, 1999).
@@ -14,7 +15,7 @@ from nn import NeuralNetwork
     the weaker competitors). Because soft-max units were used for the word output units, the error function for these
     units was the divergence function (sum over all units: target × log(target/output)).
     All other units used the logistic activation function.
-'''
+"""
 
 
 class DualPath:
@@ -35,7 +36,9 @@ class DualPath:
 
         self.event_sem_size = len(self.event_sem)
         self.lexicon_size = len(self.lexicon)
+        # basically, lexicon size is the same as concept size... or not?
         self.concept_size = len(self.concepts)
+
         self.roles_size = len(self.roles)
         # same for c
         self.c_lexicon_size = self.lexicon_size
@@ -82,11 +85,11 @@ class DualPath:
         learn_level = 300'''
 
     def _read_lexicon_and_pos(self, fname):
-        '''
+        """
         :param fname: the name of the file that contains a list of categories (eg. noun, verb) and the lexicon
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
         (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
-        '''
+        """
         pos = dict()
         lexicon = []
         prev_pos = ''
@@ -97,7 +100,6 @@ class DualPath:
             next(f)
             for line in f:
                 line = line.rstrip('\n')
-                print line
                 if line.startswith(":"):
                     if prev_pos:
                         pos[prev_pos] = range(pos_start, pos_end)
@@ -109,20 +111,30 @@ class DualPath:
         return pos, lexicon
 
     def _read_concepts(self, fname):
-        ''' Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
+        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
         "where" is renamed to "role" and "what" to concept
 
         If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon and uppercase it
         i.e. concepts = [x.upper() for x in lexicon], otherwise all we need to do is read the file
-        and ignore the lines that start with a colon'''
+        and ignore the lines that start with a colon """
         return [line.rstrip('\n') for line in open(os.path.join(self.folder, fname))
-                    if not line.startswith(":")]
+                if not line.startswith(":")]
 
     def _read_file_to_list(self, fname):
         """
         We simply need to read the roles or event-semantics files into a list
         """
         return [line.rstrip('\n') for line in open(os.path.join(self.folder, fname))]
+
+    def role_index(self, role):
+        """
+        :param role: the name of the role (e.g. ACTION, AGENT, PATIENT)
+        :return: the index from the roles list.
+        Warning: intentionally, there was no Exception added in case the role doesn't exist in the
+        predefined list of roles. In that case, an error should be raised as it would be critical.
+        In the future, we can automatically add new roles to the list.
+        """
+        return self.roles.index(role)
 
     def pos_lookup(self, word_idx):
         """
@@ -135,21 +147,61 @@ class DualPath:
         # in (hopefully rare) case that the word index not available
         return False
 
+    def word_lookup(self, word_idx):
+        return self.lexicon[word_idx]
+
     def word_index(self, word):
         return self.lexicon.index(word)
 
+    def event_index(self, event):
+        return self.event_sem.index(event)
+
+    def concept_index(self, concept):
+        return self.concepts.index(concept)
+
+    def activate_sentence(self, sentence):
+        """
+        :param sentence: intended sentence from train file
+        :return: list of activations in the lexicon
+        """
+        return [self.word_index(w) for w in sentence.split()]
+
+    def activate_message(self, message):
+        """
+        :param message: string, e.g. "A=CARRY X=FATHER,THE Y=STICK,A E=PAST,PROG,XX,YY" which maps roles (A,X,Y) with
+         concepts and also gives information about the event-semantics (E)
+        """
+        self.clear_message()
+        event_list = []
+        for info in message.split():
+            i = info.split("=")
+            if i[0] == "E":
+                for event in i[1].split(","):
+                    event_list.append(self.event_index(event))
+                self.link_event_sem(event_list)
+            else:
+                concepts = []
+                for concept in i[1].split(","):
+                    concepts.append(self.concept_index(concept))
+                self.link_role_concept(self.role_index(i[0]), concepts)
+
+    def link_event_sem(self, event_list):
+        # TODO: link them
+        print event_list
+
+    def link_role_concept(self, role, concepts):
+        # TODO: link them
+        print role, concepts
+
     def clear_message(self):
         # TODO: before the production of each sentence, the links between role and concept units are set to 0
-        # initially, and then individual links between roles and concepts were made by setting the weight to 6 (why 6?)
+        # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
         # Same weight for c_role, c_concept
         initialize = True
 
     def train(self, trainfile = 'train.en'):
-        '''nn = NeuralNetwork(2, 2, 2, hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
-                   output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)'''
-
-        # TODO: Well, obviously check the NN
-        nn = NeuralNetwork()
+        # TODO: Well, obviously, check the NN
+        nn = NeuralNetwork(5, 4, 1)
 
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
@@ -158,4 +210,6 @@ class DualPath:
                 # print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
 
 
-dualp = DualPath()
+def __main__():
+    dualp = DualPath()
+    dualp.lexicon

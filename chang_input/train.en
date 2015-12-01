@@ -1,29 +1,8 @@
 name:{ the father is throw -ing the woman a kite . . }
 #mess:   A=THROW X=FATHER,THE Y=KITE,A Z=WOMAN,THE E=PRES,PROG,XX,ZZ,YY  
-proc:{ clear ;link 0 28 ;link 1 9 1 ;link 2 18 2 ;link 3 4 1 ;tlink 0 3 4 6 5;} 
-11
-i:{targ 1.0} 1
-t:{word 1.0} 1
-i:{targ 1.0} 9
-t:{word 1.0} 9
-i:{targ 1.0} 32
-t:{word 1.0} 32
-i:{targ 1.0} 28
-t:{word 1.0} 28
-i:{targ 1.0} 41
-t:{word 1.0} 41
-i:{targ 1.0} 1
-t:{word 1.0} 1
-i:{targ 1.0} 4
-t:{word 1.0} 4
-i:{targ 1.0} 2
-t:{word 1.0} 2
-i:{targ 1.0} 18
-t:{word 1.0} 18
-i:{targ 1.0} 39
-t:{word 1.0} 39
-i:{targ 1.0} 39
-t:{word 1.0} 39;
+proc:{ clear ;link 0 28 ;link 1 9 1 ;link 2 18 2 ;link 3 4 1 ;tlink 0 3 4 6 5;}
+
+
 name:{ the father was carry -ing a stick . . }
 #mess:   A=CARRY X=FATHER,THE Y=STICK,A E=PAST,PROG,XX,YY  
 proc:{ clear ;link 0 26 ;link 1 9 1 ;link 2 16 2 ;tlink 1 3 4 5;} 
