@@ -225,11 +225,11 @@ class Elman:
 
 
 def sigmoid(x):
-    return 1.0 / (1.0 + math.exp(-x))
+    return 1.0/(1.0 + math.exp(-x))
 
 
 def sigmoid_derivative(x):
-    return x * (1.0 - x)
+    return x*(1.0 - x)
 
 if __name__ == '__main__':
     # BEVector is the symbol used to "B"egin or "E"nd a sequence.
@@ -240,7 +240,7 @@ if __name__ == '__main__':
                     [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
                     [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]
 
-    NUM_TESTS = 10000
+    ''''NUM_TESTS = 10000
     NUM_SAMPLES = 4
     INPUT_NEURONS = 6
     HIDDEN_NEURONS = 3
@@ -250,7 +250,13 @@ if __name__ == '__main__':
     TRAINING_REPS = 2000
 
     elman = Elman(NUM_TESTS, NUM_SAMPLES, INPUT_NEURONS, HIDDEN_NEURONS, OUTPUT_NEURONS, CONTEXT_NEURONS,
-                  LEARNING_RATE, TRAINING_REPS, BE_VECTOR, SAMPLE_INPUT)
+                  LEARNING_RATE, TRAINING_REPS, BE_VECTOR, SAMPLE_INPUT)'''
+
+    learn_rate = 0.2
+    epochs = 2000
+
+    elman = Elman(num_tests=0, sample_size=0, input_size=0, hidden_size=0, output_size=0, context_size=0,
+                  learning_rate=learn_rate, epochs=epochs, beArray=[], sample_input=[])
     elman.initialize_arrays()
     elman.train_network()
     elman.test_network()
