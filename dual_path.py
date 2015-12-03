@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
-from nn import NeuralNetwork
+from elman_network import Elman
 
 """ From Chang F., 2002:
     Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
@@ -16,6 +16,27 @@ from nn import NeuralNetwork
     units was the divergence function (sum over all units: target × log(target/output)).
     All other units used the logistic activation function.
 """
+''' http://tedlab.mit.edu/~dr/Lens/Commands/addGroup.html
+    c_lexicon_size: addGroup cword $lexSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED OUT_NORM
+    c_compress_size: addGroup ccompress $ccompressSize -BIASED
+    c_concept_size: addGroup cwhat $semSize OUTPUT TARGET_COPY -BIASED -WRITE_OUTPUTS
+    c_roles_size: addGroup cwhere2 $whereSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED
+    [why 2?] addGroup cwhere $whereSize SOFT_MAX -BIASED
+    event_sem_size: addGroup eventsem $eventsemSize LINEAR -BIASED
+    context_size: addGroup context $contextSize ELMAN OUT_INTEGR -BIASED
+    hidden_size: addGroup hidden $hiddenSize -BIASED
+    role_size: addGroup where $whereSize -BIASED
+    concept_size: addGroup what $semSize -BIASED
+    compress_size: addGroup compress $compressSize -BIASED
+    (how do cword and targ differ?) : addGroup targ $lexSize INPUT
+    lexicon_size: addGroup word $lexSize OUTPUT SOFT_MAX STANDARD_CRIT USE_OUTPUT_HIST USE_TARGET_HIST -BIASED
+    sent_pos
+    int time
+    direction = 2
+    mode = 0
+    mode_type = 0
+    learn_level = 300
+'''
 
 
 class DualPath:
@@ -29,10 +50,13 @@ class DualPath:
 
         """ Dual Path has 4 input layers.
         The event-semantics unit is the only unit that provides information about the target sentence order
-        e.g. for the dative sentence "A man bake a cake for the cafe| there are 3 event-sem units:
+        e.g. for the dative sentence "A man bake a cake for the cafe" there are 3 event-sem units:
         CAUSE, CREATE, TRANSFER
 
-        role-concept and c_role-c_concept links are used to store the message """
+        role-concept and c_role-c_concept links are used to store the message
+
+        role, concept and c_concept units are UNbiased to make them more input driven (all other units excpet
+        concept had bias) """
 
         self.event_sem_size = len(self.event_sem)
         self.lexicon_size = len(self.lexicon)
@@ -40,6 +64,7 @@ class DualPath:
         self.concept_size = len(self.concepts)
 
         self.roles_size = len(self.roles)
+        self.word = self.prev_word = -1
         # same for c
         self.c_lexicon_size = self.lexicon_size
         self.c_concept_size = self.concept_size
@@ -56,33 +81,14 @@ class DualPath:
         # where it was fixed for the rest of training. Values taken from Chang F., 2002
         self.learn_rate = 0.2
         self.epochs = 2000
+        # Doug momentum is similar to standard momentum descent with the exception that the pre-momentum weight step
+        # vector is bounded so that its length cannot exceed 1.0
         self.doug_momentum = 0.9
         # batch size = len(training_set) , 501 in Chang 2002
 
         # all other units except context have bias
         # context units are Elman units that were initialized to 0.5 at the beginning of a sentence.
         self.context = 0.5
-
-        ''' http://tedlab.mit.edu/~dr/Lens/Commands/addGroup.html
-        c_lexicon_size: addGroup cword $lexSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED OUT_NORM
-        c_compress_size: addGroup ccompress $ccompressSize -BIASED
-        c_concept_size: addGroup cwhat $semSize OUTPUT TARGET_COPY -BIASED -WRITE_OUTPUTS
-        c_roles_size: addGroup cwhere2 $whereSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED
-        [why 2?] addGroup cwhere $whereSize SOFT_MAX -BIASED
-        event_sem_size: addGroup eventsem $eventsemSize LINEAR -BIASED
-        context_size: addGroup context $contextSize ELMAN OUT_INTEGR -BIASED
-        hidden_size: addGroup hidden $hiddenSize -BIASED
-        role_size: addGroup where $whereSize -BIASED
-        concept_size: addGroup what $semSize -BIASED
-        compress_size: addGroup compress $compressSize -BIASED
-        (how do cword and targ differ?) : addGroup targ $lexSize INPUT
-        lexicon_size: addGroup word $lexSize OUTPUT SOFT_MAX STANDARD_CRIT USE_OUTPUT_HIST USE_TARGET_HIST -BIASED'''
-        '''sent_pos
-        int time
-        direction = 2
-        mode = 0
-        mode_type = 0
-        learn_level = 300'''
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -197,11 +203,15 @@ class DualPath:
         # TODO: before the production of each sentence, the links between role and concept units are set to 0
         # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
         # Same weight for c_role, c_concept
-        initialize = True
+
+        self.context = 0.5
+        self.prev_word = 0
+
 
     def train(self, trainfile = 'train.en'):
         # TODO: Well, obviously, check the NN
-        nn = NeuralNetwork(5, 4, 1)
+        # 1 hidden layer, 1 context layer
+        nn = Elman(5, 1, 1)
 
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
