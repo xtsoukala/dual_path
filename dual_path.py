@@ -73,7 +73,8 @@ class DualPath:
         # Hidden layers (context and hidden), values are taken from dualpath3.in
         # compress is also hidden
         self.hidden_size = 20
-        self.context_size = self.hidden_size
+        # According to Chang, context layer is roughly hidden/3
+        self.context_size = round(self.hidden_size / 3, -1)
         self.compress_size = 10  # is it coincidence that it's hidden/2?
         self.c_compress_size = self.compress_size
 
@@ -213,9 +214,16 @@ class DualPath:
         # 1 hidden layer, 1 context layer
         nn = Elman(5, 1, 1)
 
+        # the first line is the target sentence and the second line contains the message
+        sentence = ''
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
                 print line
+                if line.startswith("#mess:"):
+                    message = line.split('#mess:   ')[1]
+                    self.link_sentences(sentence, message)
+                else:
+                    sentence = line.rstrip()
                 # nn.train([0.05, 0.1], [0.01, 0.99])
                 # print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
 

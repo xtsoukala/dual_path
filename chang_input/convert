@@ -1,0 +1,1 @@
+grep -i "name:{.*\|#mess.*" train.en > train_c.en
