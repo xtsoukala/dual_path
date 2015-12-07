@@ -7,19 +7,24 @@ and on articles by Jeffrey L. Elman, Laurene Fausett, and Ben Krose & Patrick va
 
 
 class Elman:
-    def __init__(self, num_tests, sample_size, input_size, hidden_size, output_size, context_size, learning_rate,
-                 epochs, beArray, sample_input):
-        self.num_tests = num_tests
-        self.sample_size = sample_size
-        self.input_size = input_size
+    def __init__(self, lexicon_size, hidden_size, output_size, learning_rate,
+                 epochs, train_file, test_file):
+        #self.num_tests = num_tests
+        #self.sample_size = sample_size
+        # in the case of dual path, input is the activated word from the lexicon
+        self.input_size = lexicon_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.context_size = context_size
+        # isn't context size same to hidden? Otherwise how are values copied?
+        self.context_size = self.hidden_size
+
         self.learn_rate = learning_rate
         self.epochs = epochs
 
-        self.mBEArray = beArray
-        self.sample_input = sample_input
+        #self.mBEArray = beArray
+        #self.sample_input = sample_input
+        self.train_file = train_file
+        self.test_file = test_file
 
         self.weight_ih = []  # Input to Hidden Weights (with Biases).
         self.weight_ch = []  # Context to Hidden Weight (with Biases).
@@ -29,47 +34,60 @@ class Elman:
         # activations
         self.input = []
         self.hidden = []
+        self.predicted = []
+        # actual target
         self.target = []
-        self.actual = []
         self.context = []
 
         # unit errors
         self.err_out = []
         self.err_hidden = []
 
-    def initialize_arrays(self):
-        for i in range(self.input_size + 1):  # The extra element represents the bias node
+        # leave it as a variable in case we want to modify it, though in Chang, 2002 it's always 0.5
+        self.context = 0.5
+
+        self.initialize()
+
+    def initialize(self):
+        # The extra element represents the bias node
+
+        # initialize input to hidden weights
+        for i in range(self.input_size + 1):
             self.weight_ih.append([0.0] * self.hidden_size)
             for j in range(self.hidden_size):
-                # Assign a random weight value between -0.5 and 0.5
+                # Assign random weight between -0.5 and 0.5
                 self.weight_ih[i][j] = random.random() - 0.5
 
+        # context to hidden
         for i in range(self.context_size + 1):
             self.weight_ch.append([0.0] * self.hidden_size)
             for j in range(self.hidden_size):
                 self.weight_ch[i][j] = random.random() - 0.5
 
+        # hidden to output
         for i in range(self.hidden_size + 1):
             self.weight_ho.append([0.0] * self.output_size)
             for j in range(self.output_size):
                 self.weight_ho[i][j] = random.random() - 0.5
 
+        # hidden to context
         for i in range(self.output_size + 1):
             self.weight_hc.append([0.0] * self.context_size)
             for j in range(self.context_size):
-                # These are all fixed weights set to 0.5
-                self.weight_hc[i][j] = 0.5
+                # This is always fixed (default set to 0.5)
+                self.weight_hc[i][j] = self.context
 
         self.input = [0.0] * self.input_size
         self.hidden = [0.0] * self.hidden_size
+        self.predicted = [0.0] * self.output_size
         self.target = [0.0] * self.output_size
-        self.actual = [0.0] * self.output_size
         self.context = [0.0] * self.context_size
+
         self.err_out = [0.0] * self.output_size
         self.err_hidden = [0.0] * self.hidden_size
 
     def feed_forward(self):
-        # Calculate input and context connections to hidden layer.
+        # Calculate input AND context connections to hidden layer
         for j in range(self.hidden_size):
             total = 0.0
             for i in range(self.input_size):
@@ -78,56 +96,75 @@ class Elman:
             for i in range(self.context_size):
                 total += self.context[i] * self.weight_ch[i][j]
 
-            # Add in bias.
+            # add bias
             total += self.weight_ih[self.input_size][j]
             total += self.weight_ch[self.context_size][j]
             self.hidden[j] = sigmoid(total)
 
-        # Calculate the hidden to output layer.
+        # Calculate hidden to output layer
         for j in range(self.output_size):
             total = 0.0
             for i in range(self.hidden_size):
                 total += self.hidden[i] * self.weight_ho[i][j]
 
-            # Add in bias.
+            # add bias
             total += self.weight_ho[self.hidden_size][j]
-            self.actual[j] = sigmoid(total)
+            self.target[j] = sigmoid(total)
 
         # Copy output of the hidden to context layer.
         for i in range(self.context_size):
             self.context[i] = self.hidden[i]
-        return
 
     def back_propagate(self):
         # Calculate the output layer error (step 3 for output cell).
         for j in range(self.output_size):
-            self.err_out[j] = (self.target[j] - self.actual[j]) * sigmoid_derivative(self.actual[j])
+            self.err_out[j] = (self.predicted[j] - self.target[j]) * sigmoid_derivative(self.target[j])
 
         # Calculate the hidden layer error (step 3 for hidden cell).
         for i in range(self.hidden_size):
             self.err_hidden[i] = 0.0
             for j in range(self.output_size):
                 self.err_hidden[i] += self.err_out[j] * self.weight_ho[i][j]
-
             self.err_hidden[i] *= sigmoid_derivative(self.hidden[i])
 
         # Update the weights for the output layer (step 4).
         for j in range(self.output_size):
             for i in range(self.hidden_size):
                 self.weight_ho[i][j] += (self.learn_rate * self.err_out[j] * self.hidden[i])
-
-            # Update the bias.
+            # Update the bias
             self.weight_ho[self.hidden_size][j] += (self.learn_rate * self.err_out[j])
 
         # Update the weights for the hidden layer (step 4).
         for j in range(self.hidden_size):
             for i in range(self.input_size):
                 self.weight_ih[i][j] += (self.learn_rate * self.err_hidden[j] * self.input[i])
-
             # Update the bias.
             self.weight_ih[self.input_size][j] += (self.learn_rate * self.err_hidden[j])
 
-        return
+    def clear_message(self):
+        # TODO: before the production of each sentence, the links between role and concept units are set to 0
+        # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
+        # Same weight for prev_role, prev_concept
+
+        # hidden to context
+        for i in range(self.output_size + 1):
+            self.weight_hc.append([0.0] * self.context_size)
+            for j in range(self.context_size):
+                # This is always fixed (default set to 0.5)
+                self.weight_hc[i][j] = self.context
+
+        # set previous word to 0
+        self.input = [0.0] * self.input_size
+
+    def train(self):
+        sentence = "a man walk -s . ."
+        for word in sentence.split():
+
+
+    def test(self):
+        print
+
+
 
     def train_network(self):
         sample = 0
@@ -145,16 +182,16 @@ class Elman:
             # later comparison.
             if sample == self.sample_size - 1:
                 for i in range(self.input_size):
-                    self.target[i] = self.mBEArray[i]
+                    self.predicted[i] = self.mBEArray[i]
             else:
                 for i in range(self.input_size):
-                    self.target[i] = self.sample_input[sample][i]
+                    self.predicted[i] = self.sample_input[sample][i]
 
             self.feed_forward()
 
             err = 0.0
             for i in range(self.output_size):
-                err += math.sqrt(math.fabs(self.target[i] - self.actual[i]))
+                err += math.sqrt(math.fabs(self.predicted[i] - self.target[i]))
             err = 0.5 * err
 
             self.back_propagate()
@@ -180,8 +217,8 @@ class Elman:
             predicted = 0
             while stopSample == False:
                 for i in range(self.output_size):
-                    sys.stdout.write("{:03.3f} ".format(self.actual[i]))
-                    if self.actual[i] >= 0.3:
+                    sys.stdout.write("{:03.3f} ".format(self.target[i]))
+                    if self.target[i] >= 0.3:
                         # The output unit with the highest value (usually over 3.0)
                         # is the network's predicted unit that it expects to appear
                         # in the next input vector.
@@ -232,7 +269,7 @@ def sigmoid_derivative(x):
     return x*(1.0 - x)
 
 if __name__ == '__main__':
-    # BEVector is the symbol used to "B"egin or "E"nd a sequence.
+    ''''# BEVector is the symbol used to "B"egin or "E"nd a sequence.
     BE_VECTOR = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     #                 0    1    2    3    4    5
@@ -240,7 +277,7 @@ if __name__ == '__main__':
                     [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
                     [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]
 
-    ''''NUM_TESTS = 10000
+    NUM_TESTS = 10000
     NUM_SAMPLES = 4
     INPUT_NEURONS = 6
     HIDDEN_NEURONS = 3
@@ -248,15 +285,20 @@ if __name__ == '__main__':
     CONTEXT_NEURONS = 3
     LEARNING_RATE = 0.2  # Rho.
     TRAINING_REPS = 2000
-
     elman = Elman(NUM_TESTS, NUM_SAMPLES, INPUT_NEURONS, HIDDEN_NEURONS, OUTPUT_NEURONS, CONTEXT_NEURONS,
-                  LEARNING_RATE, TRAINING_REPS, BE_VECTOR, SAMPLE_INPUT)'''
+                  LEARNING_RATE, TRAINING_REPS, BE_VECTOR, SAMPLE_INPUT)
+    elman = Elman(num_tests=0, sample_size=0, input_size=0, hidden_size=0, output_size=0, context_size=0,
+                  learning_rate=learn_rate, epochs=epochs, beArray=[], sample_input=[])'''
 
     learn_rate = 0.2
     epochs = 2000
+    trainfile = 'train_c.en'
+    testfile = 'test_c.en'
+    lexicon_size = 0
 
-    elman = Elman(num_tests=0, sample_size=0, input_size=0, hidden_size=0, output_size=0, context_size=0,
-                  learning_rate=learn_rate, epochs=epochs, beArray=[], sample_input=[])
-    elman.initialize_arrays()
+
+    elman = Elman(input_size=lexicon_size, hidden_size=0, output_size=0, context_size=0,
+                  learning_rate=learn_rate, epochs=epochs, beArray=[], sample_input=[],
+                  train_file=trainfile, test_file=testfile)
     elman.train_network()
     elman.test_network()

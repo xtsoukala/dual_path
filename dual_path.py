@@ -17,10 +17,10 @@ from elman_network import Elman
     All other units used the logistic activation function.
 """
 ''' http://tedlab.mit.edu/~dr/Lens/Commands/addGroup.html
-    c_lexicon_size: addGroup cword $lexSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED OUT_NORM
-    c_compress_size: addGroup ccompress $ccompressSize -BIASED
-    c_concept_size: addGroup cwhat $semSize OUTPUT TARGET_COPY -BIASED -WRITE_OUTPUTS
-    c_roles_size: addGroup cwhere2 $whereSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED
+    prev_lexicon_size: addGroup cword $lexSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED OUT_NORM
+    prev_compress_size: addGroup ccompress $ccompressSize -BIASED
+    prev_concept_size: addGroup cwhat $semSize OUTPUT TARGET_COPY -BIASED -WRITE_OUTPUTS
+    prev_roles_size: addGroup cwhere2 $whereSize ELMAN ELMAN_CLAMP ELMAN_CLAMP -BIASED
     [why 2?] addGroup cwhere $whereSize SOFT_MAX -BIASED
     event_sem_size: addGroup eventsem $eventsemSize LINEAR -BIASED
     context_size: addGroup context $contextSize ELMAN OUT_INTEGR -BIASED
@@ -53,30 +53,32 @@ class DualPath:
         e.g. for the dative sentence "A man bake a cake for the cafe" there are 3 event-sem units:
         CAUSE, CREATE, TRANSFER
 
-        role-concept and c_role-c_concept links are used to store the message
+        role-concept and prev_role-prev_concept links are used to store the message
 
-        role, concept and c_concept units are UNbiased to make them more input driven (all other units excpet
+        role, concept and prev_concept units are unbiased to make them more input driven (all other units except
         concept had bias) """
 
         self.event_sem_size = len(self.event_sem)
+        # lexicon is one of the input layers
         self.lexicon_size = len(self.lexicon)
-        # basically, lexicon size is the same as concept size... or not?
+        # in our case lexicon size is the same as concept size,
+        # but we want to allow synonyms etc (same concept, different word)
         self.concept_size = len(self.concepts)
+        # basically accounts for POS (syntactic categories)
+        # is compress also hidden?
+        self.compress_size = len(self.pos)
 
         self.roles_size = len(self.roles)
-        self.word = self.prev_word = -1
-        # same for c
-        self.c_lexicon_size = self.lexicon_size
-        self.c_concept_size = self.concept_size
-        self.c_roles_size = self.roles_size
+        # same for previous
+        self.prev_lexicon_size = self.lexicon_size
+        self.prev_concept_size = self.concept_size
+        self.prev_roles_size = self.roles_size
+        self.prev_compress_size = self.compress_size
 
         # Hidden layers (context and hidden), values are taken from dualpath3.in
-        # compress is also hidden
         self.hidden_size = 20
-        # According to Chang, context layer is roughly hidden/3
-        self.context_size = round(self.hidden_size / 3, -1)
-        self.compress_size = 10  # is it coincidence that it's hidden/2?
-        self.c_compress_size = self.compress_size
+        # According to Chang, context layer is roughly hidden/3. Why not equal to hidden..?
+        self.context_size = self.hidden_size  # round(self.hidden_size / 3, -1)
 
         # Learning rate started at 0.2 and was reduced linearly until it reached 0.05 at 2000 epochs,
         # where it was fixed for the rest of training. Values taken from Chang F., 2002
@@ -200,34 +202,29 @@ class DualPath:
         # TODO: link them
         print role, concepts
 
-    def clear_message(self):
-        # TODO: before the production of each sentence, the links between role and concept units are set to 0
-        # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
-        # Same weight for c_role, c_concept
 
-        self.context = 0.5
-        self.prev_word = 0
-
-
-    def train(self, trainfile = 'train.en'):
-        # TODO: Well, obviously, check the NN
-        # 1 hidden layer, 1 context layer
-        nn = Elman(5, 1, 1)
-
+    def train(self, elman, trainfile = 'train.en'):
         # the first line is the target sentence and the second line contains the message
         sentence = ''
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
-                print line
                 if line.startswith("#mess:"):
                     message = line.split('#mess:   ')[1]
                     self.link_sentences(sentence, message)
                 else:
-                    sentence = line.rstrip()
-                # nn.train([0.05, 0.1], [0.01, 0.99])
-                # print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
-
+                    print self.activate_sentence(sentence)
 
 def __main__():
     dualp = DualPath()
-    dualp.lexicon
+
+    trainfile = os.path.join(dualp.folder, 'train_c.en')
+    testfile = os.path.join(dualp.folder, 'test_c.en')
+
+    elman = Elman(input_size=dualp.lexicon_size, hidden_size=dualp.hidden_size, output_size=dualp.output_size,
+                  learning_rate=dualp.learn_rate, epochs=dualp.epochs, train_file=trainfile, test_file=testfile)
+
+    dualp.train(elman)
+
+
+    elman.train_network()
+    elman.test_network()

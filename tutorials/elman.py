@@ -55,10 +55,8 @@ class Elman:
         return self.layers[-1]
 
     def propagate_backward(self, target, lrate=0.1, momentum=0.1):
-        ''' Back propagate error related to target using lrate. '''
-
+        """ Back propagate error related to target using lrate. """
         deltas = []
-
         # Compute error on output layer
         error = target - self.layers[-1]
         delta = error * tanh_prime(self.layers[-1])

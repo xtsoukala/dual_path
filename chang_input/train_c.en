@@ -1997,4 +1997,4 @@ the cat show -s the boy the toy . .
 a cat was give -ing the father the ball . .
 #mess:   A=GIVE X=CAT,A Y=BALL,THE Z=FATHER,THE E=PAST,PROG,XX,ZZ,YY  
 a father carry -ed the kite . .
-#mess:   A=CARRY X=FATHER,A Y=KITE,THE E=PAST,SIMP,XX,YY  
+#mess:   A=CARRY X=FATHER,A Y=KITE,THE E=PAST,SIMP,XX,YY
