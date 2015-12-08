@@ -7,16 +7,31 @@ and on articles by Jeffrey L. Elman, Laurene Fausett, and Ben Krose & Patrick va
 
 
 class Elman:
-    def __init__(self, lexicon_size, hidden_size, output_size, learning_rate,
-                 epochs, train_file, test_file):
+    def __init__(self, lexicon_size, hidden_size, output_size, eventsem_size, concept_size, compress_size, roles_size,
+                 learning_rate, epochs, train_file, test_file):
         #self.num_tests = num_tests
         #self.sample_size = sample_size
-        # in the case of dual path, input is the activated word from the lexicon
+        # in the case of dual path, main input is the activated word from the lexicon
         self.input_size = lexicon_size
         self.hidden_size = hidden_size
+        # output size same as lexicon maybe? To predict the word
         self.output_size = output_size
         # isn't context size same to hidden? Otherwise how are values copied?
         self.context_size = self.hidden_size
+
+        self.event_sem_size = eventsem_size
+        # in our case lexicon size is the same as concept size,
+        # but we want to allow synonyms etc (same concept, different word)
+        self.concept_size = concept_size
+        # basically accounts for POS (syntactic categories)
+        # is compress also hidden?
+        self.compress_size = compress_size
+        self.roles_size = roles_size
+        # same for predicted
+        self.pred_concept_size = self.concept_size
+        self.pred_roles_size = self.roles_size
+        self.pred_compress_size = self.compress_size
+
 
         self.learn_rate = learning_rate
         self.epochs = epochs
@@ -38,6 +53,14 @@ class Elman:
         # actual target
         self.target = []
         self.context = []
+        # for dual path
+        self.concept = []
+        self.roles = []
+        self.compress = []
+        self.event_sem = []
+        self.pred_roles = []
+        self.pred_concept = []
+        self.pred_compress = []
 
         # unit errors
         self.err_out = []
@@ -86,7 +109,20 @@ class Elman:
         self.err_out = [0.0] * self.output_size
         self.err_hidden = [0.0] * self.hidden_size
 
+        # specifically for dual path
+        self.concept = [0.0] * self.concept_size
+        self.roles = [0.0] * self.roles_size
+        self.compress = [0.0] * self.compress_size
+        self.event_sem = [0.0] * self.event_sem_size
+        self.pred_roles = [0.0] * self.roles_size
+        self.pred_concept = [0.0] * self.concept_size
+        self.pred_compress = [0.0] * self.compress_size
+
     def feed_forward(self):
+        # first calculate lexicon to concept AND compress layers
+        # link concept to role
+
+        # need to calculate role and compress and event sem layers to hidden
         # Calculate input AND context connections to hidden layer
         for j in range(self.hidden_size):
             total = 0.0
@@ -144,7 +180,7 @@ class Elman:
     def clear_message(self):
         # TODO: before the production of each sentence, the links between role and concept units are set to 0
         # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
-        # Same weight for prev_role, prev_concept
+        # Same weight for pred_role, pred_concept
 
         # hidden to context
         for i in range(self.output_size + 1):
@@ -159,7 +195,7 @@ class Elman:
     def train(self):
         sentence = "a man walk -s . ."
         for word in sentence.split():
-
+            print ''
 
     def test(self):
         print

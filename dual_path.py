@@ -203,16 +203,19 @@ class DualPath:
         print role, concepts
 
 
-    def train(self, elman, trainfile = 'train.en'):
+    def train(self, elman, trainfile = 'train_c.en'):
         # the first line is the target sentence and the second line contains the message
-        sentence = ''
+        #sentence = ''
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
                 if line.startswith("#mess:"):
                     message = line.split('#mess:   ')[1]
-                    self.link_sentences(sentence, message)
+                    #self.link_sentences(sentence, message)
                 else:
-                    print self.activate_sentence(sentence)
+                    print line
+                    for word in self.activate_sentence(line):
+                        print word
+                    return
 
 def __main__():
     dualp = DualPath()
@@ -220,8 +223,10 @@ def __main__():
     trainfile = os.path.join(dualp.folder, 'train_c.en')
     testfile = os.path.join(dualp.folder, 'test_c.en')
 
-    elman = Elman(input_size=dualp.lexicon_size, hidden_size=dualp.hidden_size, output_size=dualp.output_size,
-                  learning_rate=dualp.learn_rate, epochs=dualp.epochs, train_file=trainfile, test_file=testfile)
+    elman = Elman(lexicon_size=dualp.lexicon_size, hidden_size=dualp.hidden_size, output_size=dualp.lexicon_size,
+                  eventsem_size=dualp.event_sem_size, concept_size=dualp.concept_size,
+                  compress_size=dualp.compress_size, roles_size=dualp.roles_size, learning_rate=dualp.learn_rate,
+                  epochs=dualp.epochs, train_file=trainfile, test_file=testfile)
 
     dualp.train(elman)
 
