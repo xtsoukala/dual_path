@@ -191,12 +191,12 @@ class Elman:
                 # This is always fixed (default set to 0.5)
                 self.weight_hc[i][j] = self.context
 
-        self.clear_input_target()
+        self.clear_input_set_target()
 
-    def clear_input_target(self):
-        # set previous word to 0
+    def clear_input_set_target(self):
+        # set input to 0 and target to previous input
+        self.target = self.input
         self.input = [0.0] * self.input_size
-        self.target = [0.0] * self.input_size
 
 
     def test(self):

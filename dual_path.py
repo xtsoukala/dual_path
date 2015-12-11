@@ -219,8 +219,11 @@ class DualPath:
 """
 
     def train_elman(self, nn, trainfile = 'train_c.en'):
-        # the first line is the target sentence and the second line contains the message
-        #sentence = ''
+        """
+        :param nn: the SRN network is given as input
+        :param trainfile: the name of the train file. The first line is the target
+        sentence and the second line contains the message (A=THROW etc)
+        """
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
                 if line.startswith("#mess:"):
@@ -228,24 +231,20 @@ class DualPath:
                     message = line.split('#mess:   ')[1]
                     #self.link_sentences(sentence, message)
                 else:
+                    # pou paei to for-loop? Ana frasi i' ana leksi?
                     for it in range(0, self.epochs + 1):
                         #print line
-                        l = self.retrieve_sentence(line)
-                        for i, word_idx in enumerate(l):
-                            nn.clear_input_target()
+                        for word_idx in self.retrieve_sentence(line):
+                            nn.clear_input_set_target()
                             #print word_idx, self.word_lookup(word_idx)
-                            #w = [0.0]*self.lexicon_size
                             nn.input[word_idx] = 1.0
-                            try:
-                                nn.target[l[i+1]] = 1.0
-                            except IndexError:
-                                # should it predict the same word? Or stop?
-                                nn.target[word_idx] = 1.0
+                            
                             #print nn.input
                             print nn.target
                             nn.feed_forward()
                             nn.back_propagate()
                             print nn.predicted
+
 
 def max_activation(lista):
     return lista.index(max(lista))
