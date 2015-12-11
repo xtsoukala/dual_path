@@ -145,7 +145,9 @@ class Elman:
 
             # add bias
             total += self.weight_ho[self.hidden_size][j]
-            self.target[j] = sigmoid(total)
+            # this is the predicted, right?
+            #self.target[j] = sigmoid(total)
+            self.predicted[j] = sigmoid(total)
 
         # Copy output of the hidden to context layer.
         for i in range(self.context_size):
@@ -189,13 +191,13 @@ class Elman:
                 # This is always fixed (default set to 0.5)
                 self.weight_hc[i][j] = self.context
 
+        self.clear_input_target()
+
+    def clear_input_target(self):
         # set previous word to 0
         self.input = [0.0] * self.input_size
+        self.target = [0.0] * self.input_size
 
-    def train(self):
-        sentence = "a man walk -s . ."
-        for word in sentence.split():
-            print ''
 
     def test(self):
         print
