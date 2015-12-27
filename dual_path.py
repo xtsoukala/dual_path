@@ -237,8 +237,9 @@ class DualPath:
                         for word_idx in self.retrieve_sentence(line):
                             nn.clear_input_set_target()
                             #print word_idx, self.word_lookup(word_idx)
-                            nn.input[word_idx] = 1.0
-                            
+                            nn.input[word_idx] = 1.0 # activation set to 1?
+                            pos = self.pos_lookup(word_idx)
+                            nn.compress[pos] =
                             #print nn.input
                             print nn.target
                             nn.feed_forward()

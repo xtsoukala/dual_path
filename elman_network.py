@@ -180,9 +180,11 @@ class Elman:
             self.weight_ih[self.input_size][j] += (self.learn_rate * self.err_hidden[j])
 
     def clear_message(self):
-        # TODO: before the production of each sentence, the links between role and concept units are set to 0
-        # initially, and then individual links between roles and concepts were made by setting the weight to 6(why 6?)
-        # Same weight for pred_role, pred_concept
+        """ TODO: before the production of each sentence, the links between
+        role and concept units are set to 0 initially, and then
+        individual links between roles and concepts were made by setting
+        the weight to 6(why 6?)
+        Same regarding weight for pred_role, pred_concept """
 
         # hidden to context
         for i in range(self.output_size + 1):
@@ -198,11 +200,8 @@ class Elman:
         self.target = self.input
         self.input = [0.0] * self.input_size
 
-
     def test(self):
         print
-
-
 
     def train_network(self):
         sample = 0
