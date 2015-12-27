@@ -40,8 +40,9 @@ from elman_network import Elman
 
 
 class DualPath:
-    def __init__(self, infolder='chang_input', lex_fname='lexicon.in', concept_fname='concepts.in',
-                 role_fname='roles.in', eventsem_fname='event-sem.in'):
+    def __init__(self, infolder='chang_input', lex_fname='lexicon.in',
+                 concept_fname='concepts.in', role_fname='roles.in',
+                 eventsem_fname='event-sem.in'):
         self.folder = infolder
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
         self.concepts = self._read_concepts(concept_fname)
@@ -49,14 +50,15 @@ class DualPath:
         self.event_sem = self._read_file_to_list(eventsem_fname)
 
         """ Dual Path has 4 input layers.
-        The event-semantics unit is the only unit that provides information about the target sentence order
-        e.g. for the dative sentence "A man bake a cake for the cafe" there are 3 event-sem units:
-        CAUSE, CREATE, TRANSFER
+        The event-semantics unit is the only unit that provides information
+        about the target sentence order
+        e.g. for the dative sentence "A man bake a cake for the cafe" there are
+        3 event-sem units: CAUSE, CREATE, TRANSFER
 
-        role-concept and prev_role-prev_concept links are used to store the message
+        role-concept&prev_role-prev_concept links are used to store the message
 
-        role, concept and prev_concept units are unbiased to make them more input driven (all other units except
-        concept had bias) """
+        role, concept and prev_concept units are unbiased to make them more
+        input driven (all other units except concept have bias) """
 
         self.event_sem_size = len(self.event_sem)
         # lexicon is one of the input layers
@@ -75,23 +77,22 @@ class DualPath:
         self.prev_roles_size = self.roles_size
         self.prev_compress_size = self.compress_size
 
-        # Hidden layers (context and hidden), values are taken from dualpath3.in
+        # Hidden layers (context and hidden)-values are taken from dualpath3.in
         self.hidden_size = 20
-        # According to Chang, context layer is roughly hidden/3. Why not equal to hidden..?
-        self.context_size = self.hidden_size  # round(self.hidden_size / 3, -1)
+        # According to Chang, context layer is roughly hidden/3, i.e.
+        # round(self.hidden_size / 3, -1). Why not equal to hidden..?
+        self.context_size = self.hidden_size
 
-        # Learning rate started at 0.2 and was reduced linearly until it reached 0.05 at 2000 epochs,
-        # where it was fixed for the rest of training. Values taken from Chang F., 2002
+        # Learning rate started at 0.2 and was reduced linearly until it
+        # reached 0.05 at 2000 epochs, where it was fixed for the rest of
+        # training. Values taken from Chang F., 2002
         self.learn_rate = 0.2
         self.epochs = 2000
-        # Doug momentum is similar to standard momentum descent with the exception that the pre-momentum weight step
-        # vector is bounded so that its length cannot exceed 1.0
+        # Doug momentum is similar to standard momentum descent with the
+        # exception that the pre-momentum weight step vector is bounded
+        # so that its length cannot exceed 1.0
         self.doug_momentum = 0.9
         # batch size = len(training_set) , 501 in Chang 2002
-
-        # all other units except context have bias
-        # context units are Elman units that were initialized to 0.5 at the beginning of a sentence.
-        self.context = 0.5
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -120,27 +121,30 @@ class DualPath:
         return pos, lexicon
 
     def _read_concepts(self, fname):
-        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it seems that
-        "where" is renamed to "role" and "what" to concept
+        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it
+        seems that "where" is renamed to "role" and "what" to concept
 
-        If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon and uppercase it
-        i.e. concepts = [x.upper() for x in lexicon], otherwise all we need to do is read the file
-        and ignore the lines that start with a colon """
-        return [line.rstrip('\n') for line in open(os.path.join(self.folder, fname))
+        If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon
+        and uppercase it i.e. concepts = [x.upper() for x in lexicon],
+        otherwise read the file and ignore lines that start with a colon """
+        return [line.rstrip('\n') for line in
+                open(os.path.join(self.folder, fname))
                 if not line.startswith(":")]
 
     def _read_file_to_list(self, fname):
         """
-        We simply need to read the roles or event-semantics files into a list
+        Simply read the roles or event-semantics files into a list
         """
-        return [line.rstrip('\n') for line in open(os.path.join(self.folder, fname))]
+        return [line.rstrip('\n') for line in
+                open(os.path.join(self.folder, fname))]
 
     def role_index(self, role):
         """
         :param role: the name of the role (e.g. ACTION, AGENT, PATIENT)
         :return: the index from the roles list.
-        Warning: intentionally, there was no Exception added in case the role doesn't exist in the
-        predefined list of roles. In that case, an error should be raised as it would be critical.
+        Warning: intentionally, there was no Exception added in case the role
+        doesn't exist in the predefined list of roles. In that case, an error
+        should be raised as it would be critical.
         In the future, we can automatically add new roles to the list.
         """
         return self.roles.index(role)
@@ -148,7 +152,8 @@ class DualPath:
     def pos_lookup(self, word_idx):
         """
         :param word_idx: The index of a given word (as stored in the lexicon)
-        :return: It looks up the pos dictionary and returns the category of the word (noun, verb etc)
+        :return: It looks up the pos dictionary and returns the category of
+        the word (noun, verb etc)
         """
         for pos, idx in self.pos.iteritems():
             if word_idx in idx:
@@ -177,8 +182,9 @@ class DualPath:
 
     def activate_message(self, message):
         """
-        :param message: string, e.g. "A=CARRY X=FATHER,THE Y=STICK,A E=PAST,PROG,XX,YY" which maps roles (A,X,Y) with
-         concepts and also gives information about the event-semantics (E)
+        :param message: string, e.g. "A=CARRY X=FATHER,THE Y=STICK,A
+        E=PAST,PROG,XX,YY" which maps roles (A,X,Y) with concepts and also
+        gives information about the event-semantics (E)
         """
         self.clear_message()
         event_list = []
@@ -214,34 +220,34 @@ class DualPath:
                 self.clear_message()
                 for i, word_idx in enumerate(sentence.split()):
                     # feed the word to the network
-                    self.input[word_idx] = 1.0
-                    self.target[sent]
     """
 
-    def train_elman(self, nn, trainfile = 'train_c.en'):
+    def train_elman(self, nn, trainfile='train_c.en'):
         """
         :param nn: the SRN network is given as input
-        :param trainfile: the name of the train file. The first line is the target
-        sentence and the second line contains the message (A=THROW etc)
+        :param trainfile: the name of the train file. The first line is the
+        target sentence and the second line contains the message (A=THROW etc)
         """
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
                 if line.startswith("#mess:"):
                     nn.clear_message()
                     message = line.split('#mess:   ')[1]
-                    #self.link_sentences(sentence, message)
+                    # self.link_sentences(sentence, message)
                 else:
-                    # pou paei to for-loop? Ana frasi i' ana leksi?
+                    # TODO: pou paei to for-loop? Ana frasi i' ana leksi?
                     for it in range(0, self.epochs + 1):
-                        #print line
+                        # print line
                         for word_idx in self.retrieve_sentence(line):
+                            # clear the input and set previous target as input
                             nn.clear_input_set_target()
-                            #print word_idx, self.word_lookup(word_idx)
-                            nn.input[word_idx] = 1.0 # activation set to 1?
+                            # print word_idx, self.word_lookup(word_idx)
+                            nn.input[word_idx] = 1.0  # activation set to 1?
                             pos = self.pos_lookup(word_idx)
-                            nn.compress[pos] =
-                            #print nn.input
-                            print nn.target
+                            # the compress layer keeps track of the POS
+                            nn.compress[pos] = 1.0
+                            # print nn.input
+                            # print nn.target
                             nn.feed_forward()
                             nn.back_propagate()
                             print nn.predicted
@@ -250,19 +256,20 @@ class DualPath:
 def max_activation(lista):
     return lista.index(max(lista))
 
+
 def __main__():
     dualp = DualPath()
 
     trainfile = os.path.join(dualp.folder, 'train_c.en')
     testfile = os.path.join(dualp.folder, 'test_c.en')
 
-    elman = Elman(lexicon_size=dualp.lexicon_size, hidden_size=dualp.hidden_size, output_size=dualp.lexicon_size,
-                  eventsem_size=dualp.event_sem_size, concept_size=dualp.concept_size,
-                  compress_size=dualp.compress_size, roles_size=dualp.roles_size, learning_rate=dualp.learn_rate,
-                  epochs=dualp.epochs, train_file=trainfile, test_file=testfile)
+    elman = Elman(lexicon_size=dualp.lexicon_size,
+                  hidden_size=dualp.hidden_size,
+                  eventsem_size=dualp.event_sem_size,
+                  concept_size=dualp.concept_size,
+                  compress_size=dualp.compress_size,
+                  roles_size=dualp.roles_size, learning_rate=dualp.learn_rate,
+                  epochs=dualp.epochs, train_file=trainfile,
+                  test_file=testfile)
 
     dualp.train(elman)
-
-
-    elman.train_network()
-    elman.test_network()
