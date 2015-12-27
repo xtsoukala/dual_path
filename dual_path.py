@@ -202,21 +202,21 @@ class DualPath:
         # TODO: link them
         print role, concepts
 
-"""     gia kathe frasi:
-        - dose input (sentence)
-        - init prin ti frasi
-        - gia kathe leksi sti frasi, dose input kai target (next word)
-        - compute predicted response
-        - determine error, propagate and update weights
-        - copy hidden units to context
-        sentences = ["a man walk -s . .", "a boy walk -s . ."]
-        for sentence in sentences:
-            self.clear_message()
-            for i, word_idx in enumerate(sentence.split()):
-                # feed the word to the network
-                self.input[word_idx] = 1.0
-                self.target[sent]
-"""
+    """     gia kathe frasi:
+            - dose input (sentence)
+            - init prin ti frasi
+            - gia kathe leksi sti frasi, dose input kai target (next word)
+            - compute predicted response
+            - determine error, propagate and update weights
+            - copy hidden units to context
+            sentences = ["a man walk -s . .", "a boy walk -s . ."]
+            for sentence in sentences:
+                self.clear_message()
+                for i, word_idx in enumerate(sentence.split()):
+                    # feed the word to the network
+                    self.input[word_idx] = 1.0
+                    self.target[sent]
+    """
 
     def train_elman(self, nn, trainfile = 'train_c.en'):
         """
