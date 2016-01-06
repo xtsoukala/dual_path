@@ -40,27 +40,32 @@ from elman_network import Elman
 
 
 class DualPath:
-    def __init__(self, infolder='chang_input', lex_fname='lexicon.in',
+    def __init__(self, input_folder='chang_input', lex_fname='lexicon.in',
                  concept_fname='concepts.in', role_fname='roles.in',
                  eventsem_fname='event-sem.in'):
-        self.folder = infolder
-        self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
-        self.concepts = self._read_concepts(concept_fname)
-        self.roles = self._read_file_to_list(role_fname)
-        self.event_sem = self._read_file_to_list(eventsem_fname)
+        """ Dual Path has the following input layers:
+        word, compress, concept&role and event-semantics.
 
-        """ Dual Path has 4 input layers.
         The event-semantics unit is the only unit that provides information
         about the target sentence order
-        e.g. for the dative sentence "A man bake a cake for the cafe" there are
+        e.g. for the dative sentence "A man bakes a cake for the cafe" there are
         3 event-sem units: CAUSE, CREATE, TRANSFER
 
-        role-concept&prev_role-prev_concept links are used to store the message
+        role-concept and prev_role-prev_concept links are used to store the message
 
         role, concept and prev_concept units are unbiased to make them more
         input driven (all other units except concept have bias) """
 
-        self.event_sem_size = len(self.event_sem)
+        self.folder = input_folder
+        self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
+        self.concepts = self._read_concepts(concept_fname)
+        self.roles = self._read_file_to_list(role_fname)
+        self.event_semantics = self._read_file_to_list(eventsem_fname)
+
+        self.event_sem_size = len(self.event_semantics)
+        self.event_sem_activations = [0] * self.event_sem_size
+        self.concept_role_dict = {}
+
         # lexicon is one of the input layers
         self.lexicon_size = len(self.lexicon)
         # in our case lexicon size is the same as concept size,
@@ -71,17 +76,18 @@ class DualPath:
         self.compress_size = len(self.pos)
 
         self.roles_size = len(self.roles)
-        # same for previous
-        self.prev_lexicon_size = self.lexicon_size
+
+        # same for predicted (next)
+        """self.prev_lexicon_size = self.lexicon_size
         self.prev_concept_size = self.concept_size
         self.prev_roles_size = self.roles_size
-        self.prev_compress_size = self.compress_size
+        self.prev_compress_size = self.compress_size"""
 
         # Hidden layers (context and hidden)-values are taken from dualpath3.in
         self.hidden_size = 20
-        # According to Chang, context layer is roughly hidden/3, i.e.
+        """ According to Chang, context layer is roughly hidden/3, i.e.
         # round(self.hidden_size / 3, -1). Why not equal to hidden..?
-        self.context_size = self.hidden_size
+        #self.context_size = self.hidden_size"""
 
         # Learning rate started at 0.2 and was reduced linearly until it
         # reached 0.05 at 2000 epochs, where it was fixed for the rest of
@@ -106,14 +112,16 @@ class DualPath:
         # Keep in mind that in the Lens algorithm by Chang, indexes start from 1, not 0
         pos_start = pos_end = 0
         with open(os.path.join(self.folder, fname)) as f:
-            # skip first line (header)
+            # skip first line (header).
             next(f)
+            # POS lines are introduced by a colon (:) otherwise it's a lexicon item
             for line in f:
                 line = line.rstrip('\n')
                 if line.startswith(":"):
                     if prev_pos:
                         pos[prev_pos] = range(pos_start, pos_end)
                         pos_start = pos_end
+                    # remove the colon first
                     prev_pos = line[1:]
                 else:
                     lexicon.append(line)
@@ -121,7 +129,7 @@ class DualPath:
         return pos, lexicon
 
     def _read_concepts(self, fname):
-        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2), it
+        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2) it
         seems that "where" is renamed to "role" and "what" to concept
 
         If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon
@@ -158,7 +166,7 @@ class DualPath:
         for pos, idx in self.pos.iteritems():
             if word_idx in idx:
                 return pos
-        # in (hopefully rare) case that the word index not available
+        # in (hopefully rare) case that the word index is not available
         return False
 
     def word_lookup(self, word_idx):
@@ -167,46 +175,45 @@ class DualPath:
     def word_index(self, word):
         return self.lexicon.index(word)
 
-    def event_index(self, event):
-        return self.event_sem.index(event)
+    def event_sem_index(self, event):
+        return self.event_semantics.index(event)
 
     def concept_index(self, concept):
         return self.concepts.index(concept)
 
-    def retrieve_sentence(self, sentence):
+    def sentence_indeces(self, sentence):
         """
         :param sentence: intended sentence from train file
         :return: list of activations in the lexicon
         """
         return [self.word_index(w) for w in sentence.split()]
 
-    def activate_message(self, message):
+    def get_message_info(self, message):
         """
         :param message: string, e.g. "A=CARRY X=FATHER,THE Y=STICK,A
         E=PAST,PROG,XX,YY" which maps roles (A,X,Y) with concepts and also
         gives information about the event-semantics (E)
         """
-        self.clear_message()
-        event_list = []
+        self.clear_message_info()
         for info in message.split():
             i = info.split("=")
             if i[0] == "E":
+                # retrieve activations for the event-sem layer
                 for event in i[1].split(","):
-                    event_list.append(self.event_index(event))
-                self.link_event_sem(event_list)
+                    self.event_sem_activations[self.event_sem_index(event)] = 1
             else:
-                concepts = []
+                concepts = [0] * self.concept_size
                 for concept in i[1].split(","):
-                    concepts.append(self.concept_index(concept))
-                self.link_role_concept(self.role_index(i[0]), concepts)
+                    # it's usually only one concept unless it's a noun with a det
+                    # (
+                    concepts[self.concept_index(concept)] = 1
+                # lists cannot be used as dict keys so we're using the representation
+                # of the "concept" list
+                self.concept_role_dict[repr(concepts)] = self.role_index(i[0])
 
-    def link_event_sem(self, event_list):
-        # TODO: link them
-        print event_list
-
-    def link_role_concept(self, role, concepts):
-        # TODO: link them
-        print role, concepts
+    def clear_message_info(self):
+        self.event_sem_activations = [0] * self.event_sem_size
+        self.concept_role_dict = {}
 
     """     gia kathe frasi:
             - dose input (sentence)
@@ -222,27 +229,34 @@ class DualPath:
                     # feed the word to the network
     """
 
-    def train_elman(self, nn, trainfile='train_c.en'):
+    def train_network(self, nn, trainfile='train_c.en'):
         """
-        :param nn: the SRN network is given as input
-        :param trainfile: the name of the train file. The first line is the
-        target sentence and the second line contains the message (A=THROW etc)
+        :param nn: the SRN (Elman) network is given as input
+        :param trainfile: the name of the training file. The first line is the
+        target sentence and the second line contains the message (A=THROW etc).
+        We only use the sentence input when the meaning system (event-sem and
+        concept-role bindings) have been given for this sentence.
         """
         with open(os.path.join(self.folder, trainfile)) as f:
             for line in f:
                 if line.startswith("#mess:"):
-                    nn.clear_message()
+                    nn.initialize()
+                    # nn.clear_message()
                     message = line.split('#mess:   ')[1]
-                    # self.link_sentences(sentence, message)
-                else:
-                    # TODO: pou paei to for-loop? Ana frasi i' ana leksi?
+                    self.get_message_info(message)
+
+                    # start training per sentence
                     for it in range(0, self.epochs + 1):
-                        # print line
-                        for word_idx in self.retrieve_sentence(line):
-                            # clear the input and set previous target as input
-                            nn.clear_input_set_target()
-                            # print word_idx, self.word_lookup(word_idx)
+                        sentence_idx = self.sentence_indeces(sentence)
+                        for idx, word_idx in enumerate(sentence_idx):
+                            # clear the target and set previous target as input
+                            nn.compress = [0] * self.compress_size
                             nn.input[word_idx] = 1.0  # activation set to 1?
+                            next_idx = sentence_idx[(idx + 1) % len(sentence_idx)]
+                            nn.target[next_idx] = 1.0
+                            # apparently the ". ." combination is the </s> signal
+                            if nn.input is nn.target and nn.input is self.word_index('.'):
+                                break
                             pos = self.pos_lookup(word_idx)
                             # the compress layer keeps track of the POS
                             nn.compress[pos] = 1.0
@@ -251,6 +265,8 @@ class DualPath:
                             nn.feed_forward()
                             nn.back_propagate()
                             print nn.predicted
+                else:
+                    sentence = line
 
 
 def max_activation(lista):
@@ -272,4 +288,4 @@ def __main__():
                   epochs=dualp.epochs, train_file=trainfile,
                   test_file=testfile)
 
-    dualp.train(elman)
+    dualp.train_network(elman)

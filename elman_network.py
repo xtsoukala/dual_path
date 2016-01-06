@@ -1,6 +1,5 @@
 import math
 import random
-import sys
 from copy import deepcopy
 
 """ based on the following tutorial:
@@ -11,65 +10,55 @@ from copy import deepcopy
 class Elman:
     def __init__(self, lexicon_size, hidden_size, eventsem_size,
                  concept_size, compress_size, roles_size,
-                 learning_rate, epochs, train_file, test_file):
-        # del:self.num_tests = num_tests
-        # del:self.sample_size = sample_size
+                 learning_rate, epochs):
         # main input is the activated word from the lexicon
         self.input_size = lexicon_size
         self.hidden_size = hidden_size
-        # output size same as lexicon maybe? To predict the word
+        # output size same as lexicon, as we need to predict a word
         self.output_size = lexicon_size
-        # isn't context size same to hidden? Otherwise how are values copied?
+        # context is same as hidden because values need to be copied
         self.context_size = hidden_size
 
         self.event_sem_size = eventsem_size
         # in our case lexicon size is the same as concept size,
         # but we want to allow synonyms etc (same concept, different word)
         self.concept_size = concept_size
-        # basically accounts for POS (syntactic categories)
-        # is compress also hidden?
-        self.compress_size = compress_size
         self.roles_size = roles_size
-        # same for predicted
-        self.pred_concept_size = self.concept_size
-        self.pred_roles_size = self.roles_size
-        self.pred_compress_size = self.compress_size
+        # basically accounts for POS (syntactic categories)
+        self.compress_size = compress_size
 
         self.learn_rate = learning_rate
         self.epochs = epochs
 
-        #self.mBEArray = beArray
-        #self.sample_input = sample_input
-        self.train_file = train_file
-        self.test_file = test_file
-
+        # TODO: How many weights do we need here?
         self.weight_ih = []  # Input to Hidden Weights (with Biases).
         self.weight_ch = []  # Context to Hidden Weight (with Biases).
         self.weight_ho = []  # Hidden to Output Weights (with Biases).
         self.weight_hc = []  # Hidden to Context Weights (no Biases).
 
-        # activations
+        # general activations
         self.input = []
         self.hidden = []
         self.predicted = []
-        # actual target
-        self.target = []
+        self.target = []  # the actual target
         self.context = []
         # for dual path
         self.concept = []
-        self.roles = []
+        self.role = []
         self.compress = []
         self.event_sem = []
-        self.pred_roles = []
+        # same for predicted activations
+        self.pred_role = []
         self.pred_concept = []
         self.pred_compress = []
 
         # unit errors
+        # TODO: Do we need more error units? No, right?
         self.err_out = []
         self.err_hidden = []
 
-        """ all other units except context have bias
-        context units are Elman units that were initialized to 0.5
+        """ all other units except context have bias.
+        Context units are Elman units that were initialized to 0.5
         at the beginning of a sentence """
         self.context = 0.5
 
@@ -106,19 +95,19 @@ class Elman:
 
         self.input = [0.0] * self.input_size
         self.hidden = [0.0] * self.hidden_size
-        self.predicted = [0.0] * self.output_size
-        self.target = deepcopy(self.predicted)
         self.context = [0.0] * self.context_size
+        self.target = [0.0] * self.output_size
+        self.predicted = deepcopy(self.target)
 
-        self.err_out = deepcopy(self.predicted)
-        self.err_hidden = [0.0] * self.hidden_size
+        self.err_out = deepcopy(self.target)
+        self.err_hidden = deepcopy(self.hidden)
 
         # specifically for dual path
         self.concept = [0.0] * self.concept_size
-        self.roles = [0.0] * self.roles_size
+        self.role = [0.0] * self.roles_size
         self.compress = [0.0] * self.compress_size
         self.event_sem = [0.0] * self.event_sem_size
-        self.pred_roles = deepcopy(self.roles)
+        self.pred_role = deepcopy(self.role)
         self.pred_concept = deepcopy(self.concept)
         self.pred_compress = deepcopy(self.compress)
 
@@ -187,11 +176,10 @@ class Elman:
             self.learn_rate * self.err_hidden[j])
 
     def clear_message(self):
-        """ TODO: before the production of each sentence, the links between
-        role and concept units are set to 0 initially, and then
-        individual links between roles and concepts were made by setting
-        the weight to 6(why 6?)
-        Same regarding weight for pred_role, pred_concept """
+        # TODO: before the production of each sentence, the links between role and concept units
+        # TODO: are set to 0 initially, and then individual links between roles and concepts were
+        # TODO: made by setting the weight to 6(why 6?)
+        # TODO: Same regarding weight for pred_role, pred_concept """
 
         # hidden to context
         for i in range(self.output_size + 1):
@@ -200,14 +188,14 @@ class Elman:
                 # This is always fixed (default set to 0.5)
                 self.weight_hc[i][j] = self.context
 
-        self.clear_input_set_target()
+        # self.set_input_clear_target()
 
-    def clear_input_set_target(self):
-        # set input to 0 and target to previous input
-        self.target = self.input
-        self.input = [0.0] * self.input_size
+    '''def set_input_clear_target(self):
+        # clear the input and set previous target as input
+        self.input = deepcopy(self.target)
+        self.target = [0.0] * self.input_size'''
 
-    def test(self):
+    """def test(self):
         print
 
     def train_network(self):
@@ -303,7 +291,7 @@ class Elman:
                 if j >= self.num_tests:
                     sys.stdout.write(
                         "Completed %s tests with no success.\n" % j)
-                    break
+                    break """
 
 
 def sigmoid(x):
@@ -313,8 +301,7 @@ def sigmoid(x):
 def sigmoid_derivative(x):
     return x * (1.0 - x)
 
-
-if __name__ == '__main__':
+"""if __name__ == '__main__':
     ''''# BEVector is the symbol used to "B"egin or "E"nd a sequence.
     BE_VECTOR = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
@@ -349,3 +336,4 @@ if __name__ == '__main__':
                   train_file=trainfile, test_file=testfile)
     elman.train_network()
     elman.test_network()
+"""
