@@ -1,8 +1,8 @@
-# Replication of the Dual path model
+# Bilingual Dual path model
 
 Dual path is a computational model of (monolingual) sentence production by Chang, 2002
 
-Take a look in this tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
+Take a look at this tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
 
 
 From Chang F., 2002:
@@ -10,8 +10,6 @@ From Chang F., 2002:
 Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
 Doug momentum: similar to standard momentum descent with the exception that the pre-momentum
 weight step vector is bounded so that its length cannot exceed 1.0 (Rohde, 1999).
-
-Batch size was set to be the size of the training set.
 
 The cwhere and word units used the soft-max activation function.
 Soft-max units caused the output to be passed through an exponential function, which magnified

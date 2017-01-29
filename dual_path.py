@@ -6,7 +6,6 @@ import numpy as np
 from datetime import datetime
 from elman_network import ElmanNetwork, plt
 from multiprocessing import Process, Manager
-import subprocess
 import shutil
 import re
 
@@ -17,8 +16,8 @@ import re
 class DualPath:
     def __init__(self, hidden_size, learn_rate, results_dir, epochs, input_dir, lex_fname, concept_fname, role_fname,
                  evsem_fname, role_copy, elman_debug_mess, test_every, plot_title, compress_size, set_weights_folder,
-                 set_weights_epoch, fixed_weight, exclude_lang, language, simulation_num=None, semantic_gender=False,
-                 emphasis=False, prodrop=False):
+                 set_weights_epoch, fixed_weight, exclude_lang, language, trainset=None, testset=None,
+                 simulation_num=None, semantic_gender=False, emphasis=False, prodrop=False):
         """ This class mostly contains helper functions that set the I/O for the model (SRN).
         Dual Path has the following layers (plus hidden&context)
         word, compress, concept&role and event-semantics.
@@ -40,9 +39,13 @@ class DualPath:
         self.roles = self._read_file_to_list(role_fname)
         self.event_semantics = self._read_file_to_list(evsem_fname)
         self.results_dir = results_dir  # directory where the results are saved
-        self.testset = None
-        self.trainset = None  # names of train and test set file names
-        self.allowed_structures = []  # all allowed POS structures
+        self.prodrop = prodrop
+        self.testset = testset
+        self.trainset = trainset  # names of train and test set file names
+        self.trainlines = self._read_set()
+        self.num_train = len(self.trainlines)
+        self.test_sentences_with_pronoun = self._number_of_pronouns()
+        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
 
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -87,13 +90,27 @@ class DualPath:
         self.srn = ElmanNetwork(learn_rate=self.learn_rate, dir=results_dir, debug_messages=elman_debug_mess,
                                 include_role_copy=self.role_copy)
         self.initialize_network()
-        self.prodrop = prodrop
         # temp
         self.period_idx = self.lexicon.index('.')
         self.code_switched_idx = self.lexicon.index('-a')  # the verb suffix is the first entry in the ES lexicon
         self.semantic_gender = semantic_gender
         self.emphasis = emphasis
         self.all_roles = dict()
+
+    def _number_of_pronouns(self):
+        with open(self.testset) as f:
+            testl = f.readlines()
+        return len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
+
+    def _read_set(self):
+        with open(self.trainset, 'r+') as f:
+            trainlines = f.readlines()
+        if self.prodrop:  # make prodrop
+            trainlines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in trainlines]
+        return trainlines
+
+    def _read_allowed_structures(self):
+        return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -261,15 +278,12 @@ class DualPath:
         tested after 2k epochs. Each training set consisted of 8k pairs and the test set of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
-        if trainset is None:
-            trainset = self.trainset
-        with open(trainset, 'r+') as f:
-            trainlines = f.readlines()
-        if self.prodrop: # make prodrop
-            trainlines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in trainlines]
-        num_train = len(trainlines)
-
-        self.allowed_structures = set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in trainlines])
+        if trainset:  # in case we want to use a different train set that the one set in DualPath()
+            with open(trainset, 'r+') as f:
+                self.trainlines = f.readlines()
+            if self.prodrop:  # make prodrop
+                self.trainlines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in self.trainlines]
+            self.num_train = len(self.trainlines)
 
         manager = Manager()
         train_results = manager.dict()
@@ -281,28 +295,14 @@ class DualPath:
         pronoun_errors = {'test': [], 'train': []}
 
         epoch = 0
-        """# evaluate before any training
-        subprocesses = []
-        # test set
-        subprocess = Process(target=self.evaluate_network, args=(test_results, epoch,))
-        subprocess.start()
-        subprocesses.append(subprocess)
-        # train set
-        subprocess = Process(target=self.evaluate_network, args=(train_results, epoch, trainset, False))
-        subprocess.start()
-        subprocesses.append(subprocess)
-        for p in subprocesses:
-            p.join()"""
-
-        # start training for x epochs
-        while epoch <= self.epochs:
+        while epoch <= self.epochs:  # start training for x epochs
             if epoch % 10 == 0:  # check whether to save weights or not (only every 10 epochs)
                 self.srn.save_weights(epochs=epoch)
 
             if shuffle_set:
-                random.shuffle(trainlines)
+                random.shuffle(self.trainlines)
 
-            if epoch % self.test_every == 0:  # eval train AND testset
+            if epoch % self.test_every == 0:  # evaluate train AND testset
                 subprocesses = []
                 # test set
                 subprocess = Process(target=self.evaluate_network, args=(test_results, epoch,))
@@ -315,13 +315,12 @@ class DualPath:
                 for p in subprocesses:
                     p.join()
 
-            for line in trainlines:
-                # TRAIN
+            for line in self.trainlines:  # start training
                 sentence, message = line.split('##')
                 weights_role_concept, evsem_act, target_lang_act, lang, message = self.get_message_info(message)
                 self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
                                                    event_sem_activations=evsem_act, target_lang_act=target_lang_act)
-                prod_idx = None  # previously produced word (at the beg. of sentence: None)
+                prod_idx = None  # previously produced word (at the beginning of sentence: None)
                 for enum_idx, trg_idx in enumerate(self.sentence_indeces(sentence)):
                     self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx)
                     self.srn.feed_forward(start_of_sentence=(prod_idx is None))
@@ -329,7 +328,7 @@ class DualPath:
                     self.srn.backpropagate(epoch)
 
             if epoch < 3 and decrease_lrate:
-                self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k epochs
+                self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k lines (2 epochs)
 
             epoch += 1  # increase number of epochs, begin new iteration
 
@@ -355,7 +354,8 @@ class DualPath:
             os.rename("%s/%s" % (os.getcwd(), self.results_dir), "%s/%s_discarded" % (os.getcwd(), self.results_dir))
             self.results_dir += "_discarded"
         with open("%s/%s" % (self.results_dir, res_name), 'w') as f:
-            pickle.dump((correct_sentences['train'], correct_pos['train'], [num_train] * len(correct_sentences['test']),
+            pickle.dump((correct_sentences['train'], correct_pos['train'],
+                         [self.num_train] * len(correct_sentences['test']),
                          correct_sentences['test'], correct_pos['test'], pronoun_errors_flex['test'],
                          pronoun_errors['test'], [num_test] * len(correct_sentences['test'])), f)
 
@@ -397,14 +397,11 @@ class DualPath:
                 plt.close()
 
                 # same using percentages
-                with open(dualp.testset) as f:
-                    testl = f.readlines()
-                sentences_pronoun = len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
-                del testl  # for memory efficiency
-
-                if sentences_pronoun:  # for instance, in ES case there are no sentences with he and she
-                    percentage_pronoun_errors = [x * 100 / sentences_pronoun for x in pronoun_errors['test']]
-                    percentage_pronoun_errors_flex = [x * 100 / sentences_pronoun for x in pronoun_errors_flex['test']]
+                if self.test_sentences_with_pronoun:  # for instance, in ES case there are no sentences with he and she
+                    percentage_pronoun_errors = [x * 100 / self.test_sentences_with_pronoun
+                                                 for x in pronoun_errors['test']]
+                    percentage_pronoun_errors_flex = [x * 100 / self.test_sentences_with_pronoun
+                                                      for x in pronoun_errors_flex['test']]
                 else:
                     percentage_pronoun_errors = pronoun_errors['test']
                     percentage_pronoun_errors_flex = pronoun_errors_flex['test']
@@ -643,17 +640,17 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-hidden', help='number of hidden layer units. Default: 20', type=int, default=30)
+    parser.add_argument('-hidden', help='number of hidden layer units. Default: 30', type=int, default=30)
     parser.add_argument('-epochs', help='Number that indicates the number of train set iterations by the model during '
                                         'training . Default: 20', type=int, default=20)
     parser.add_argument('-input', help='(Input) folder that contains the input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual', default='en')
-    parser.add_argument('-lrate', help='Learning rate. Default: 0.2', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
-    parser.add_argument('-pron', help='(If set) defines percentage of pronouns on subject level. If not set, there will'
-                                      'be no pronouns in the test/train set', type=int)
+                                      'or any other string for bilingual)', default='en')
+    parser.add_argument('-lrate', help='Learning rate. Default: 0.1', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
+    parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level. If not set, there '
+                                      'will be no pronouns in the test/train set', type=int, default=100)
     parser.add_argument('-set_weights', '-sw',
                         help='We can set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
@@ -672,14 +669,14 @@ if __name__ == "__main__":
                                                                       'is the sum of sentences that will be generated')
     parser.add_argument('-test_every', help='Test network every x epochs (default: 1)', type=int, default=1)
     parser.add_argument('-title', help='Title for the plot(s)')
-    parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=20, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     # boolean arguments
     parser.add_argument('-prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
     parser.add_argument('-norolecopy', dest='rcopy', action='store_false',
                         help='If set, the produced role layer is copied back to the comprehension layer')
-    parser.set_defaults(rcopy=True)
+    parser.set_defaults(rcopy=False)
     parser.add_argument('-debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
     parser.add_argument('-nodlr', dest='decrease_lrate', action='store_false', help='Stop automatic decrease of lrate')
@@ -710,15 +707,6 @@ if __name__ == "__main__":
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
                                use_emphasis_concept=True, use_subject_emphasis=False,
                                percentage_pronoun=args.pron, bilingual_lexicon=True, extended_evsem=True)
-            '''if not args.prodrop:
-                script = '../../../helper_scripts/create_prodrop.sh'
-                if not os.path.isfile(script):
-                    script = '../../helper_scripts/create_prodrop.sh'
-                try:
-                    process = subprocess.Popen([script], stdout=subprocess.PIPE, cwd=results_dir, shell=False)
-                    output, error = process.communicate()
-                except:
-                    print "Pro-drop input was not created" '''
 
     if not args.trainset:
         fname = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
@@ -750,9 +738,8 @@ if __name__ == "__main__":
                          elman_debug_mess=args.debug, test_every=args.test_every, plot_title=args.title,
                          compress_size=args.compress, set_weights_folder=args.set_weights, language=args.lang,
                          set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, exclude_lang=args.nolang,
-                         semantic_gender=args.gender, emphasis=args.emphasis, prodrop=args.prodrop)
-        dualp.trainset = trainset
-        dualp.testset = testset
+                         semantic_gender=args.gender, emphasis=args.emphasis, prodrop=args.prodrop, trainset=trainset,
+                         testset=testset)
         dualp.train_network(decrease_lrate=args.decrease_lrate)
         # if we want to see whether the single simulation failed, we can add a bool in the train_network function
         num_valid_simulations = 1
@@ -768,9 +755,7 @@ if __name__ == "__main__":
                              test_every=args.test_every, set_weights_folder=args.set_weights, language=args.lang,
                              set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, exclude_lang=args.nolang,
                              semantic_gender=args.gender, emphasis=args.emphasis, simulation_num=sim,
-                             prodrop=args.prodrop)
-            dualp.trainset = trainset
-            dualp.testset = testset
+                             prodrop=args.prodrop, trainset=trainset, testset=testset)
             process = Process(target=dualp.train_network, args=(args.decrease_lrate,))
             process.start()
             processes.append(process)
