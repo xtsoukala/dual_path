@@ -183,7 +183,7 @@ class GenerateSets:
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
         # PAT: PATIENT, REC: RECIPIENT, AGT: AGENT
         # how to indicate plural agent etc?
-        """self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'),
+        self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'),
                               # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
                               # 'AGENT=;ACTION=;E=EN,PROG'),
                               # ('det::def noun::animate noun_plural verb::intrans',
@@ -217,9 +217,9 @@ class GenerateSets:
 
                               #!('det noun aux::singular verb::trans par by det noun::animate',
                               # !'PATIENT=;ACTION=;AGENT=;E=EN,SIMPLE,-1,AGT,PAT')
-                             ]"""
+                             ]
 
-        self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
+        """self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
                               ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'),
                               ('det noun::animate aux::singular verb::trans ing det noun',
                                'AGENT=;ACTION=;PATIENT=;E=EN,PROG'),
@@ -234,7 +234,7 @@ class GenerateSets:
                                'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,REC'),
                               ('det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
                                'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,REC'),
-                              ]
+                              ]"""
 
 
         self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'),
