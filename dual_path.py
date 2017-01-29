@@ -461,6 +461,7 @@ class DualPath:
                             self.lexicon.index('ella'), self.lexicon.index('él')]
             idx_es_pron = [self.lexicon.index('ella'), self.lexicon.index('él')]
             idx_en_pron = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]"""
+            he_idx = idx_en_pron[0]
 
         for line in lines:
             sentence, message = line.split('##')
@@ -473,7 +474,7 @@ class DualPath:
             produced_sentence = []
             code_switched = False
             has_pronoun_error = False
-
+            #he_error = False
             for enum_idx, trg_idx in enumerate(self.sentence_indeces(sentence)):
                 self.srn.set_inputs(input_idx=prod_idx)
                 self.srn.feed_forward(start_of_sentence=(prod_idx is None))
@@ -484,6 +485,8 @@ class DualPath:
                 elif check_pron and not produced_sentence and trg_idx in idx_en_pron:  # sentences with pronoun as trg
                     if prod_idx in idx_en_pron:  # case gender error
                         has_pronoun_error = True
+                        #if prod_idx == he_idx:
+                        #    he_error = True
                     # else:  different error, we could keep track (in case it's pro-drop omission)--so far not useful
                 produced_sentence.append(self.lexicon[prod_idx])  # add word to the total sentence
                 """ will be removed (solved due to softmax)
