@@ -44,7 +44,8 @@ class DualPath:
         self.trainset = trainset  # names of train and test set file names
         self.trainlines = self._read_set()
         self.num_train = len(self.trainlines)
-        self.num_test = None
+        self.testlines = self._read_set(test=True)
+        self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_pronouns()
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
 
@@ -103,8 +104,12 @@ class DualPath:
             testl = f.readlines()
         return len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
 
-    def _read_set(self):
-        with open(self.trainset, 'r+') as f:
+    def _read_set(self, test=False):
+        if test:
+            set = self.testset
+        else:
+            set = self.trainset
+        with open(set, 'r+') as f:
             trainlines = f.readlines()
         if self.prodrop:  # make prodrop
             trainlines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in trainlines]
@@ -436,14 +441,17 @@ class DualPath:
         correct_pos = 0
         trg_sentences = []
 
-        if not eval_set:
-            eval_set = self.testset
-        with open(eval_set, 'r+') as f:
-            lines = f.readlines()
 
-        num_sentences = len(lines)
-        if is_test_set:
-            self.num_test = num_sentences
+        if not is_test_set and not eval_set:
+            lines = self.trainlines
+            num_sentences = self.num_train
+        elif not eval_set:
+            eval_set = self.testset
+            with open(eval_set, 'r+') as f:
+                lines = f.readlines()
+            num_sentences = len(lines)
+            if is_test_set:
+                self.num_test = num_sentences
         if self.prodrop:  # make prodrop
             lines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in lines]
         """ This section will soon be removed as the problem is solved due to softmax
