@@ -44,6 +44,7 @@ class DualPath:
         self.trainset = trainset  # names of train and test set file names
         self.trainlines = self._read_set()
         self.num_train = len(self.trainlines)
+        self.num_test = None
         self.test_sentences_with_pronoun = self._number_of_pronouns()
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
 
@@ -111,6 +112,11 @@ class DualPath:
 
     def _read_allowed_structures(self):
         return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
+
+    def _percentage(self, x, test=False):
+        if test:
+            return x * 100 / self.num_test
+        return x * 100 / self.num_train
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -333,21 +339,21 @@ class DualPath:
             epoch += 1  # increase number of epochs, begin new iteration
 
         for sim in test_results.values():
-            s, p, a_p, pr, num_test = sim
+            s, p, a_p, pr = sim
             correct_sentences['test'].append(s)
             correct_pos['test'].append(p)
             pronoun_errors_flex['test'].append(a_p)
             pronoun_errors['test'].append(pr)
 
         for sim in train_results.values():
-            s, p, a_p, pr, num_train = sim
+            s, p, a_p, pr = sim
             correct_sentences['train'].append(s)
             correct_pos['train'].append(p)
             pronoun_errors_flex['train'].append(a_p)
             pronoun_errors['train'].append(pr)
 
         # ONLY include simulations that have learned successfully! POS accuracy at the end should be at least 75%
-        if correct_pos['test'][-1] * 100 / num_test > 75 or self.simulation_num is None:
+        if self._percentage(correct_pos['test'][-1], test=True) > 75 or self.simulation_num is None:
             res_name = "results.pickled"
         else:  # rename folder and don't take data into consideration
             res_name = "results.discarded"
@@ -357,20 +363,20 @@ class DualPath:
             pickle.dump((correct_sentences['train'], correct_pos['train'],
                          [self.num_train] * len(correct_sentences['test']),
                          correct_sentences['test'], correct_pos['test'], pronoun_errors_flex['test'],
-                         pronoun_errors['test'], [num_test] * len(correct_sentences['test'])), f)
+                         pronoun_errors['test'], [self.num_test] * len(correct_sentences['test'])), f)
 
         if plot_results:
             epochs = range(len(correct_sentences['train']))
-            plt.plot(epochs, [x * 100 / num_train for x in correct_sentences['train']], linestyle='--',
+            plt.plot(epochs, [self._percentage(x) for x in correct_sentences['train']], linestyle='--',
                      color='olivedrab', label='train')
             # plt.plot(epochs, _flex_correct, linestyle='--', color='g', label='train flex')
-            plt.plot(epochs, [x * 100 / num_train for x in correct_pos['train']], linestyle='--',
+            plt.plot(epochs, [self._percentage(x) for x in correct_pos['train']], linestyle='--',
                      color='yellowgreen', label='train POS')
             # now add test sentences
-            plt.plot(epochs, [x * 100 / num_test for x in correct_sentences['test']], color='darkslateblue',
-                     label='test')
+            plt.plot(epochs, [self._percentage(x, test=True) for x in correct_sentences['test']],
+                     color='darkslateblue', label='test')
             # plt.plot(epochs, test_flex_correct, color='royalblue', label='test flex')
-            plt.plot(epochs, [x * 100 / num_test for x in correct_pos['test']], color='deepskyblue',
+            plt.plot(epochs, [self._percentage(x, test=True) for x in correct_pos['test']], color='deepskyblue',
                      label='test POS')
             plt.ylim([0, 100])
             plt.xlabel('Epochs')
@@ -429,11 +435,15 @@ class DualPath:
         words_correct = 0
         correct_pos = 0
         trg_sentences = []
-        if eval_set is None:
+
+        if not eval_set:
             eval_set = self.testset
         with open(eval_set, 'r+') as f:
             lines = f.readlines()
+
         num_sentences = len(lines)
+        if is_test_set:
+            self.num_test = num_sentences
         if self.prodrop:  # make prodrop
             lines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in lines]
         """ This section will soon be removed as the problem is solved due to softmax
@@ -461,7 +471,7 @@ class DualPath:
                             self.lexicon.index('ella'), self.lexicon.index('él')]
             idx_es_pron = [self.lexicon.index('ella'), self.lexicon.index('él')]
             idx_en_pron = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]"""
-            he_idx = idx_en_pron[0]
+            #he_idx = idx_en_pron[0]
 
         for line in lines:
             sentence, message = line.split('##')
@@ -578,7 +588,7 @@ class DualPath:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, sentences_correct, num_sentences, correct_pos, num_sentences))
 
-        results_dict[epoch] = (sentences_correct, correct_pos, all_pron_err, pron_err, num_sentences)
+        results_dict[epoch] = (sentences_correct, correct_pos, all_pron_err, pron_err)
 
     def initialize_network(self):
         # The where, what, and cwhat units were unbiased to make them more input driven
@@ -672,7 +682,7 @@ if __name__ == "__main__":
                                                                       'is the sum of sentences that will be generated')
     parser.add_argument('-test_every', help='Test network every x epochs (default: 1)', type=int, default=1)
     parser.add_argument('-title', help='Title for the plot(s)')
-    parser.add_argument('-sim', type=int, default=20, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     # boolean arguments
     parser.add_argument('-prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
