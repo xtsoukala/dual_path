@@ -1,5 +1,7 @@
 # Bilingual Dual path model
 
+![alt-image](Bilingual Dual-path.png)
+
 Dual path is a computational model of (monolingual) sentence production by Chang, 2002
 
 Take a look at this tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
