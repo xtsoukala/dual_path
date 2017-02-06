@@ -660,16 +660,16 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-hidden', help='number of hidden layer units. Default: 30', type=int, default=30)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-hidden', help='number of hidden layer units.', type=int, default=30)
     parser.add_argument('-epochs', help='Number that indicates the number of train set iterations by the model during '
-                                        'training . Default: 20', type=int, default=20)
+                                        'training.', type=int, default=20)
     parser.add_argument('-input', help='(Input) folder that contains the input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any other string for bilingual)', default='en')
-    parser.add_argument('-lrate', help='Learning rate. Default: 0.1', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
+    parser.add_argument('-lrate', help='Learning rate.', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
     parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level. If not set, there '
                                       'will be no pronouns in the test/train set', type=int, default=100)
     parser.add_argument('-set_weights', '-sw',
@@ -688,7 +688,7 @@ if __name__ == "__main__":
     parser.add_argument('-testset', '-test', help='Test set file name (optional)')
     parser.add_argument('-generate_num', type=int, default=2500, help='Generate new train/test dataset. generate_num '
                                                                       'is the sum of sentences that will be generated')
-    parser.add_argument('-test_every', help='Test network every x epochs (default: 1)', type=int, default=1)
+    parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plot(s)')
     parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
@@ -696,7 +696,7 @@ if __name__ == "__main__":
     parser.add_argument('-prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
     parser.add_argument('-norolecopy', dest='rcopy', action='store_false',
-                        help='If set, the produced role layer is copied back to the comprehension layer')
+                        help='If set, the produced role layer is not copied back to the comprehension layer')
     parser.set_defaults(rcopy=False)
     parser.add_argument('-debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
@@ -706,7 +706,7 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('-gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
     parser.set_defaults(gender=False)
-    parser.add_argument('-emph', dest='emphasis', action='store_true', help='Include emphasis concept 30% of the time')
+    parser.add_argument('-emph', dest='emphasis', action='store_true', help='Include emphasis concept 30%% of the time')
     parser.set_defaults(emphasis=False)
     args = parser.parse_known_args()[0]
 
