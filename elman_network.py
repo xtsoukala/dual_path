@@ -262,7 +262,7 @@ class ElmanNetwork:
                 sum_deltas = np.sum(delta_sq)
                 len_delta = np.sqrt(sum_deltas)  # split sum deltas and len delta for less memory consumption
                 if len_delta > 1:
-                    layer.delta = layer.delta / len_delta
+                    layer.delta = np.true_divide(layer.delta, len_delta)
 
             layer.delta *= self.learn_rate
             if self.debug_messages:
@@ -403,7 +403,7 @@ def input_sd(number_of_inputs):
     """
     As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
     """
-    return 1.0 / number_of_inputs
+    return np.true_divide(1.0, number_of_inputs)
 
 
 def convert_range(matrix, min_val=-0.9, max_val=0.9):
@@ -413,7 +413,7 @@ def convert_range(matrix, min_val=-0.9, max_val=0.9):
     if np.sum(matrix) == 0:
         return matrix + min_val
     else:
-        return (max_val - min_val) * (matrix - matrix.min()) / (matrix.max() - matrix.min()) + min_val
+        return np.true_divide((max_val - min_val) * (matrix - matrix.min()), (matrix.max() - matrix.min())) + min_val
         #return (max_val - min_val) * (matrix - min(matrix)) / (max(matrix) - min(matrix)) + min_val
 
 
@@ -437,9 +437,9 @@ def softmax(x, average=True):
     if average:
         # averaging using max seems to work better than the usual softmax
         xt = np.exp(x - x.max())
-        return xt / np.sum(xt, axis=0)
+        return np.true_divide(xt, np.sum(xt, axis=0))
     # but this is the default. It sometimes gives "RuntimeWarning: invalid value encountered in divide" and returns nan
-    return np.exp(x) / np.sum(np.exp(x), axis=0)
+    return np.true_divide(np.exp(x), np.sum(np.exp(x), axis=0))
 
 
 def softmax_derivative(x):
@@ -457,7 +457,7 @@ def relu_derivative(x):
 
 
 def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-x))
+    return np.true_divide(1.0, (1.0 + np.exp(-x)))
 
 
 def sigmoid_derivative(x, input_activation=False):

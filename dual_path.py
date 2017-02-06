@@ -120,8 +120,8 @@ class DualPath:
 
     def _percentage(self, x, test=False):
         if test:
-            return x * 100 / self.num_test
-        return x * 100 / self.num_train
+            return np.true_divide(x * 100, self.num_test)
+        return np.true_divide(x * 100, self.num_train)
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -409,9 +409,9 @@ class DualPath:
 
                 # same using percentages
                 if self.test_sentences_with_pronoun:  # for instance, in ES case there are no sentences with he and she
-                    percentage_pronoun_errors = [x * 100 / self.test_sentences_with_pronoun
+                    percentage_pronoun_errors = [np.true_divide(x * 100, self.test_sentences_with_pronoun)
                                                  for x in pronoun_errors['test']]
-                    percentage_pronoun_errors_flex = [x * 100 / self.test_sentences_with_pronoun
+                    percentage_pronoun_errors_flex = [np.true_divide(x * 100, self.test_sentences_with_pronoun)
                                                       for x in pronoun_errors_flex['test']]
                 else:
                     percentage_pronoun_errors = pronoun_errors['test']
@@ -801,12 +801,12 @@ if __name__ == "__main__":
              test_pos_correct, all_pronoun_err, pronoun_err, test_sentences) = np.mean(results, axis=0)
             epoch_list = range(len(test_num_correct))
             # take average of lists and plot
-            plt.plot(epoch_list, num_correct * 100 / train_sentences, linestyle='--', color='olivedrab', label='train')
-            plt.plot(epoch_list, pos_correct * 100 / train_sentences, linestyle='--', color='yellowgreen',
+            plt.plot(epoch_list, np.true_divide(num_correct * 100, train_sentences), linestyle='--', color='olivedrab', label='train')
+            plt.plot(epoch_list, np.true_divide(pos_correct * 100, train_sentences), linestyle='--', color='yellowgreen',
                      label='train POS')
             # add test sentences
-            plt.plot(epoch_list, test_num_correct * 100 / test_sentences, color='darkslateblue', label='test')
-            plt.plot(epoch_list, test_pos_correct * 100 / test_sentences, color='deepskyblue', label='test POS')
+            plt.plot(epoch_list, np.true_divide(test_num_correct * 100, test_sentences), color='darkslateblue', label='test')
+            plt.plot(epoch_list, np.true_divide(test_pos_correct * 100, test_sentences), color='deepskyblue', label='test POS')
             plt.ylim([0, 100])
             plt.xlabel('Epochs')
             plt.ylabel('Percentage correct (%)')
@@ -828,8 +828,8 @@ if __name__ == "__main__":
                     testl = f.readlines()
                 sentences_pronoun = len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
                 if sentences_pronoun:
-                    all_pronoun_err = all_pronoun_err * 100 / sentences_pronoun
-                    pronoun_err = pronoun_err * 100 / sentences_pronoun
+                    all_pronoun_err = np.true_divide(all_pronoun_err * 100, sentences_pronoun)
+                    pronoun_err = np.true_divide(pronoun_err * 100, sentences_pronoun)
                 plt.title("Percentage of subject pronoun errors (%%) for %s " % dualp.plot_title)
                 plt.plot(epoch_list, all_pronoun_err, color='deepskyblue', linestyle='--')
                 plt.plot(epoch_list, pronoun_err)
