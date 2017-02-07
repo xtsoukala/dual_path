@@ -233,7 +233,7 @@ class DualPath:
                 #    event_sem_activations[self.event_semantics.index('ES')] = 0 #activation - same for EN
                 for event in what.split(","):
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
-                        activation = reduced_activation
+                        activation = norm_activation #reduced_activation
                         break
                     # elif event == "2":
                     #    activation = 1
@@ -704,11 +704,11 @@ if __name__ == "__main__":
     parser.set_defaults(decrease_lrate=True)
     parser.add_argument('-nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
     parser.set_defaults(nolang=False)
-    parser.add_argument('-gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
-    parser.set_defaults(gender=False)
+    parser.add_argument('-nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
+    parser.set_defaults(gender=True)
     parser.add_argument('-emph', dest='emphasis', action='store_true', help='Include emphasis concept 30%% of the time')
     parser.set_defaults(emphasis=False)
-    args = parser.parse_known_args()[0]
+    args = parser.parse_args()  # parse_known_args()[0] won't show non existing arguments, it's better to get a warning
 
     results_dir = "simulations/%s%s_%s_h%s" % ((args.resdir if args.resdir else ""),
                                                datetime.now().strftime("%Y-%m-%dt%H.%M.%S"), args.lang, args.hidden)

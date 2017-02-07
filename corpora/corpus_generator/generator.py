@@ -30,26 +30,55 @@ class GenerateSets:
                                           'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},#{'def': 'the', 'indef': 'a'}, 'c': 'a',
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
-                                      'animate': {'m': 'man boy father brother dog teacher'.split(),
-                                                  'f': 'woman girl mother sister cat nurse'.split(),
-                                                  #'c': 'nurse teacher'.split(),
+                                      'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
+                                                       'host nephew policeman son uncle waiter bull'.split(),
+                                                  'f': 'woman girl mother sister cat nurse actress grandmother wife '
+                                                       'hostess niece policewoman daughter aunt waitress cow'.split(),
+                                                  #'c': 'nurse teacher baby cousin'.split(),
                                                   #'n':  'cat dog'.split()
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon'.split()}
                                       },
-                                  'verb': {'intrans': 'swim jump walk run'.split(),
+                                  'verb': {'intrans': 'swim jump walk run arrive lie sneeze sit die eat'.split(),
                                            'trans': 'push hit kick carry'.split(),
                                            'double': 'give throw show present'.split()},
-                                  'aux': {'singular': {'present': 'is'}, #'past': 'was'},
-                                          'plural': {'present': 'are'}
-                                          },#, 'past': 'were'}},
+                                  'aux': {'singular': {'present': 'is'}, #, 'past': 'was'},
+                                          'plural': {'present': 'are'},#, 'past': 'were'}},
+                                          },
                                   'being': 'being',
                                   'ing': '-ing',
-                                  'verb_suffix': {'present': '-s'},# 'past': '-ed'},
+                                  'verb_suffix': {'present': '-s'},#, 'past': '-ed'},
                                   'by': 'by',
                                   'to': 'to',
                                   'per': '.',
                                   'par': '-par'}  # , 'noun_plural': '-ss'}
+                           }
+
+        """'verb': {'intrans': 'dormir saltar caminar correr'.split(),
+             'trans': 'empujar golpear patear llevar'.split(),
+             'double': 'dar lanzar mostrar presentar'.split()},"""
+        self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'}, 'indef': {'m': 'un', 'f': 'una'},
+                                         },
+                                  'pron': {'m': 'él', 'f': 'ella'},
+                                  'noun': {'animate': {'m': 'niño padre hermano perro maestro actor abuelo esposo '
+                                                            'sobrino policía hijo tío camarero toro'.split(),
+                                                       'f': 'mujer niña madre hermana gata enfermera actríz abuela '
+                                                            'esposa sobrina policía hija tía camarera vaca'.split()},
+                                           'inanimate': {'m': 'palo juguete bolso'.split(),
+                                                         'f': 'pelota llave cometa'.split()}
+                                           },
+                                  'verb': {'intrans': 'nad salt camin corr'.split(),
+                                           'trans': 'empuj golpe pate llev'.split(),
+                                           'double': 'd tir mostr present_'.split()},
+                                  'aux': {'singular': {'present': 'está'},#, 'past': 'estaba'},
+                                          'plural': {'present': 'están'}#, 'past': 'estaban'}},
+                                          },
+                                  'ing': '-ando',
+                                  'verb_suffix': {'present': '-a'},# 'past': '-ó'},
+                                  'by': 'por',
+                                  'to': 'a_',
+                                  'per': '.',
+                                  'par': '_par'}  # ,'noun_plural': '-ss'}
                            }
 
         self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
@@ -57,15 +86,15 @@ class GenerateSets:
                                   'det-acc': {'m': 'τον', 'f': 'την', 'n': 'το'},
                                   'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
                                   'noun': {
-                                      'animate': {'m': 'άντρας πατέρας αδερφός σκύλος'.split(), # σκύλος
-                                                  'f': 'γυναίκα  μητέρα αδερφή γάτα'.split(), #γάτα
-                                                  #'c': 'nurse teacher'.split(),
-                                                  'n':  'αγόρι κορίτσι'.split()
+                                      'animate': {'m': 'άντρας πατέρας αδερφός σκύλος'.split(),  # σκύλος
+                                                  'f': 'γυναίκα  μητέρα αδερφή γάτα'.split(),  # γάτα
+                                                  # 'c': 'nurse teacher'.split(),
+                                                  'n': 'αγόρι κορίτσι'.split()
                                                   },
                                       'inanimate': {'f': 'μπάλα τσάντα'.split(),
                                                     'n': 'παιχνίδι κλειδί'.split(),
                                                     'm': 'χαρταετός λοστός'.split()}
-                                      },
+                                  },
                                   'verb': {'intrans': 'κολυμπά πηδά περπατά τρέχ'.split(),
                                            'trans': 'σπρώχν χτυπά κλωτσά κουβαλά'.split(),
                                            'double': 'δίν πετά δείχν παρουσιάζ'.split()},
@@ -78,56 +107,33 @@ class GenerateSets:
                                   'par': '-ται'}  # , 'noun_plural': '-ss'}
                            }
 
-        """'verb': {'intrans': 'dormir saltar caminar correr'.split(),
-             'trans': 'empujar golpear patear llevar'.split(),
-             'double': 'dar lanzar mostrar presentar'.split()},"""
-        self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'}, 'indef': {'m': 'un', 'f': 'una'},
-                                         },
-                                  'pron': {'m': 'él', 'f': 'ella'},
-                                  'noun': {'animate': {'m': 'hombre gato perro niño padre hermano maestro'.split(),
-                                                       'f': 'mujer niña madre hermana enfermera'.split()},
-                                           'inanimate': {'m': 'palo juguete bolso'.split(),
-                                                         'f': 'pelota llave cometa'.split()}
-                                           },
-                                  'verb': {'intrans': 'nad salt camin corr'.split(),
-                                           'trans': 'empuj golpe pate llev'.split(),
-                                           'double': 'd tir mostr present_'.split()},
-                                  'aux': {'singular': {'present': 'está'},#, 'past': 'estaba'},
-                                          'plural': {'present': 'están'}
-                                          },#, 'past': 'estaban'}},
-                                  'ing': '-ando',
-                                  'verb_suffix': {'present': '-a'},# 'past': '-ó'},
-                                  'by': 'por',
-                                  'to': 'a_',
-                                  'per': '.',
-                                  'par': '_par'}  # ,'noun_plural': '-ss'}
-                           }
-        # non language-specific concepts -- leave out 'C', common, and 'N', neutral, for now
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
-
+        # non language-specific concepts -- leave out 'C', common, and 'N', neutral, for now
         self.concepts = {'M': 'M', 'F': 'F'}
-        self.concepts_en = {'man': 'MAN', 'sister': 'SISTER',
+        # note that sister = SIBLING + F, brother = SIBLING + M, etc
+        self.concepts_en = {'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
+                            'mother': 'PARENT', 'father': 'PARENT',  'daughter': 'OFFSPRING', 'son': 'OFFSPRING',
+                            'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN', 'actress': 'ACTOR', 'actor': 'ACTOR',
+                            'wife': 'PARTNER', 'husband': 'PARTNER', 'hostess': 'HOST', 'host': 'HOST',
+                            'grandmother': 'GRANDPARENT', 'grandfather': 'GRANDPARENT',
+                            'waitress': 'WAITER', 'waiter': 'WAITER', 'aunt': 'UNCLES', 'uncle': 'UNCLES',
+                            'nephew': 'NIBLING', 'niece': 'NIBLING',
+                            'nurse': 'NURSE',
+                            'cat': 'CAT',
+                            'dog': 'DOG',
+                            'teacher': 'TEACHER',
+                            'woman': 'WOMAN', 'man': 'MAN',
                              'give': 'GIVE',
-                             'brother': 'BROTHER',
-                             'girl': 'GIRL',
                              'carry': 'CARRY',
-                             'woman': 'WOMAN',
                              'kick': 'KICK',
-                             'boy': 'BOY',
                              'run': 'RUN',
-                             'dog': 'DOG',
-                             'mother': 'MOTHER',
                              'throw': 'THROW',
-                             'nurse': 'NURSE',
                              'swim': 'SWIM',
                              'walk': 'WALK',
-                             'cat': 'CAT',
-                             'teacher': 'TEACHER',
                              'jump': 'JUMP',
                              'show': 'SHOW',
                              'present': 'PRESENT',
                              'hit': 'HIT',
-                             'father': 'FATHER',
                              'push': 'PUSH',
                              'bag': 'BAG',
                              'ball': 'BALL',
@@ -135,13 +141,31 @@ class GenerateSets:
                              'toy': 'TOY',
                              'stick': 'STICK',
                              'key': 'KEY',
-                             'balloon': 'BALLOON'
+                             'balloon': 'BALLOON',
+                            'sit': 'SIT',
+                            'sneeze': 'SNEEZE',
+                            'lie': 'LIE',
+                            'cow': 'COW',
+                            'eat': 'EAT',
+                            'arrive': 'ARRIVE',
+                            'bull': 'BULL',
+                            'die': 'DIE'
                             }
 
-        self.concepts_es = {'padre': 'FATHER', 'enfermera': 'NURSE', 'mujer': 'WOMAN', 'd': 'GIVE',
-                            'ni\xc3\xb1o': 'BOY', 'bolso': 'BAG', 'ni\xc3\xb1a': 'GIRL', 'hermano': 'BROTHER',
-                            'hombre': 'MAN', 'cometa': 'KITE', 'juguete': 'TOY', 'madre': 'MOTHER', 'gato': 'CAT',
-                            'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER', 'hermana': 'SISTER',
+        self.concepts_es = {'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD', 'ni\xc3\xb1a': 'CHILD',
+                            'madre': 'PARENT', 'padre': 'PARENT',  'hija': 'OFFSPRING', 'hijo': 'OFFSPRING',
+                            'policía': 'POLICEMAN', 'policía': 'POLICEMAN', 'actriz': 'ACTOR', 'actor': 'ACTOR',
+                            'esposa': 'PARTNER', 'esposo': 'PARTNER',
+                            'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT',
+                            'camarera': 'WAITER', 'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES',
+                            'sobrino': 'NIBLING', 'sobrina': 'NIBLING',
+                            'vaca': 'COW',
+                            'toro': 'COW',
+                            'actríz': 'ACTOR',
+                            'gata': 'CAT',
+                            'enfermera': 'NURSE', 'mujer': 'WOMAN', 'd': 'GIVE',
+                            'bolso': 'BAG', 'hombre': 'MAN', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
+                            'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
                             'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
                             'dorm': 'SLEEP', 'empuj': 'PUSH', 'lanz': 'THROW', 'tir': 'THROW', 'corr': 'RUN',
                             'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'nad': 'SWIM', 'globo': 'BALLOON'}
