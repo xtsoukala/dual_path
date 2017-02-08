@@ -7,14 +7,14 @@ from datetime import datetime
 import sys
 
 reload(sys)
-sys.setdefaultencoding("utf-8")
+sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 
 
 class GenerateSets:
     def __init__(self, results_dir=None):
         if results_dir:
             self.results_dir = results_dir
-        else:
+        else:  # store under "generated/" if folder was not specified
             self.results_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
 
         if os.path.isdir(self.results_dir):
@@ -24,8 +24,7 @@ class GenerateSets:
             os.makedirs(self.results_dir)
 
         self.lexicon = {}
-        # Write the lexicon directly. Alternatively we can load files, but splitting a string sounds more efficient.
-        # How many genders are there in English? 3 (f/m/n) or 4 (including "common" gender?)
+        # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point
         self.lexicon_en = {'en': {'det': {'def': {'m': 'the', 'f': 'the', 'n': 'the'}, # 'c': 'the',
                                           'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},#{'def': 'the', 'indef': 'a'}, 'c': 'a',
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
@@ -108,7 +107,8 @@ class GenerateSets:
                            }
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
-        # non language-specific concepts -- leave out 'C', common, and 'N', neutral, for now
+        # semantic gender, which is a non language-specific concept.
+        # The syntactic genders "N(eutral" and "C(ommon)" are not included
         self.concepts = {'M': 'M', 'F': 'F'}
         # note that sister = SIBLING + F, brother = SIBLING + M, etc
         self.concepts_en = {'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
@@ -117,12 +117,11 @@ class GenerateSets:
                             'wife': 'PARTNER', 'husband': 'PARTNER', 'hostess': 'HOST', 'host': 'HOST',
                             'grandmother': 'GRANDPARENT', 'grandfather': 'GRANDPARENT',
                             'waitress': 'WAITER', 'waiter': 'WAITER', 'aunt': 'UNCLES', 'uncle': 'UNCLES',
-                            'nephew': 'NIBLING', 'niece': 'NIBLING',
+                            'nephew': 'NIBLING', 'niece': 'NIBLING', 'woman': 'HUMAN', 'man': 'HUMAN',
                             'nurse': 'NURSE',
                             'cat': 'CAT',
                             'dog': 'DOG',
                             'teacher': 'TEACHER',
-                            'woman': 'WOMAN', 'man': 'MAN',
                              'give': 'GIVE',
                              'carry': 'CARRY',
                              'kick': 'KICK',
@@ -155,16 +154,14 @@ class GenerateSets:
         self.concepts_es = {'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD', 'ni\xc3\xb1a': 'CHILD',
                             'madre': 'PARENT', 'padre': 'PARENT',  'hija': 'OFFSPRING', 'hijo': 'OFFSPRING',
                             'policía': 'POLICEMAN', 'policía': 'POLICEMAN', 'actriz': 'ACTOR', 'actor': 'ACTOR',
-                            'esposa': 'PARTNER', 'esposo': 'PARTNER',
+                            'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
                             'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT',
                             'camarera': 'WAITER', 'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES',
-                            'sobrino': 'NIBLING', 'sobrina': 'NIBLING',
-                            'vaca': 'COW',
-                            'toro': 'COW',
-                            'actríz': 'ACTOR',
+                            'sobrino': 'NIBLING', 'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN',
+                            'vaca': 'COW', 'toro': 'COW',
                             'gata': 'CAT',
-                            'enfermera': 'NURSE', 'mujer': 'WOMAN', 'd': 'GIVE',
-                            'bolso': 'BAG', 'hombre': 'MAN', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
+                            'enfermera': 'NURSE', 'd': 'GIVE',
+                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
                             'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
                             'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
                             'dorm': 'SLEEP', 'empuj': 'PUSH', 'lanz': 'THROW', 'tir': 'THROW', 'corr': 'RUN',
