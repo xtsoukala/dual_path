@@ -1,4 +1,4 @@
-# Bilingual Dual path model
+# Bilingual Dual-path model
 
 ![alt-image](Bilingual Dual-path.png)
 
@@ -22,14 +22,12 @@ the word output units, the error function for these units was the divergence fun
 All other units used the logistic activation function.
 ```
 
-To run the model: 
+To see all the parameters of the model: 
 
 
 ```
 python dual_path.py -h 
 ```
-
-to see all the parameters of the model.
 
 ```
 usage: dual_path.py [-h] [-hidden HIDDEN] [-epochs EPOCHS] [-input INPUT]
