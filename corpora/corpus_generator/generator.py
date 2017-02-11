@@ -327,8 +327,7 @@ class GenerateSets:
                               ]
 
     def generate_sets(self, num_sentences, lang, bilingual_lexicon, percentage_pronoun,
-                      extended_evsem, use_subject_emphasis, use_emphasis_concept, percentage_english=50,
-                      print_all=False):
+                      extended_evsem, percentage_english=50, print_all=False):
         """
             lang: leave None for bilingual
             num_sentences: number of train AND test sentences
@@ -375,12 +374,9 @@ class GenerateSets:
 
         test_set = self.generate_sentences(sentence_type_test, self.lexicon, fname="test.%s" % lang,
                                            percentage_pronoun=percentage_pronoun,
-                                           use_emphasis_concept=use_emphasis_concept,
-                                           use_subject_emphasis=use_subject_emphasis,
                                            extended_evsem=extended_evsem, return_mess=True, print_all=print_all)
         self.generate_sentences(sentence_type_train, self.lexicon, fname="train.%s" % lang,
-                                percentage_pronoun=percentage_pronoun, use_emphasis_concept=use_emphasis_concept,
-                                use_subject_emphasis=use_subject_emphasis,
+                                percentage_pronoun=percentage_pronoun,
                                 extended_evsem=extended_evsem, exclude_test_sentences=test_set, print_all=print_all)
 
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
@@ -407,10 +403,8 @@ class GenerateSets:
         self.print_lexicon(self.lexicon)
 
     def generate_sentences(self, sentence_type, lexicon, fname, percentage_pronoun, extended_evsem,
-                           use_emphasis_concept, use_subject_emphasis, exclude_test_sentences=[],
-                           return_mess=False, print_all=False):
+                           exclude_test_sentences=[], return_mess=False, print_all=False, use_emphasis_concept=True):
         is_prodrop = False
-        prodrop_null = False  # whether to append "NULL" in prodrop cases or not
         # determine how often we will use NPs vs pronouns
         num_sentences = len(sentence_type)
         if not percentage_pronoun:  # full NPs
@@ -419,7 +413,7 @@ class GenerateSets:
             number_pronouns = num_sentences * percentage_pronoun / 100
             np = number_pronouns * [0] + (num_sentences - number_pronouns) * [1]
             random.shuffle(np)
-        use_emphasis_concept = True  # FIXME
+        use_emphasis_concept = use_emphasis_concept
         # emphasize subject 30% of the times
         emphasis = [0] * num_sentences
         emphasis[::4] = [1] * len(emphasis[::4])  # every fourth subject is emphasized, whether it's NP or pronoun
@@ -479,8 +473,6 @@ class GenerateSets:
                                 if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):
                                     # use pronoun if emphasized
                                     sentence.append(lexicon[lang]['pron'][gender])
-                                elif prodrop_null:
-                                    sentence.append('NULL')
                             elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
                                 sentence.append(pronoun_list[gender])
                                 add_det = False  # reset
@@ -500,8 +492,6 @@ class GenerateSets:
                             add_det = False
                             if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):  # use pron if emph
                                 sentence.append(lexicon[lang]['pron'][gender])
-                            elif prodrop_null:
-                                sentence.append('NULL')
                         elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
                             sentence.append(pronoun_list[gender])
                             add_det = False  # reset
@@ -528,10 +518,6 @@ class GenerateSets:
             if not extended_evsem:
                 #message = re.sub(r",PAT|,REC|,AGT|,-1", "", message)
                 message = re.sub(r"ES,|EN,", "", message)  # only remove language code for now
-            if use_subject_emphasis and emphasis[sen_idx]:
-                # increase agent's activation
-                #message = re.sub(r",AGT", ",2,AGT", message)
-                message += ",EMPHASIS"
             if message in exclude_test_sentences:
                 sentence_type.append((pos_full, mes))  # find unique sentence, don't add it to the train set
             else:
@@ -583,6 +569,5 @@ class GenerateSets:
 
 if __name__ == "__main__":
     sets = GenerateSets()
-    sets.generate_sets(num_sentences=200, lang='enes', bilingual_lexicon=True,
-                       percentage_pronoun=50, use_emphasis_concept=False, use_subject_emphasis=True,
+    sets.generate_sets(num_sentences=200, lang='enes', bilingual_lexicon=True, percentage_pronoun=50,
                        extended_evsem=False, percentage_english=50, print_all=True)
