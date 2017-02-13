@@ -2,12 +2,10 @@
 
 ![alt-image](Bilingual Dual-path.png)
 
-Dual path is a computational model of (monolingual) sentence production by Chang, 2002
-
-Take a look at this tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
+Dual-path is a computational model of (monolingual) sentence production by [Chang, 2002](http://onlinelibrary.wiley.com/store/10.1207/s15516709cog2605_3/asset/s15516709cog2605_3.pdf;jsessionid=37E50E857AA5FA7A83648E4E9E63C93D.f01t04?v=1&t=iz4eh1e7&s=fc21e79381e43ccc95265509af7587e517141705). Tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
 
 
-From Chang F., 2002:
+From Chang, 2002:
 ```
 Learning algorithm: back-propagation, using a modified momentum algorithm (doug momentum)
 Doug momentum: similar to standard momentum descent with the exception that the pre-momentum
@@ -42,8 +40,8 @@ usage: dual_path.py [-h] [-hidden HIDDEN] [-epochs EPOCHS] [-input INPUT]
                     [-debug] [-nodlr] [-nolang] [-gender] [-emph]
 
 optional arguments:
-    -h, --help            show this help message and exit
-    -hidden HIDDEN        number of hidden layer units. (default: 30)
+    -h, --help            Show this help message and exit
+    -hidden HIDDEN        Number of hidden layer units. (default: 30)
     -epochs EPOCHS        Number that indicates the number of train set iterations by the model during training. (default: 20)
     -input INPUT          (Input) folder that contains the input files (lexicon, concepts etc) (default: None)
     -resdir RESDIR, -r RESDIR Prefix of results folder name; will be stored under folder "simulations"and a timestamp will be added (default: None)
