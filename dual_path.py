@@ -10,9 +10,6 @@ import shutil
 import re
 
 
-# import gc gc.collect()  # garbage collection, for memory efficiency
-
-
 class DualPath:
     def __init__(self, hidden_size, learn_rate, results_dir, epochs, input_dir, lex_fname, concept_fname, role_fname,
                  evsem_fname, role_copy, elman_debug_mess, test_every, plot_title, compress_size, set_weights_folder,
@@ -191,27 +188,26 @@ class DualPath:
 
     def sentence_indeces(self, sentence):
         """
-        :param sentence: intended sentence from train file (e.g. "the cat was walk -ing . .")
-        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20, 40, 38]
+        :param sentence: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'was', 'walk', '-ing']
+        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20, 40]
         """
-        return [self.lexicon.index(w) for w in sentence.split()]
+        return [self.lexicon.index(w) for w in sentence]
 
-    def sentence_pos_str(self, sentence):
+    def sentence_pos_str(self, sentence, remove_period=True):
         """
         :param sentence: sentence string
+        :param remove_period: whether to remove the period from the end of the sentence
         :return: returns a list of the POS of every word in the sentence
         """
+        if remove_period:
+            sentence = re.sub(' \.', '', sentence)
         return " ".join([self.pos_lookup(word) for word in sentence.split()])
 
     def get_message_info(self, message, test_phase=False):
         """
-        :param message: string, e.g. "A=CARRY X=FATHER,THE Y=STICK,A
-        E=PAST,PROG,XX,YY" which maps roles (A,X,Y) with concepts and also
+        :param message: string, e.g. "ACTION=CARRY AGENT=FATHER,DEF PATIENT=STICK,INDEF
+        E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
         gives information about the event-semantics (E)
-
-        NOTE: In the given test and train files several event-semantics had -1 as an event:
-        PRES,SIMP,XX,YY,-1,ZZ
-        So for now I added the string "-1" as a valid event instead of modifying the train sets
         """
         message = message.strip()
         message = re.sub(r',(AGT|-1|PAT|REC),', ',', message)
@@ -321,14 +317,15 @@ class DualPath:
 
             for line in self.trainlines:  # start training
                 sentence, message = line.split('##')
+                target_sentence = sentence.split()
                 weights_role_concept, evsem_act, target_lang_act, lang, message = self.get_message_info(message)
                 self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
                                                    event_sem_activations=evsem_act, target_lang_act=target_lang_act)
                 prod_idx = None  # previously produced word (at the beginning of sentence: None)
-                for enum_idx, trg_idx in enumerate(self.sentence_indeces(sentence)):
+                for enum_idx, trg_idx in enumerate(self.sentence_indeces(target_sentence)):
                     self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx)
                     self.srn.feed_forward(start_of_sentence=(prod_idx is None))
-                    prod_idx = self.srn.get_max_output_activation()
+                    prod_idx = trg_idx#self.srn.get_max_output_activation()
                     self.srn.backpropagate(epoch)
 
             if epoch < 3 and decrease_lrate:
@@ -418,7 +415,12 @@ class DualPath:
 
     def evaluate_network(self, results_dict, epoch='final', eval_set=None, is_test_set=True, check_pron=True):
         """
-        According to Chang, Dell & Bock (2006) initially there is not input, only context and event-sem give input
+        :param results_dict: Dictionary that contains evaluation results for all epochs
+        :param epoch: Number of epoch
+        :param eval_set: Which set needs to be evaluated (optional, if not set the train/test set is used)
+        :param is_test_set: Whether it is a test set (otherwise a train set is used)
+        :param check_pron: Whether to evaluate pronoun production
+        :return:
         """
 
         if eval_set:
@@ -432,18 +434,19 @@ class DualPath:
             num_sentences = self.num_train
 
         sentences_correct = 0
-        all_pron_err = 0
-        pos_pron_err = 0  # the latter only counts otherwise correct sentences (so correct POS)
-        pron_err = 0  # all sentence (but the pronoun) is correct
         words_correct = 0
         correct_pos = 0
         trg_sentences = []
 
         if check_pron:
+            all_pron_err = 0  # all sentences that have he/she errors, even the ungrammatical ones
+            pos_pron_err = 0  # grammatical sentence with gender pronoun error (and potentially other semantic errors)
+            pron_err = 0  # sentence with gender pronoun error only (and otherwise correct)
             idx_en_pron = [self.lexicon.index('he'), self.lexicon.index('she')]
 
         for line in lines:
             sentence, message = line.split('##')
+            target_sentence = sentence.split()
             weights_role_concept, event_sem_activations, target_lang_act, lang, message = \
                 self.get_message_info(message, test_phase=True)
             self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
@@ -453,7 +456,8 @@ class DualPath:
             produced_sentence = []
             code_switched = False
             has_pronoun_error = False
-            for enum_idx, trg_idx in enumerate(self.sentence_indeces(sentence)):
+            flexible_order = False
+            for enum_idx, trg_idx in enumerate(self.sentence_indeces(target_sentence)):
                 self.srn.set_inputs(input_idx=prod_idx)
                 self.srn.feed_forward(start_of_sentence=(prod_idx is None))
                 prod_idx = self.srn.get_max_output_activation()
@@ -466,6 +470,8 @@ class DualPath:
                                                         (lang == 'ES' and prod_idx < self.code_switched_idx)):
                         code_switched = True
                 produced_sentence.append(self.lexicon[prod_idx])  # add word to the total sentence
+                if prod_idx == self.period_idx:  # end sentence if a period was produced
+                    break
                 """ will be removed (solved due to softmax)
                 if check_determiners:
                     if epoch >= 2000 and trg_idx in idx_all_dets and prod_idx in idx_all_dets \
@@ -506,7 +512,7 @@ class DualPath:
                                             cc, max_role, (max_role == trg_role), rr,
                                             np.argmax(compr), np.where(compr > 0.9), np.argmax(hidd), allhidd))
                 """
-            # stats sentence level
+            # stats on the sentence level
             out_sentence = ' '.join(produced_sentence)
             trg_sentences.append(sentence)
             if out_sentence == sentence:
@@ -517,11 +523,20 @@ class DualPath:
             if out_pos in self.allowed_structures:
                 corr_pos = True
                 correct_pos += 1
+                # if POS was correct but produced sentence was not identical to the target one, check if
+                # the meaning was correct but expressed with a different syntactic structure (due to, e.g., priming)
+                if out_sentence != sentence:
+                    produced_sentence = [x for x in produced_sentence if x not in ["to", "."]]
+                    target_sentence = [x for x in target_sentence if x not in ["to", "."]]
+                    if set(produced_sentence) == set(target_sentence):
+                        flexible_order = True
+                        # regard it as a correct sentence (it is grammatical and it conveys the same meaning)
+                        sentences_correct += 1
             if epoch > 0:
                 with open("%s/%s.eval" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nCS:%s POS:%s (%scorrect sentence)\n%s\n" %
                             (epoch, out_sentence, sentence, code_switched, corr_pos,
-                             "in" if out_sentence != sentence else "", message))
+                             "in" if (not flexible_order and out_sentence != sentence) else "", message))
             if check_pron and has_pronoun_error:
                 all_pron_err += 1
                 with open("%s/all_pronoun_%s.err" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
@@ -571,7 +586,7 @@ class DualPath:
         self.srn.connect_layers("identif", "role")
         self.srn.connect_layers("concept", "role")
         # hidden layer
-        if self.role_copy:
+        if self.role_copy:  # does not seem to improve this model, set default to False for simplicity
             self.srn.add_layer("role_copy", self.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
         self.srn.connect_layers("role", "hidden")
@@ -606,21 +621,18 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='number of hidden layer units.', type=int, default=30)
-    parser.add_argument('-epochs', help='Number that indicates the number of train set iterations by the model during '
-                                        'training.', type=int, default=20)
-    parser.add_argument('-input', help='(Input) folder that contains the input files (lexicon, concepts etc)')
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
+    parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
+    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any other string for bilingual)', default='en')
-    parser.add_argument('-lrate', help='Learning rate.', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
-    parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level. If not set, there '
-                                      'will be no pronouns in the test/train set', type=int, default=100)
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
     parser.add_argument('-set_weights', '-sw',
-                        help='We can set a folder that contains pre-trained weights as initial weights for simulations')
+                        help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
-                        help='In case of pre-trained weights we can also specify num of epochs under the -sw folder')
+                        help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=int, default=18,
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-compress', help='Number of compress layer units', type=int)  # 15?
@@ -630,36 +642,38 @@ if __name__ == "__main__":
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
     parser.add_argument('-trainset', '-train', help='File name that contains the message-sentence pair for training. '
                                                     'If left empty, the train*.* file under -input will be used.')
-    parser.add_argument('-testset', '-test', help='Test set file name (optional)')
-    parser.add_argument('-generate_num', type=int, default=2500, help='Generate new train/test dataset. generate_num '
-                                                                      'is the sum of sentences that will be generated')
+    parser.add_argument('-testset', '-test', help='Test set file name')
+    parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
+                                                                      '(if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
-    parser.add_argument('-title', help='Title for the plot(s)')
+    parser.add_argument('-title', help='Title for the plots')
     parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
+    parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
     # boolean arguments
-    parser.add_argument('-prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
+    parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
-    parser.add_argument('-norolecopy', dest='rcopy', action='store_false',
-                        help='If set, the produced role layer is not copied back to the comprehension layer')
+    parser.add_argument('--rcopy', dest='rcopy', action='store_true',
+                        help='If (role copy) is set, the produced role layer is copied back to the comprehension layer')
     parser.set_defaults(rcopy=False)
-    parser.add_argument('-debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
+    parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('-nodlr', dest='decrease_lrate', action='store_false', help='Stop automatic decrease of lrate')
+    parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Stop automatic decrease of lrate')
     parser.set_defaults(decrease_lrate=True)
-    parser.add_argument('-nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
+    parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
     parser.set_defaults(nolang=False)
-    parser.add_argument('-nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
+    parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
-    parser.add_argument('-emph', dest='emphasis', action='store_true', help='Include emphasis concept 30%% of the time')
+    parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
+                                                                             'level 20%% of the time')
     parser.set_defaults(emphasis=False)
     args = parser.parse_args()
-
+    # (create) path to store results
     results_dir = "simulations/%s%s_%s_h%s" % ((args.resdir if args.resdir else ""),
                                                datetime.now().strftime("%Y-%m-%dt%H.%M.%S"), args.lang, args.hidden)
     os.makedirs(results_dir)
 
-    if args.generate_num:  # generate a new set (unless "dir" was also set)
+    if args.generate_num:  # generate a new set (unless "input" was also set)
         if args.input:
             print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
             copy_dir(args.input, '%s/input_cp' % results_dir)
@@ -667,7 +681,7 @@ if __name__ == "__main__":
         else:
             from corpora.corpus_generator.generator import GenerateSets
 
-            args.input = "%s/input" % results_dir
+            args.input = "%s/input/" % results_dir
             sets = GenerateSets(results_dir=args.input)
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
                                bilingual_lexicon=True, extended_evsem=True)

@@ -141,8 +141,6 @@ class ElmanNetwork:
             self.reset_context_and_delta()
 
     def reset_context_and_delta(self):
-        '''context_layer = self._get_layer("context")
-        context_layer.activation = np.array([self.context_init] * context_layer.size)'''
         recurrent_layer = self._get_layer("hidden")
         recurrent_layer.context_activation = np.array([self.context_init] * recurrent_layer.size)
 

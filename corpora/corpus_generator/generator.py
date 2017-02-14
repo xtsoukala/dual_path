@@ -24,17 +24,15 @@ class GenerateSets:
             os.makedirs(self.results_dir)
 
         self.lexicon = {}
-        # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point
-        self.lexicon_en = {'en': {'det': {'def': {'m': 'the', 'f': 'the', 'n': 'the'}, # 'c': 'the',
-                                          'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},#{'def': 'the', 'indef': 'a'}, 'c': 'a',
+        # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point.
+        self.lexicon_en = {'en': {'det': {'def': {'m': 'the', 'f': 'the', 'n': 'the'},
+                                          'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
                                       'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
                                                        'host nephew policeman son uncle waiter bull'.split(),
                                                   'f': 'woman girl mother sister cat nurse actress grandmother wife '
                                                        'hostess niece policewoman daughter aunt waitress cow'.split(),
-                                                  #'c': 'nurse teacher baby cousin'.split(),
-                                                  #'n':  'cat dog'.split()
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon'.split()}
                                       },
@@ -199,12 +197,12 @@ class GenerateSets:
                             'χαρταετός': 'KITE',
                             'κολυμπά': 'SWIM'}
 
-        self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'PAT', 'REC', 'AGT']
-        self.target_lang = ['EN', 'ES'] #, 'EL']
+        #self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'PAT', 'REC', 'AGT']
+        self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
+        self.target_lang = ['EN', 'ES']  # , 'EL']
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
-        # PAT: PATIENT, REC: RECIPIENT, AGT: AGENT
         # how to indicate plural agent etc?
-        self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'),
+        """self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'),
                               # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
                               # 'AGENT=;ACTION=;E=EN,PROG'),
                               # ('det::def noun::animate noun_plural verb::intrans',
@@ -238,9 +236,9 @@ class GenerateSets:
 
                               #!('det noun aux::singular verb::trans par by det noun::animate',
                               # !'PATIENT=;ACTION=;AGENT=;E=EN,SIMPLE,-1,AGT,PAT')
-                             ]
+                             ]"""
 
-        """self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
+        self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
                               ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'),
                               ('det noun::animate aux::singular verb::trans ing det noun',
                                'AGENT=;ACTION=;PATIENT=;E=EN,PROG'),
@@ -250,15 +248,14 @@ class GenerateSets:
                                'det noun::inanimate to det noun::animate',
                                'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'),
                               ('det noun::animate aux::singular verb::double ing det noun::animate det noun::inanimate',
-                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,REC'),
+                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'),
                               ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                               'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,REC'),
+                               'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'),
                               ('det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,REC'),
-                              ]"""
+                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'),
+                              ]
 
-
-        self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'),
+        """self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'),
                               # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
                               # 'AGENT=;ACTION=;E=EN,PROG'),
                               # ('det::def noun::animate noun_plural verb::intrans',
@@ -294,10 +291,26 @@ class GenerateSets:
 
                               #!('det noun aux::singular verb::trans par by det noun::animate',
                               #! 'PATIENT=;ACTION=;AGENT=;E=ES,SIMPLE,-1,AGT,PAT')
+                              ]"""
+        self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,PROG'),
+                              ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,SIMPLE'),
+                              ('det noun::animate aux::singular verb::trans ing det noun',
+                               'AGENT=;ACTION=;PATIENT=;E=ES,PROG'),
+                              ('det noun::animate verb::trans verb_suffix det noun',
+                               'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'),
+                              ('det noun::animate aux::singular verb::double ing '
+                               'det noun::inanimate to det noun::animate',
+                               'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'),
+                              ('det noun::animate aux::singular verb::double ing '
+                               'to det noun::animate det noun::inanimate',
+                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'),
+                              ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
+                               'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'),
+                              ('det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
+                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE')
                               ]
 
-        self.structures_el = [
-                              # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
+        self.structures_el = [# ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
                               # 'AGENT=;ACTION=;E=EN,PROG'),
                               # ('det::def noun::animate noun_plural verb::intrans',
                               # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'),
