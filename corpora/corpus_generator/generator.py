@@ -25,8 +25,7 @@ class GenerateSets:
 
         self.lexicon = {}
         # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point.
-        self.lexicon_en = {'en': {'det': {'def': {'m': 'the', 'f': 'the', 'n': 'the'},
-                                          'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},
+        self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
                                       'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
@@ -197,7 +196,6 @@ class GenerateSets:
                             'χαρταετός': 'KITE',
                             'κολυμπά': 'SWIM'}
 
-        #self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'PAT', 'REC', 'AGT']
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
         self.target_lang = ['EN', 'ES']  # , 'EL']
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
@@ -255,43 +253,6 @@ class GenerateSets:
                                'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'),
                               ]
 
-        """self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'),
-                              # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                              # 'AGENT=;ACTION=;E=EN,PROG'),
-                              # ('det::def noun::animate noun_plural verb::intrans',
-                              # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'),
-                              ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,AGT,SIMPLE'),
-
-                              ('det noun::animate aux::singular verb::trans ing det noun',
-                               'AGENT=;ACTION=;PATIENT=;E=ES,PROG,AGT,PAT'),
-                              # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                              # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
-                              # ('det::def noun::animate noun_plural verb::trans det noun',
-                              # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                              ('det noun::animate verb::trans verb_suffix det noun',
-                               'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE,AGT,PAT'),
-
-                              (
-                              'det noun::animate aux::singular verb::double ing '
-                              'det noun::inanimate to det noun::animate',
-                              'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,-1,REC'),
-                              #'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,REC'),
-                              ('det noun::animate aux::singular verb::double ing '
-                              'to det noun::animate det noun::inanimate',
-                              'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG,AGT,PAT,REC'),
-                              # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                              # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
-                              # ('det::def noun::animate noun_plural verb::trans det noun',
-                              # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                              ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                               'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,-1,REC'),
-                              #'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'),
-                              ('det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                               'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE,AGT,PAT,REC'),
-
-                              #!('det noun aux::singular verb::trans par by det noun::animate',
-                              #! 'PATIENT=;ACTION=;AGENT=;E=ES,SIMPLE,-1,AGT,PAT')
-                              ]"""
         self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,PROG'),
                               ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,SIMPLE'),
                               ('det noun::animate aux::singular verb::trans ing det noun',
@@ -340,7 +301,7 @@ class GenerateSets:
                               ]
 
     def generate_sets(self, num_sentences, lang, bilingual_lexicon, percentage_pronoun,
-                      extended_evsem, percentage_english=50, print_all=False):
+                      percentage_english=50, print_all=False):
         """
             lang: leave None for bilingual
             num_sentences: number of train AND test sentences
@@ -386,11 +347,9 @@ class GenerateSets:
         random.shuffle(sentence_type_test)
 
         test_set = self.generate_sentences(sentence_type_test, self.lexicon, fname="test.%s" % lang,
-                                           percentage_pronoun=percentage_pronoun,
-                                           extended_evsem=extended_evsem, return_mess=True, print_all=print_all)
-        self.generate_sentences(sentence_type_train, self.lexicon, fname="train.%s" % lang,
-                                percentage_pronoun=percentage_pronoun,
-                                extended_evsem=extended_evsem, exclude_test_sentences=test_set, print_all=print_all)
+                                           percentage_pronoun=percentage_pronoun, return_mess=True, print_all=print_all)
+        self.generate_sentences(sentence_type_train, self.lexicon, fname="train.%s" % lang, print_all=print_all,
+                                percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
 
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
             f.write("%s" % "\n".join(self.identifiability))
@@ -415,16 +374,16 @@ class GenerateSets:
             self.lexicon.update(self.lexicon_es)
         self.print_lexicon(self.lexicon)
 
-    def generate_sentences(self, sentence_type, lexicon, fname, percentage_pronoun, extended_evsem,
+    def generate_sentences(self, sentence_type, lexicon, fname, percentage_pronoun,
                            exclude_test_sentences=[], return_mess=False, print_all=False, use_emphasis_concept=True):
         is_prodrop = False
-        # determine how often we will use NPs vs pronouns
+        # determine how often we will use NPs vs determiners
         num_sentences = len(sentence_type)
         if not percentage_pronoun:  # full NPs
             np = [1] * num_sentences
         else:  # any other percentage
-            number_pronouns = num_sentences * percentage_pronoun / 100
-            np = number_pronouns * [0] + (num_sentences - number_pronouns) * [1]
+            number_determiners = num_sentences * percentage_pronoun / 100
+            np = number_determiners * [0] + (num_sentences - number_determiners) * [1]
             random.shuffle(np)
         use_emphasis_concept = use_emphasis_concept
         # emphasize subject 30% of the times
@@ -456,7 +415,7 @@ class GenerateSets:
                         level = random_key
                     if pos == 'det':
                         message[msg_idx] += random_key + ","   # def/indef info
-                        pronoun_list = syn[random_key]
+                        determiners = syn[random_key]
                     elif random_key in ['past', 'present']:
                         message[-1] += "," + random_key
                     elif random_key in ['m', 'f', 'n', 'c']:
@@ -486,8 +445,9 @@ class GenerateSets:
                                 if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):
                                     # use pronoun if emphasized
                                     sentence.append(lexicon[lang]['pron'][gender])
-                            elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
-                                sentence.append(pronoun_list[gender])
+                            elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                                if type(determiners) is dict:
+                                    sentence.append(determiners[gender])
                                 add_det = False  # reset
                                 sentence.append(wd)
                             message[msg_idx] += self.get_concept(wd)
@@ -505,8 +465,9 @@ class GenerateSets:
                             add_det = False
                             if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):  # use pron if emph
                                 sentence.append(lexicon[lang]['pron'][gender])
-                        elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
-                            sentence.append(pronoun_list[gender])
+                        elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                            if type(determiners) is dict:
+                                sentence.append(determiners[gender])
                             add_det = False  # reset
                             sentence.append(random_word)
 
@@ -514,13 +475,17 @@ class GenerateSets:
                                 message[0] += ",EMPH"
                         msg_idx += 1
                     else:  # elif type == str
-                        sentence.append(w)
+                        # if it's a determiner and we want to produce a pronoun, don't add it to the sentence
+                        if not (not np[sen_idx] and msg_idx == 0):
+                            sentence.append(w)
+                            if w == determiners and not np[sen_idx]:
+                                add_det = True
                 elif type(syn) is list:
                     random_word = random.choice(syn)
                     message[msg_idx] += self.get_concept(random_word)  # verb
                     msg_idx += 1
                     if add_det:
-                        sentence.append(pronoun_list[gender])
+                        sentence.append(determiners[gender])
                         add_det = False
                     sentence.append(random_word)
                 else:
@@ -528,9 +493,6 @@ class GenerateSets:
 
             sentence = u"%s ." % " ".join(sentence)
             message = ";".join(message).upper()
-            if not extended_evsem:
-                #message = re.sub(r",PAT|,REC|,AGT|,-1", "", message)
-                message = re.sub(r"ES,|EN,", "", message)  # only remove language code for now
             if message in exclude_test_sentences:
                 sentence_type.append((pos_full, mes))  # find unique sentence, don't add it to the train set
             else:
@@ -583,4 +545,4 @@ class GenerateSets:
 if __name__ == "__main__":
     sets = GenerateSets()
     sets.generate_sets(num_sentences=200, lang='enes', bilingual_lexicon=True, percentage_pronoun=50,
-                       extended_evsem=False, percentage_english=50, print_all=True)
+                       percentage_english=50, print_all=True)
