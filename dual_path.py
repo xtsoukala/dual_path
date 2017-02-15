@@ -684,10 +684,10 @@ if __name__ == "__main__":
             copy_dir(args.input, '%s/input_cp' % results_dir)
             args.input = '%s/input_cp' % results_dir
         else:
-            from corpora.corpus_generator.generator import GenerateSets
+            from corpora.corpus_generator.generator import SetsGenerator
 
             args.input = "%s/input/" % results_dir
-            sets = GenerateSets(results_dir=args.input)
+            sets = SetsGenerator(results_dir=args.input)
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
                                include_bilingual_lex=True)
 

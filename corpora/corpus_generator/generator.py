@@ -10,7 +10,7 @@ reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 
 
-class GenerateSets:
+class SetsGenerator:
     def __init__(self, results_dir=None):
         if results_dir:
             self.results_dir = results_dir
@@ -590,6 +590,6 @@ class GenerateSets:
                         f.write("{0}:\n{1}\n".format(key.upper(), v))
 
 if __name__ == "__main__":
-    sets = GenerateSets()
+    sets = SetsGenerator()
     sets.generate_sets(num_sentences=200, lang='enes', include_bilingual_lex=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)

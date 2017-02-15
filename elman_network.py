@@ -18,7 +18,7 @@ class ElmanNetwork:
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
-        self.initially_deactive_layers = ['compress', 'concept', 'identif', 'role']  # No need to include input and role_copy
+        self.initially_deactive_layers = ['compress', 'concept', 'identif', 'role']
 
         self.dir = dir
         self.output_size = 0
@@ -70,10 +70,7 @@ class ElmanNetwork:
                                                                                                   is not None else "")
                     layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
             else:
-                # if it's a recurrent layer we need to increase the in_size (include the recurrency)
-                if layer.is_recurrent:
-                    layer.in_size += layer.size
-                layer.sd = input_sd(layer.size)  # SIZE
+                layer.sd = input_sd(layer.size)
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
@@ -391,9 +388,15 @@ class NeuronLayer:
         self.gradient = None
         self.previous_delta = np.empty([])
         self.has_fixed_weights = has_fixed_weights
+        self.context_activation = np.zeros(size)
         # the following two properties are only for the hidden (recurrent) layer
         self.is_recurrent = is_recurrent
-        self.context_activation = np.zeros(size)
+        if is_recurrent:
+            self.make_recurrent()
+
+    def make_recurrent(self):
+        # if it's a recurrent layer we need to increase the in_size to include the recurrency
+        self.in_size += self.size
 
 
 def input_sd(number_of_inputs):
@@ -411,7 +414,6 @@ def convert_range(matrix, min_val=-0.9, max_val=0.9):
         return matrix + min_val
     else:
         return np.true_divide((max_val - min_val) * (matrix - matrix.min()), (matrix.max() - matrix.min())) + min_val
-        #return (max_val - min_val) * (matrix - min(matrix)) / (max(matrix) - min(matrix)) + min_val
 
 
 def tanh_activation(x):
