@@ -689,7 +689,7 @@ if __name__ == "__main__":
             args.input = "%s/input/" % results_dir
             sets = GenerateSets(results_dir=args.input)
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
-                               bilingual_lexicon=True)
+                               include_bilingual_lex=True)
 
     if not args.trainset:
         fname = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
