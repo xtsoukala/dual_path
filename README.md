@@ -2,7 +2,7 @@
 
 ![alt-image](Bilingual Dual-path.png)
 
-Dual-path is a computational model of (monolingual) sentence production by [Chang, 2002](http://onlinelibrary.wiley.com/store/10.1207/s15516709cog2605_3/asset/s15516709cog2605_3.pdf;jsessionid=37E50E857AA5FA7A83648E4E9E63C93D.f01t04?v=1&t=iz4eh1e7&s=fc21e79381e43ccc95265509af7587e517141705). Tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
+Dual-path is a computational model of (monolingual) sentence production by [Chang, 2002](https://sites.google.com/site/sentenceproductionmodel/Home/chang-2002). Tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
 
 
 From Chang, 2002:
@@ -36,7 +36,7 @@ usage: dual_path.py [-h] [-hidden HIDDEN] [-epochs EPOCHS] [-input INPUT]
                     [-concepts CONCEPTS] [-role ROLE] [-eventsem EVENTSEM]
                     [-trainset TRAINSET] [-testset TESTSET]
                     [-generate_num GENERATE_NUM] [-test_every TEST_EVERY]
-                    [-title TITLE] [-sim SIM] [-prodrop] [-norolecopy]
+                    [-title TITLE] [-sim SIM] [-prodrop] [-rcopy]
                     [-debug] [-nodlr] [-nolang] [-gender] [-emph]
 
 optional arguments:
@@ -63,7 +63,7 @@ optional arguments:
     -title TITLE          Title for the plot(s) (default: None)
     -sim SIM              Train several simulations (sim) at once to take the average of the results (Monte Carlo approach)(default: 2)
     -prodrop              Indicates that it is a pro-drop lang (default: False)
-    -norolecopy           If set, the produced role layer is not copied back to the comprehension layer (default: False)
+    -rcopy                If set, the produced role layer is copied back to the comprehension layer (default: False)
     -debug                Debugging info for SRN layers and deltas (default: False)
     -nodlr                Stop automatic decrease of lrate (default: True)
     -nolang               Exclude language info during TESTing (default: False)
