@@ -24,9 +24,8 @@ class GenerateSets:
             os.makedirs(self.results_dir)
 
         self.lexicon = {}
-        # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point.
-        self.lexicon_en = {'en': {'det': {'def': {'m': 'the', 'f': 'the', 'n': 'the'},
-                                          'indef': {'m': 'a', 'f': 'a', 'n': 'a'}},
+        # Write the lexicon in a dict. Alternatively, we can load files but splitting str is efficient at this point.
+        self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
                                       'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
@@ -39,22 +38,20 @@ class GenerateSets:
                                   'verb': {'intrans': 'swim jump walk run arrive lie sneeze sit die eat'.split(),
                                            'trans': 'push hit kick carry'.split(),
                                            'double': 'give throw show present'.split()},
-                                  'aux': {'singular': {'present': 'is'}, #, 'past': 'was'},
-                                          'plural': {'present': 'are'},#, 'past': 'were'}},
+                                  'aux': {'singular': {'present': 'is', 'past': 'was'},
+                                          'plural': {'present': 'are', 'past': 'were'},
                                           },
                                   'being': 'being',
                                   'ing': '-ing',
-                                  'verb_suffix': {'present': '-s'},#, 'past': '-ed'},
+                                  'verb_suffix': {'present': '-s', 'past': '-ed'},
                                   'by': 'by',
                                   'to': 'to',
                                   'per': '.',
                                   'par': '-par'}  # , 'noun_plural': '-ss'}
                            }
 
-        """'verb': {'intrans': 'dormir saltar caminar correr'.split(),
-             'trans': 'empujar golpear patear llevar'.split(),
-             'double': 'dar lanzar mostrar presentar'.split()},"""
-        self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'}, 'indef': {'m': 'un', 'f': 'una'},
+        self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'},
+                                          'indef': {'m': 'un', 'f': 'una'},
                                          },
                                   'pron': {'m': 'él', 'f': 'ella'},
                                   'noun': {'animate': {'m': 'niño padre hermano perro maestro actor abuelo esposo '
@@ -64,14 +61,14 @@ class GenerateSets:
                                            'inanimate': {'m': 'palo juguete bolso'.split(),
                                                          'f': 'pelota llave cometa'.split()}
                                            },
-                                  'verb': {'intrans': 'nad salt camin corr'.split(),
+                                  'verb': {'intrans': 'nad salt camin corr dorm'.split(),
                                            'trans': 'empuj golpe pate llev'.split(),
                                            'double': 'd tir mostr present_'.split()},
-                                  'aux': {'singular': {'present': 'está'},#, 'past': 'estaba'},
-                                          'plural': {'present': 'están'}#, 'past': 'estaban'}},
+                                  'aux': {'singular': {'present': 'está', 'past': 'estaba'},
+                                          'plural': {'present': 'están', 'past': 'estaban'},
                                           },
                                   'ing': '-ando',
-                                  'verb_suffix': {'present': '-a'},# 'past': '-ó'},
+                                  'verb_suffix': {'present': '-a', 'past': '-ó'},
                                   'by': 'por',
                                   'to': 'a_',
                                   'per': '.',
@@ -83,9 +80,8 @@ class GenerateSets:
                                   'det-acc': {'m': 'τον', 'f': 'την', 'n': 'το'},
                                   'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
                                   'noun': {
-                                      'animate': {'m': 'άντρας πατέρας αδερφός σκύλος'.split(),  # σκύλος
-                                                  'f': 'γυναίκα  μητέρα αδερφή γάτα'.split(),  # γάτα
-                                                  # 'c': 'nurse teacher'.split(),
+                                      'animate': {'m': 'άντρας πατέρας αδερφός σκύλος'.split(),
+                                                  'f': 'γυναίκα  μητέρα αδερφή γάτα'.split(),
                                                   'n': 'αγόρι κορίτσι'.split()
                                                   },
                                       'inanimate': {'f': 'μπάλα τσάντα'.split(),
@@ -162,7 +158,7 @@ class GenerateSets:
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
                             'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
                             'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
-                            'dorm': 'SLEEP', 'empuj': 'PUSH', 'lanz': 'THROW', 'tir': 'THROW', 'corr': 'RUN',
+                            'dorm': 'SLEEP', 'empuj': 'PUSH', 'tir': 'THROW', 'corr': 'RUN',
                             'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'nad': 'SWIM', 'globo': 'BALLOON'}
 
         self.concepts_el = {'σκυλί': 'DOG',
@@ -339,11 +335,16 @@ class GenerateSets:
                               # 'PATIENT=;ACTION=;AGENT=;E=EL,SIMPLE,-1,AGT,PAT')
                               ]
 
-    def generate_sets(self, num_sentences, lang, bilingual_lexicon, percentage_pronoun,
-                      extended_evsem, percentage_english=50, print_all=False):
+    def generate_sets(self, num_sentences, lang, include_bilingual_lex, percentage_pronoun, percentage_l2=50,
+                      print_sets=False):
         """
-            lang: leave None for bilingual
-            num_sentences: number of train AND test sentences
+        :param num_sentences: number of train AND test sentences to be generated
+        :param lang: language code, leave None for bilingual es-en
+        :param include_bilingual_lex: whether lexicon should be bilingual even if generated sentences are in L1
+        :param percentage_pronoun: percentage of pronouns vs Noun Phrases (NPs)
+        :param percentage_l2: percentage of L2 (usually English) vs L1
+        :param print_sets:
+        :return:
         """
         if lang.lower() == 'es':
             structures = self.structures_es
@@ -354,7 +355,7 @@ class GenerateSets:
         elif lang == 'el':
             structures = self.structures_el
             self.lexicon = self.lexicon_el
-        elif "el" in lang and "en" in lang:  # actually checking "en" is redundant, as we don't have "el-es"
+        elif "el" in lang and "en" in lang:
             structures = self.structures_en + self.structures_el
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_el)
@@ -374,23 +375,22 @@ class GenerateSets:
         num_train = num_sentences - num_test
 
         # now generate sentence types for train set
-        sentence_type_train = structures * (num_train / n)
+        sentence_structures_train = structures * (num_train / n)
         for m in range(num_train % n):
-            sentence_type_train.append(structures[random.randint(0, n - 1)])
-        random.shuffle(sentence_type_train)
+            sentence_structures_train.append(structures[random.randint(0, n - 1)])
+        random.shuffle(sentence_structures_train)
 
         # same for test set (we want sets to be homogeneous when it comes to structures)
-        sentence_type_test = structures * (num_test / n)
+        sentence_structures_test = structures * (num_test / n)
         for m in range(num_test % n):
-            sentence_type_test.append(structures[random.randint(0, n - 1)])
-        random.shuffle(sentence_type_test)
+            sentence_structures_test.append(structures[random.randint(0, n - 1)])
+        random.shuffle(sentence_structures_test)
 
-        test_set = self.generate_sentences(sentence_type_test, self.lexicon, fname="test.%s" % lang,
-                                           percentage_pronoun=percentage_pronoun,
-                                           extended_evsem=extended_evsem, return_mess=True, print_all=print_all)
-        self.generate_sentences(sentence_type_train, self.lexicon, fname="train.%s" % lang,
-                                percentage_pronoun=percentage_pronoun,
-                                extended_evsem=extended_evsem, exclude_test_sentences=test_set, print_all=print_all)
+        test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
+                                           percentage_pronoun=percentage_pronoun, print_sets=print_sets,
+                                           return_mess=True)
+        self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
+                                percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
 
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
             f.write("%s" % "\n".join(self.identifiability))
@@ -407,7 +407,7 @@ class GenerateSets:
         with open('%s/roles.in' % self.results_dir, 'w') as f:
             f.write("%s" % "\n".join(self.roles))
 
-        if bilingual_lexicon and lang is "el":
+        if include_bilingual_lex and lang is "el":
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_el)
         else:  # lang is "es":  # print bilingual EN ES lexicon
@@ -415,11 +415,21 @@ class GenerateSets:
             self.lexicon.update(self.lexicon_es)
         self.print_lexicon(self.lexicon)
 
-    def generate_sentences(self, sentence_type, lexicon, fname, percentage_pronoun, extended_evsem,
-                           exclude_test_sentences=[], return_mess=False, print_all=False, use_emphasis_concept=True):
-        is_prodrop = False
-        # determine how often we will use NPs vs pronouns
-        num_sentences = len(sentence_type)
+    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[], 
+                           return_mess=False, print_sets=False, use_emphasis_concept=True):
+        """
+        :param sentence_structures: list of allowed structures for sentences
+        :param lexicon: dict that contains words with syntactic labeling
+        :param fname: filename with results
+        :param percentage_pronoun: percentage of pronouns vs NPs in subject position
+        :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
+        :param return_mess: 
+        :param print_sets: 
+        :param use_emphasis_concept: 
+        :return: 
+        """
+        # determine how often we will use NPs vs determiners
+        num_sentences = len(sentence_structures)
         if not percentage_pronoun:  # full NPs
             np = [1] * num_sentences
         else:  # any other percentage
@@ -435,7 +445,7 @@ class GenerateSets:
         full_mess = []
         # now select words according to structure
         sen_idx = 0
-        for pos_full, mes in sentence_type:
+        for pos_full, mes in sentence_structures:
             message = mes.split(';')
             lang = re.search(r"^E=(\S.)", message[-1]).group(1).lower()
             sentence = []
@@ -456,7 +466,7 @@ class GenerateSets:
                         level = random_key
                     if pos == 'det':
                         message[msg_idx] += random_key + ","   # def/indef info
-                        pronoun_list = syn[random_key]
+                        determiners = syn[random_key]
                     elif random_key in ['past', 'present']:
                         message[-1] += "," + random_key
                     elif random_key in ['m', 'f', 'n', 'c']:
@@ -483,11 +493,11 @@ class GenerateSets:
                                 message[0] = re.sub(r"def|indef", "", message[0]) + "PRON,"  # remove def/indef info
                                 message[0] = re.sub("=,", '=', message[0])
                                 add_det = False
-                                if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):
-                                    # use pronoun if emphasized
-                                    sentence.append(lexicon[lang]['pron'][gender])
-                            elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
-                                sentence.append(pronoun_list[gender])
+                                # add pronoun
+                                sentence.append(lexicon[lang]['pron'][gender])
+                            elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                                if type(determiners) is dict:
+                                    sentence.append(determiners[gender])
                                 add_det = False  # reset
                                 sentence.append(wd)
                             message[msg_idx] += self.get_concept(wd)
@@ -503,10 +513,11 @@ class GenerateSets:
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
                             message[0] = re.sub("=,", '=', message[0])
                             add_det = False
-                            if lang == 'en' or not is_prodrop or (is_prodrop and emphasis[sen_idx]):  # use pron if emph
-                                sentence.append(lexicon[lang]['pron'][gender])
-                        elif add_det or np[sen_idx]:  # or not pronouns[sen_idx]:
-                            sentence.append(pronoun_list[gender])
+                            # add pronoun
+                            sentence.append(lexicon[lang]['pron'][gender])
+                        elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                            if type(determiners) is dict:
+                                sentence.append(determiners[gender])
                             add_det = False  # reset
                             sentence.append(random_word)
 
@@ -520,7 +531,7 @@ class GenerateSets:
                     message[msg_idx] += self.get_concept(random_word)  # verb
                     msg_idx += 1
                     if add_det:
-                        sentence.append(pronoun_list[gender])
+                        sentence.append(determiners[gender])
                         add_det = False
                     sentence.append(random_word)
                 else:
@@ -528,14 +539,12 @@ class GenerateSets:
 
             sentence = u"%s ." % " ".join(sentence)
             message = ";".join(message).upper()
-            if not extended_evsem:
-                #message = re.sub(r",PAT|,REC|,AGT|,-1", "", message)
-                message = re.sub(r"ES,|EN,", "", message)  # only remove language code for now
+
             if message in exclude_test_sentences:
-                sentence_type.append((pos_full, mes))  # find unique sentence, don't add it to the train set
+                sentence_structures.append((pos_full, mes))  # find unique sentence, don't add it to the train set
             else:
                 sen_idx += 1
-                if print_all:
+                if print_sets:
                     print u"%s## %s" % (sentence, message)
                 with codecs.open('%s/%s' % (self.results_dir, fname), 'a',  "utf-8") as f:
                     f.write(u"%s## %s\n" % (sentence, message))
@@ -582,5 +591,5 @@ class GenerateSets:
 
 if __name__ == "__main__":
     sets = GenerateSets()
-    sets.generate_sets(num_sentences=200, lang='enes', bilingual_lexicon=True, percentage_pronoun=50,
-                       extended_evsem=False, percentage_english=50, print_all=True)
+    sets.generate_sets(num_sentences=200, lang='enes', include_bilingual_lex=True, percentage_pronoun=50,
+                       percentage_l2=50, print_sets=True)

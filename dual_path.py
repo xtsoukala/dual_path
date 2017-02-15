@@ -110,9 +110,9 @@ class DualPath:
             trainlines = f.readlines()
         if self.prodrop:  # make prodrop
             if self.emphasis:  # keep pronoun if emphasized
-                trainlines = [re.sub(r'^(él|ella) ', '', sentence) for sentence in trainlines if ',EMPH' in sentence]
+                trainlines = [re.sub(r'^(él|ella) ', '', line) if ',EMPH' not in line else line for line in trainlines]
             else:
-                trainlines = [re.sub(r'(él|ella|,EMPH) ', '', sentence) for sentence in trainlines]
+                trainlines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in trainlines]
         elif not self.emphasis:
             trainlines = [re.sub(r',EMPH', '', sentence) for sentence in trainlines]
         return trainlines
@@ -325,11 +325,13 @@ class DualPath:
                 for enum_idx, trg_idx in enumerate(self.sentence_indeces(target_sentence)):
                     self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx)
                     self.srn.feed_forward(start_of_sentence=(prod_idx is None))
-                    prod_idx = trg_idx#self.srn.get_max_output_activation()
+                    prod_idx = trg_idx  # Train with target word, NOT produced one
                     self.srn.backpropagate(epoch)
+                    #if prod_idx == self.period_idx:  # end sentence if a period was produced
+                    #    break
 
-            if epoch < 3 and decrease_lrate:
-                self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k lines (2 epochs)
+            if epoch < 2 and decrease_lrate:
+                self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k lines (1 epoch)
 
             epoch += 1  # increase number of epochs, begin new iteration
 
@@ -533,10 +535,10 @@ class DualPath:
                         # regard it as a correct sentence (it is grammatical and it conveys the same meaning)
                         sentences_correct += 1
             if epoch > 0:
+                suffix = "flex-" if flexible_order else "in" if out_sentence != sentence else ""
                 with open("%s/%s.eval" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nCS:%s POS:%s (%scorrect sentence)\n%s\n" %
-                            (epoch, out_sentence, sentence, code_switched, corr_pos,
-                             "in" if (not flexible_order and out_sentence != sentence) else "", message))
+                            (epoch, out_sentence, sentence, code_switched, corr_pos, suffix, message))
             if check_pron and has_pronoun_error:
                 all_pron_err += 1
                 with open("%s/all_pronoun_%s.err" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
@@ -586,7 +588,7 @@ class DualPath:
         self.srn.connect_layers("identif", "role")
         self.srn.connect_layers("concept", "role")
         # hidden layer
-        if self.role_copy:  # does not seem to improve this model, set default to False for simplicity
+        if self.role_copy:  # it does not seem to improve this model, set default to False for simplicity
             self.srn.add_layer("role_copy", self.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
         self.srn.connect_layers("role", "hidden")
@@ -627,7 +629,7 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='en')
+                                      'or any other string for bilingual)', default='es')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
@@ -668,13 +670,16 @@ if __name__ == "__main__":
                                                                              'level 20%% of the time')
     parser.set_defaults(emphasis=False)
     args = parser.parse_args()
-    # (create) path to store results
+    # create path to store results
     results_dir = "simulations/%s%s_%s_h%s" % ((args.resdir if args.resdir else ""),
                                                datetime.now().strftime("%Y-%m-%dt%H.%M.%S"), args.lang, args.hidden)
     os.makedirs(results_dir)
 
     if args.generate_num:  # generate a new set (unless "input" was also set)
         if args.input:
+            if 'input' not in args.input:
+                import sys
+                sys.exit('No input folder found in the path (%s)' % args.input)
             print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
             copy_dir(args.input, '%s/input_cp' % results_dir)
             args.input = '%s/input_cp' % results_dir
@@ -684,7 +689,7 @@ if __name__ == "__main__":
             args.input = "%s/input/" % results_dir
             sets = GenerateSets(results_dir=args.input)
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
-                               bilingual_lexicon=True, extended_evsem=True)
+                               bilingual_lexicon=True)
 
     if not args.trainset:
         fname = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]

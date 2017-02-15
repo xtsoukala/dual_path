@@ -212,17 +212,16 @@ class ElmanNetwork:
         # STEP 1: Calculate error [Eo] (target - output)
         output_layer = self._get_layer("output")
 
-        ''''Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
+        """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
             the i output unit on the current word and ti is its target activation
-        divergence_err = np.sum(self.target_activation)'''
-        if epoch not in self.mse:  # we may want Mean Square Error
+        divergence_err = np.sum(self.target_activation) """
+        if epoch not in self.mse:  # Mean Square Error
             self.mse[epoch] = []
-        # mse = ((self.target_activation - output_layer.activation) ** 2).mean(axis=None)  print "MSE: %s" % mse
         self.mse[epoch].append(((self.target_activation - output_layer.activation) ** 2).mean(axis=None))
-        """  with ax=0 the average is performed along the row, for each column, returning an array
-             with ax=1 the average is performed along the column, for each row, returning an array
-             with ax=None the average is performed element-wise along the array, returning a single value
+        """  ax=0: average performed along the row, for each column. ax=1: along the column for each row (returns array)
+             ax=None: average is performed element-wise along the array (returns single value)
         """
+
         if output_layer.activation_function == "softmax":
             output_layer.gradient = self.target_activation - output_layer.activation
         else:  # elif output_layer.activation_function == "tanh":
