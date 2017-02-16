@@ -495,7 +495,7 @@ class SetsGenerator:
                                 add_det = False
                                 # add pronoun
                                 sentence.append(lexicon[lang]['pron'][gender])
-                            elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                            elif add_det or np[sen_idx]  or msg_idx > 0:
                                 if type(determiners) is dict:
                                     sentence.append(determiners[gender])
                                 add_det = False  # reset
@@ -515,7 +515,7 @@ class SetsGenerator:
                             add_det = False
                             # add pronoun
                             sentence.append(lexicon[lang]['pron'][gender])
-                        elif add_det or np[sen_idx]:  # or not determiners[sen_idx]:
+                        elif add_det or np[sen_idx]  or msg_idx > 0:
                             if type(determiners) is dict:
                                 sentence.append(determiners[gender])
                             add_det = False  # reset
