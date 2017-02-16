@@ -525,6 +525,8 @@ class SetsGenerator:
                                 message[0] += ",EMPH"
                         msg_idx += 1
                     else:  # elif type == str
+                        if not np[sen_idx] and w == determiners:
+                            continue
                         sentence.append(w)
                 elif type(syn) is list:
                     random_word = random.choice(syn)
