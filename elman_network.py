@@ -3,10 +3,7 @@ import sys
 import os
 import numpy as np
 from copy import deepcopy
-import matplotlib
-
-matplotlib.use('Agg')  # needed for the server only
-import matplotlib.pyplot as plt
+from plotter import Plotter
 
 
 class ElmanNetwork:
@@ -42,8 +39,8 @@ class ElmanNetwork:
             self.output_size = size
 
     def connect_layers(self, first_layer_name, second_layer_name):
-        first = self._get_layer(first_layer_name)
-        second = self._get_layer(second_layer_name)
+        first = self.get_layer(first_layer_name)
+        second = self.get_layer(second_layer_name)
         second.in_size += first.size
         second.in_layers.append(first)
 
@@ -75,7 +72,7 @@ class ElmanNetwork:
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
                 mean = 0
-                #layer.in_weights = 2*np.random.random((layer.in_size + int(layer.has_bias), layer.size)) - 1
+                # layer.in_weights = 2*np.random.random((layer.in_size + int(layer.has_bias), layer.size)) - 1
                 layer.in_weights = np.random.normal(mean, layer.sd,
                                                     size=[layer.in_size + int(layer.has_bias), layer.size])
                 means.append(layer.in_weights.mean())
@@ -86,16 +83,12 @@ class ElmanNetwork:
                     f.write("name, max, min, mean, std\n"
                             "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
                                                   layer.in_weights.mean(), layer.in_weights.std()))
-        self.reset_context_and_delta()
+        self.reset_context_delta_and_crole()
         self._complete_initialization()
 
         if plot_stats:
-            ind = np.arange(len(labels))  # the x locations for the groups
-            fig, ax = plt.subplots()
-            ax.bar(ind, means, color='r', yerr=std)
-            ax.set_xticklabels(labels)
-            plt.savefig('%s/weights/summary_weights.pdf' % self.dir)
-            plt.close()
+            plt = Plotter(results_dir=self.dir)
+            plt.plot_layer_stats(labels=labels, std=std, means=means)
 
     def save_weights(self, epochs=0):
         for layer in self.layers:
@@ -104,52 +97,51 @@ class ElmanNetwork:
 
     def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act=None,
                                   topic_emphasis=None, reset=True):
-        #updated_role_concept = convert_range(updated_role_concept)
         weights_concept_role = updated_role_concept.T
-        role_layer = self._get_layer("role")
+        role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
             role_layer.in_weights[x] = weights_concept_role[x]
 
         # pred_concept is split into pred_identifiability and pred_concept. The fixed weights are essentially the same
-        pred_identif = self._get_layer("pred_identifiability")
+        pred_identif = self.get_layer("pred_identifiability")
         for x in range(pred_identif.in_size):
             for s in range(pred_identif.size):
                 pred_identif.in_weights[x][s] = updated_role_concept[x][s]
-        pred_concept = self._get_layer("pred_concept")
+        pred_concept = self.get_layer("pred_concept")
         for x in range(pred_concept.in_size):
             for s in range(pred_concept.size):
                 pred_concept.in_weights[x][s] = updated_role_concept[x][pred_identif.size + s]
 
-        event_sem = self._get_layer("eventsem")
+        event_sem = self.get_layer("eventsem")
         if event_sem.convert_input:
             event_sem.activation = convert_range(event_sem_activations)
         else:
             event_sem.activation = event_sem_activations
 
         if target_lang_act is not None:
-            target_lang = self._get_layer("target_lang")
+            target_lang = self.get_layer("target_lang")
             target_lang.activation = target_lang_act
 
         if topic_emphasis is not None:
-            topic_emph = self._get_layer("topic_emphasis")
+            topic_emph = self.get_layer("topic_emphasis")
             topic_emph.activation = topic_emphasis
 
         if reset:
-            self.reset_context_and_delta()
+            self.reset_context_delta_and_crole()
 
-    def reset_context_and_delta(self):
-        recurrent_layer = self._get_layer("hidden")
+    def reset_context_delta_and_crole(self):
+        recurrent_layer = self.get_layer("hidden")
         recurrent_layer.context_activation = np.array([self.context_init] * recurrent_layer.size)
 
-        for layer in self._get_layers_for_backpropagation():  # Also reset the previous delta values
+        for layer in self.get_layers_for_backpropagation():  # Also reset the previous delta values
             layer.previous_delta = np.empty([])
 
         if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
-            crole = self._get_layer("role_copy")
+            crole = self.get_layer("role_copy")
             crole.activation = np.zeros(crole.size)
 
     def set_inputs(self, input_idx, target_idx=None):
-        input_layer = self._get_layer("input")
+        input_layer = self.get_layer("input")
         input_layer.activation = np.zeros(input_layer.size)
         if input_idx:  # at the beginning of sentence, input_idx is None
             input_layer.activation[input_idx] = 1
@@ -161,7 +153,7 @@ class ElmanNetwork:
             self.target_activation[target_idx] = 1
 
     def set_input_activations(self, inputs, targets):
-        input_layer = self._get_layer("input")
+        input_layer = self.get_layer("input")
         input_layer.activation = inputs
         self.target_activation = targets
 
@@ -172,7 +164,7 @@ class ElmanNetwork:
 
         for layer in self.layers:
             if not layer.in_layers:
-                continue  # for instance skip input & eventsem as their activation is given, no incoming layers
+                continue  # skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
 
             layer.in_activation = []
             for incoming_layer in layer.in_layers:
@@ -198,16 +190,16 @@ class ElmanNetwork:
             if self.debug_messages:
                 print "Layer: %s. Activation %s" % (layer.name, layer.activation)
         # Copy output of the hidden to "context" (activation of t-1)
-        hidden_layer = self._get_layer("hidden")
+        hidden_layer = self.get_layer("hidden")
         hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
         if self.include_role_copy:
-            role_layer = self._get_layer("role")
-            role_copy_layer = self._get_layer("role_copy")
+            role_layer = self.get_layer("role")
+            role_copy_layer = self.get_layer("role_copy")
             role_copy_layer.activation = deepcopy(role_layer.activation)
 
     def backpropagate(self, epoch):
         # STEP 1: Calculate error [Eo] (target - output)
-        output_layer = self._get_layer("output")
+        output_layer = self.get_layer("output")
 
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
             the i output unit on the current word and ti is its target activation
@@ -232,7 +224,7 @@ class ElmanNetwork:
                                     sigmoid_derivative(output_layer.activation)'''
 
         # Propagate error back to the previous layers
-        for layer in self._get_layers_for_backpropagation():
+        for layer in self.get_layers_for_backpropagation():
             if layer.error_out:  # output layer is the only one that has error and gradient precomputed
                 error = sum(layer.error_out)  # for hidden and input there are 2 backprop. errors, sum it
                 layer.error_out = []  # initialize for following gradient computation
@@ -286,76 +278,27 @@ class ElmanNetwork:
         layer = [x for x in self.layers if x.name is layer_name][0]
         layer.activation = activation'''
 
-    def _get_layer(self, layer_name):
+    def get_layer(self, layer_name):
         layer = [x for x in self.layers if x.name is layer_name]
         return layer[0] if layer else layer
 
-    def _get_layers_for_backpropagation(self):
+    def get_layers_for_backpropagation(self):
         """
-        Returns only the layers that have incoming activations (and should therefore backpropagate the error)
+        Returns only the layers that have incoming activations (and can therefore backpropagate the error)
         """
         return [layer for layer in reversed(self.layers) if layer.in_layers]
 
     def get_max_output_activation(self):
-        output = self._get_layer("output")
+        output = self.get_layer("output")
         return output.activation.argmax()
 
     def get_layer_activation(self, layer_name):
-        layer = self._get_layer(layer_name)
+        layer = self.get_layer(layer_name)
         return layer.activation
 
     def get_predconcept_activation(self):
-        output = self._get_layer("pred_concept")
+        output = self.get_layer("pred_concept")
         return output.activation, output.in_activation
-
-    def plot_layers(self, fig, plot_weights=False):  # by default it plots activations unless plot_weights is True
-        if fig is None:  # init fig
-            fig = plt.figure(figsize=(14, 8.2))  # (width, height)
-            cax = fig.add_axes([0.5, 0.8, 1.95, 0.85])  # [r l w h]
-            # fig2 = plt.figure(figsize=(9, 8.2))  # (width, height)
-            # cax = fig2.add_axes([1.5, 0.8, 1.95, 0.85])  # [r l w h]
-            cax.get_xaxis().set_visible(False)
-            cax.get_yaxis().set_visible(False)
-            cax.patch.set_alpha(0)
-            cax.set_frame_on(False)  # removes borders around plot
-            for idx, layer in enumerate(self._get_layers_for_backpropagation()):
-                ax = fig.add_subplot("24%s" % idx)
-                ax.set_title(layer.name)
-                if plot_weights:
-                    plt.imshow(layer.in_weights)
-                    plt.colorbar(orientation='vertical')
-                else:
-                    if layer.name == "output":
-                        continue
-                    if idx > 9:
-                        ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                    else:
-                        ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                    ax.set_title(layer.name)
-                    ax.get_yaxis().set_visible(False)
-                    # plt.step(-1, 1)
-                    plt.imshow(np.atleast_2d(layer.activation))
-                    if idx == 0:
-                        plt.colorbar(orientation='vertical')  # show colorbar
-            plt.show(block=False)  # doesn't work for all Python versions. If plot doesn't show, set block to True
-        else:
-            if plot_weights:
-                # 8 layers, plot 4 + 4
-                for idx, layer in enumerate(self._get_layers_for_backpropagation()):
-                    ax = fig.add_subplot("24%s" % idx)
-                    ax.set_title(layer.name)
-                    plt.imshow(layer.in_weights)
-            else:
-                for idx, layer in enumerate(self.layers):
-                    if idx > 9:
-                        ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                    else:
-                        ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                    ax.clear()  # otherwise it shows previous activations
-                    ax.set_title(layer.name)
-                    plt.imshow(np.atleast_2d(layer.activation))
-        plt.draw()
-        return fig
 
 
 class NeuronLayer:
@@ -395,7 +338,7 @@ class NeuronLayer:
             self.make_recurrent()
 
     def make_recurrent(self):
-        # if it's a recurrent layer we need to increase the in_size to include the recurrency
+        # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
 
 

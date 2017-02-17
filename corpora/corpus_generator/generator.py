@@ -11,6 +11,10 @@ sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters thro
 
 
 class SetsGenerator:
+    """
+    Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model.
+    Read at own risk :P (To be refactored)
+    """
     def __init__(self, results_dir=None):
         if results_dir:
             self.results_dir = results_dir
@@ -492,10 +496,10 @@ class SetsGenerator:
                             if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                                 message[0] = re.sub(r"def|indef", "", message[0]) + "PRON,"  # remove def/indef info
                                 message[0] = re.sub("=,", '=', message[0])
-                                add_det = False
+                                #add_det = False
                                 # add pronoun
                                 sentence.append(lexicon[lang]['pron'][gender])
-                            elif add_det or np[sen_idx]  or msg_idx > 0:
+                            elif add_det or np[sen_idx] or msg_idx > 0:
                                 if type(determiners) is dict:
                                     sentence.append(determiners[gender])
                                 add_det = False  # reset
@@ -515,17 +519,19 @@ class SetsGenerator:
                             add_det = False
                             # add pronoun
                             sentence.append(lexicon[lang]['pron'][gender])
-                        elif add_det or np[sen_idx]  or msg_idx > 0:
+                        elif add_det or np[sen_idx]:
                             if type(determiners) is dict:
                                 sentence.append(determiners[gender])
                             add_det = False  # reset
+                            sentence.append(random_word)
+                        elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
 
                         if use_emphasis_concept and emphasis[sen_idx] and msg_idx == 0:  # use it even for NPs?
                                 message[0] += ",EMPH"
                         msg_idx += 1
                     else:  # elif type == str
-                        if not np[sen_idx] and w == determiners:
+                        if not np[sen_idx] and w == determiners and msg_idx < 1:
                             continue
                         sentence.append(w)
                 elif type(syn) is list:
@@ -533,7 +539,8 @@ class SetsGenerator:
                     message[msg_idx] += self.get_concept(random_word)  # verb
                     msg_idx += 1
                     if add_det:
-                        sentence.append(determiners[gender])
+                        det = determiners if gender not in determiners else determiners[gender]
+                        sentence.append(det)
                         add_det = False
                     sentence.append(random_word)
                 else:

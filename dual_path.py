@@ -4,7 +4,8 @@ import random
 import pickle
 import numpy as np
 from datetime import datetime
-from elman_network import ElmanNetwork, plt
+from elman_network import ElmanNetwork
+from plotter import Plotter
 from multiprocessing import Process, Manager
 import shutil
 import re
@@ -100,13 +101,13 @@ class DualPath:
             testl = f.readlines()
         return len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
 
-    def _read_set(self, test=False, set=None):
-        if not set:
+    def _read_set(self, test=False, set_name=None, skip_period=True):
+        if not set_name:
             if test:
-                set = self.testset
+                set_name = self.testset
             else:
-                set = self.trainset
-        with open(set, 'r+') as f:
+                set_name = self.trainset
+        with open(set_name, 'r+') as f:
             trainlines = f.readlines()
         if self.prodrop:  # make prodrop
             if self.emphasis:  # keep pronoun if emphasized
@@ -115,15 +116,12 @@ class DualPath:
                 trainlines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in trainlines]
         elif not self.emphasis:
             trainlines = [re.sub(r',EMPH', '', sentence) for sentence in trainlines]
+        if skip_period:
+            trainlines = [re.sub(r' \.', '', line) for line in trainlines]
         return trainlines
 
     def _read_allowed_structures(self):
         return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
-
-    def _percentage(self, x, test=False):
-        if test:
-            return np.true_divide(x * 100, self.num_test)
-        return np.true_divide(x * 100, self.num_train)
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -193,14 +191,12 @@ class DualPath:
         """
         return [self.lexicon.index(w) for w in sentence]
 
-    def sentence_pos_str(self, sentence, remove_period=True):
+    def sentence_pos_str(self, sentence):
         """
         :param sentence: sentence string
         :param remove_period: whether to remove the period from the end of the sentence
         :return: returns a list of the POS of every word in the sentence
         """
-        if remove_period:
-            sentence = re.sub(' \.', '', sentence)
         return " ".join([self.pos_lookup(word) for word in sentence.split()])
 
     def get_message_info(self, message, test_phase=False):
@@ -208,9 +204,9 @@ class DualPath:
         :param message: string, e.g. "ACTION=CARRY AGENT=FATHER,DEF PATIENT=STICK,INDEF
         E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
         gives information about the event-semantics (E)
+        :param test_phase: Set to True during evaluation and False during training
         """
         message = message.strip()
-        message = re.sub(r',(AGT|-1|PAT|REC),', ',', message)
         if not self.semantic_gender:
             message = re.sub(',(M|F)(,|;|$)', r'\2', message)
 
@@ -230,7 +226,7 @@ class DualPath:
                 activation = norm_activation
                 for event in what.split(","):
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
-                        activation = norm_activation #reduced_activation
+                        activation = reduced_activation
                         break
                     if event in ['PRESENT', 'PAST']:
                         activation = increased_activation
@@ -244,8 +240,8 @@ class DualPath:
                                 target_lang_activations[self.languages.index('EN')] = 0.8
                         else:
                             target_lang_activations[self.languages.index(event)] = activation
-                    else:
-                        event_sem_activations[self.event_semantics.index(event)] = activation  # activate
+                    else:  # activate
+                        event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
             else:
                 # there's usually only one concept per role unless it's a noun with a det, e.g. (MAN, THE). We want to
@@ -263,12 +259,10 @@ class DualPath:
                         weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weight
         return weights_role_concept, event_sem_activations, target_lang_activations, lang, message
 
-    def train_network(self, decrease_lrate=False, trainset=None, shuffle_set=True, show_progress=False,
-                      plot_results=True):
+    def train_network(self, decrease_lrate=False, trainset=None, shuffle_set=True, plot_results=True):
         """
         decrease_lrate: whether to decrease the learning rate or not
         shuffle_set: Whether to shuffle the training set after each iteration
-        show_progress: Show a progress bar (default: false)
         plot_results: Whether to plot the performance
         trainset: the name of the training file (inc. the path). Contains target sentence and the message (A=THROW etc).
 
@@ -278,21 +272,22 @@ class DualPath:
             - copy hidden units to context
 
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its trainset and was
-        tested after 2k epochs. Each training set consisted of 8k pairs and the test set of 2k.
+        tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
         if trainset:  # in case we want to use a different train set that the one set in DualPath()
-            self.trainlines = self._read_set(set=trainset)
+            self.trainlines = self._read_set(set_name=trainset)
             self.num_train = len(self.trainlines)
 
         manager = Manager()
         train_results = manager.dict()
         test_results = manager.dict()
 
-        correct_sentences = {'test': [], 'train': []}
-        correct_pos = {'test': [], 'train': []}
-        pronoun_errors_flex = {'test': [], 'train': []}
-        pronoun_errors = {'test': [], 'train': []}
+        reslt = {'correct_sentences': {'test': [], 'train': []},
+                 'correct_pos': {'test': [], 'train': []},
+                 'pronoun_errors_flex': {'test': [], 'train': []},
+                 'pronoun_errors': {'test': [], 'train': []}
+                }
 
         epoch = 0
         while epoch <= self.epochs:  # start training for x epochs
@@ -327,8 +322,6 @@ class DualPath:
                     self.srn.feed_forward(start_of_sentence=(prod_idx is None))
                     prod_idx = trg_idx  # Train with target word, NOT produced one
                     self.srn.backpropagate(epoch)
-                    #if prod_idx == self.period_idx:  # end sentence if a period was produced
-                    #    break
 
             if epoch < 2 and decrease_lrate:
                 self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k lines (1 epoch)
@@ -337,85 +330,33 @@ class DualPath:
 
         for sim in test_results.values():
             s, p, a_p, pr = sim
-            correct_sentences['test'].append(s)
-            correct_pos['test'].append(p)
-            pronoun_errors_flex['test'].append(a_p)
-            pronoun_errors['test'].append(pr)
+            reslt['correct_sentences']['test'].append(s)
+            reslt['correct_pos']['test'].append(p)
+            reslt['pronoun_errors_flex']['test'].append(a_p)
+            reslt['pronoun_errors']['test'].append(pr)
 
         for sim in train_results.values():
             s, p, a_p, pr = sim
-            correct_sentences['train'].append(s)
-            correct_pos['train'].append(p)
-            pronoun_errors_flex['train'].append(a_p)
-            pronoun_errors['train'].append(pr)
+            reslt['correct_sentences']['train'].append(s)
+            reslt['correct_pos']['train'].append(p)
+            reslt['pronoun_errors_flex']['train'].append(a_p)
+            reslt['pronoun_errors']['train'].append(pr)
 
         # ONLY include simulations that have learned successfully! POS accuracy at the end should be at least 75%
-        if self._percentage(correct_pos['test'][-1], test=True) > 75 or self.simulation_num is None:
+        if np.true_divide(reslt['correct_pos']['test'][-1] * 100, self.num_test) > 5 or self.simulation_num is None:
             res_name = "results.pickled"
         else:  # rename folder and don't take data into consideration
             res_name = "results.discarded"
             os.rename("%s/%s" % (os.getcwd(), self.results_dir), "%s/%s_discarded" % (os.getcwd(), self.results_dir))
             self.results_dir += "_discarded"
         with open("%s/%s" % (self.results_dir, res_name), 'w') as f:
-            pickle.dump((correct_sentences['train'], correct_pos['train'],
-                         [self.num_train] * len(correct_sentences['test']),
-                         correct_sentences['test'], correct_pos['test'], pronoun_errors_flex['test'],
-                         pronoun_errors['test'], [self.num_test] * len(correct_sentences['test'])), f)
+            pickle.dump(reslt, f)
 
         if plot_results:
-            epochs = range(len(correct_sentences['train']))
-            plt.plot(epochs, [self._percentage(x) for x in correct_sentences['train']], linestyle='--',
-                     color='olivedrab', label='train')
-            # plt.plot(epochs, _flex_correct, linestyle='--', color='g', label='train flex')
-            plt.plot(epochs, [self._percentage(x) for x in correct_pos['train']], linestyle='--',
-                     color='yellowgreen', label='train POS')
-            # now add test sentences
-            plt.plot(epochs, [self._percentage(x, test=True) for x in correct_sentences['test']],
-                     color='darkslateblue', label='test')
-            # plt.plot(epochs, test_flex_correct, color='royalblue', label='test flex')
-            plt.plot(epochs, [self._percentage(x, test=True) for x in correct_pos['test']], color='deepskyblue',
-                     label='test POS')
-            plt.ylim([0, 100])
-            plt.xlabel('Epochs')
-            plt.ylabel('Percentage correct (%)')
-            plt.title(self.plot_title)
-            plt.legend(loc='lower right', ncol=2, fancybox=True, shadow=True)
-            plt.savefig('%s/all_epochs.pdf' % self.results_dir)
-            plt.close()
+            plt = Plotter(results_dir=self.results_dir)
+            plt.plot_results(reslt, title=self.plot_title)
 
-            mse_list = [np.mean(self.srn.mse[epoch], axis=0) for epoch in epochs]
-            plt.plot(epochs, mse_list, color='darkslateblue', label='MSE')
-            plt.xlabel('Epochs')
-            plt.ylabel('Mean Square Error')
-            plt.ylim([0, 0.007])
-            plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
-            plt.close()
-
-            if sum(pronoun_errors_flex['test']) > 0:  # only plot if there's something to be plotted
-                plt.plot(epochs, pronoun_errors['test'], color='darkslateblue', label='Subject pronoun errors')
-                plt.plot(epochs, pronoun_errors_flex['test'], linestyle='--')
-                plt.xlabel('Epochs')
-                plt.ylabel('Sum of subject pronoun errors')
-                plt.savefig('%s/all_pronoun_err.pdf' % self.results_dir)
-                plt.close()
-
-                # same using percentages
-                if self.test_sentences_with_pronoun:  # for instance, in ES case there are no sentences with he and she
-                    percentage_pronoun_errors = [np.true_divide(x * 100, self.test_sentences_with_pronoun)
-                                                 for x in pronoun_errors['test']]
-                    percentage_pronoun_errors_flex = [np.true_divide(x * 100, self.test_sentences_with_pronoun)
-                                                      for x in pronoun_errors_flex['test']]
-                else:
-                    percentage_pronoun_errors = pronoun_errors['test']
-                    percentage_pronoun_errors_flex = pronoun_errors_flex['test']
-                plt.plot(epochs, percentage_pronoun_errors)
-                plt.plot(epochs, percentage_pronoun_errors_flex, linestyle='--')
-                plt.xlabel('Epochs')
-                plt.ylabel('Percentage (%) of subject pronoun errors in test set')
-                plt.savefig('%s/perc_all_pronoun_err.pdf' % self.results_dir)
-                plt.close()
-
-    def evaluate_network(self, results_dict, epoch='final', eval_set=None, is_test_set=True, check_pron=True):
+    def evaluate_network(self, results_dict, epoch, eval_set=None, is_test_set=True, check_pron=True):
         """
         :param results_dict: Dictionary that contains evaluation results for all epochs
         :param epoch: Number of epoch
@@ -426,7 +367,7 @@ class DualPath:
         """
 
         if eval_set:
-            lines = self._read_set(set=trainset)
+            lines = self._read_set(set_name=trainset)
             num_sentences = len(lines)
         elif is_test_set:
             lines = self.testlines
@@ -713,7 +654,6 @@ if __name__ == "__main__":
         elif testset.endswith('.enes'):
             args.title = 'Bilingual EN-ES model'
 
-    number_of_all_pronoun_errors = 0
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, results_dir=results_dir, epochs=args.epochs,
                          input_dir=args.input, lex_fname=args.lexicon, concept_fname=args.concepts,
@@ -746,62 +686,34 @@ if __name__ == "__main__":
             p.join()
 
         # read the results from all simulations
-        results = []
+        all_results = []
         for sim in range(args.sim):
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'r') as f:
-                    results.append(pickle.load(f))
+                    all_results.append(pickle.load(f))
             else:
                 print 'Simulation #%s was problematic' % sim
 
-        num_valid_simulations = len(results)  # some might have been discarded
-        if results:
-            simulations_with_pron_err = [simulation for simulation in results if sum(simulation[6]) > 0]
-            number_of_all_pronoun_errors = len(simulations_with_pron_err)
-            # print number_of_all_pronoun_errors
-            (num_correct, pos_correct, train_sentences, test_num_correct,
-             test_pos_correct, all_pronoun_err, pronoun_err, test_sentences) = np.mean(results, axis=0)
-            epoch_list = range(len(test_num_correct))
-            # take average of lists and plot
-            plt.plot(epoch_list, np.true_divide(num_correct * 100, train_sentences),
-                     linestyle='--', color='olivedrab', label='train')
-            plt.plot(epoch_list, np.true_divide(pos_correct * 100, train_sentences),
-                     linestyle='--', color='yellowgreen', label='train POS')
-            # add test sentences
-            plt.plot(epoch_list, np.true_divide(test_num_correct * 100, test_sentences),
-                     color='darkslateblue', label='test')
-            plt.plot(epoch_list, np.true_divide(test_pos_correct * 100, test_sentences),
-                     color='deepskyblue', label='test POS')
-            plt.ylim([0, 100])
-            plt.xlabel('Epochs')
-            plt.ylabel('Percentage correct (%)')
-            plt.title(args.title)
-            plt.legend(loc='lower right', ncol=2, fancybox=True, shadow=True)
-            plt.savefig('%s/summary_%s_simulations.pdf' % (results_dir, num_valid_simulations))
-            plt.close()
+        num_valid_simulations = len(all_results)  # some might have been discarded
+        if all_results:
+            from operator import add, truediv
 
-            if sum(all_pronoun_err) > 0:
-                plt.title('Subject pronoun errors')
-                plt.plot(epoch_list, all_pronoun_err, color='deepskyblue', linestyle='--')
-                plt.plot(epoch_list, pronoun_err)
-                plt.xlabel('Epochs')
-                plt.ylabel('Mean errors')
-                plt.savefig('%s/summary_%s_pronoun_err.pdf' % (results_dir, num_valid_simulations))
-                plt.close()
-                # same using %
-                sentences_pronoun = len([line for line in dualp.testlines
-                                         if line.startswith('he ') or line.startswith('she ')])
-                if sentences_pronoun:
-                    all_pronoun_err = np.true_divide(all_pronoun_err * 100, sentences_pronoun)
-                    pronoun_err = np.true_divide(pronoun_err * 100, sentences_pronoun)
-                plt.title("Percentage of subject pronoun errors (%%) for %s " % dualp.plot_title)
-                plt.plot(epoch_list, all_pronoun_err, color='deepskyblue', linestyle='--')
-                plt.plot(epoch_list, pronoun_err)
-                plt.ylim([0, 40])
-                plt.xlabel('Epochs')
-                plt.ylabel('Mean errors %')
-                plt.savefig('%s/summary_%s_percentage_pronoun_err.pdf' % (results_dir, num_valid_simulations))
-                plt.close()
+            simulations_with_pron_err = len([simulation for simulation in all_results
+                                         if sum(simulation['pronoun_errors']['test']) > 0])
+            results = {}
+            for d in all_results:
+                for k, v in d.iteritems():
+                    if k not in results:
+                        results[k] = {}
+                    for s, j in v.iteritems():
+                        if s not in results[k]:
+                            results[k][s] = np.array(j)
+                        else:
+                            results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
+
+            plot = Plotter(results_dir=results_dir)
+            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations)
+
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:  # Write simulation details to a file
         f.write(("Input: %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
@@ -810,5 +722,5 @@ if __name__ == "__main__":
                  "lang during testing:%s\nSuccessful simulations:%s/%s\nSimulations with pronoun errors:%s/%s") %
                 (args.input, args.title, args.hidden, args.lrate, args.decrease_lrate, dualp.compress_size,
                  args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, dualp.fixed_weight, args.set_weights,
-                 args.set_weights_epoch, args.nolang, num_valid_simulations, args.sim,
-                 number_of_all_pronoun_errors, args.sim))
+                 args.set_weights_epoch, args.nolang, num_valid_simulations, args.sim, simulations_with_pron_err,
+                 args.sim))
