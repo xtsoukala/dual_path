@@ -1,0 +1,16 @@
+name, max, min, mean, std
+concept,0.0885276,-0.090881,-0.000382713,0.0261963
+name, max, min, mean, std
+role,0.566912,-0.617255,-0.0270299,0.238208
+name, max, min, mean, std
+compress,0.279782,-0.292388,-0.00313484,0.0858483
+name, max, min, mean, std
+hidden,0.109743,-0.116467,0.000269476,0.0335825
+name, max, min, mean, std
+pred_role,0.835385,-0.791551,0.00480714,0.289445
+name, max, min, mean, std
+pred_concept,0.0701498,-0.0699189,0.00120306,0.0258184
+name, max, min, mean, std
+pred_compress,0.236002,-0.20993,-0.00492252,0.0862838
+name, max, min, mean, std
+output,0.0384847,-0.0356597,-2.43979e-05,0.0109113

@@ -1,0 +1,4 @@
+OUT:ella está llev -ando una hermana .
+TRG:él está llev -ando una hermana .
+AGENT=CAT,PRON;ACTION=CARRY;PATIENT=INDEF,SISTER;E=ES,PROG,AGT,PAT,PRESENT
+----------------(2000)

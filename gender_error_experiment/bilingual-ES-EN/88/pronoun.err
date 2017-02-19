@@ -1,0 +1,280 @@
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=DOG,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=BROTHER,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=BROTHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=DOG,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BOY,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=BROTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=FATHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(30000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=FATHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BOY,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=DOG,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=BROTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=BROTHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=BROTHER,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=DOG,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(32000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=DOG,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=DOG,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BOY,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=BROTHER,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=FATHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=BROTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=BROTHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(34000)
+OUT:he swim -s .
+TRG:she swim -s .
+AGENT=GIRL,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=MOTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=SISTER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=MOTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=CAT,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=GIRL,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=CAT,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=MOTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he swim -s .
+TRG:she swim -s .
+AGENT=WOMAN,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=WOMAN,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=GIRL,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he walk -s .
+TRG:she walk -s .
+AGENT=SISTER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=GIRL,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he run -s .
+TRG:she run -s .
+AGENT=CAT,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=SISTER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he swim -s .
+TRG:she swim -s .
+AGENT=WOMAN,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=SISTER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:he jump -s .
+TRG:she jump -s .
+AGENT=CAT,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(36000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=BROTHER,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BROTHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she swim -s .
+TRG:he swim -s .
+AGENT=DOG,PRON;ACTION=SWIM;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=DOG,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=FATHER,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=FATHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=DOG,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she run -s .
+TRG:he run -s .
+AGENT=BOY,PRON;ACTION=RUN;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she jump -s .
+TRG:he jump -s .
+AGENT=BROTHER,PRON;ACTION=JUMP;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)
+OUT:she walk -s .
+TRG:he walk -s .
+AGENT=BROTHER,PRON;ACTION=WALK;E=EN,SIMPLE,AGT,PRESENT
+----------------(40000)

@@ -1,0 +1,8 @@
+OUT:él está golpe -ando un hermano .
+TRG:ella está golpe -ando un hermano .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=ES,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:él está golpe -ando un hermano .
+TRG:ella está golpe -ando un hermano .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=ES,PROG,AGT,PAT,PRESENT
+----------------(2000)

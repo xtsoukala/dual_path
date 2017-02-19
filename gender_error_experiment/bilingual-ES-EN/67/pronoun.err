@@ -1,0 +1,12 @@
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(32000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(32000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(32000)

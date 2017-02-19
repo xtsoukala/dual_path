@@ -1,0 +1,64 @@
+OUT:she present -s the bag to the the .
+TRG:he give -s the bag to the woman .
+AGENT=BOY,PRON;ACTION=GIVE;PATIENT=DEF,BAG;RECIPIENT=DEF,WOMAN;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she present -s a stick to the stick .
+TRG:he show -s a stick to the woman .
+AGENT=BOY,PRON;ACTION=SHOW;PATIENT=INDEF,STICK;RECIPIENT=DEF,WOMAN;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:he present -s a bag to the bag .
+TRG:she throw -s a bag to the boy .
+AGENT=SISTER,PRON;ACTION=THROW;PATIENT=INDEF,BAG;RECIPIENT=DEF,BOY;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she present -s a bag to the bag .
+TRG:he throw -s a bag to the mother .
+AGENT=MAN,PRON;ACTION=THROW;PATIENT=INDEF,BAG;RECIPIENT=DEF,MOTHER;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she present -s a stick to the stick .
+TRG:he present -s a stick to the sister .
+AGENT=BROTHER,PRON;ACTION=PRESENT;PATIENT=INDEF,STICK;RECIPIENT=DEF,SISTER;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she kick -s a kite .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she kick -s a kite .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she present -s a stick to the stick .
+TRG:he give -s a stick to the woman .
+AGENT=MAN,PRON;ACTION=GIVE;PATIENT=INDEF,STICK;RECIPIENT=DEF,WOMAN;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she present -s the key to the the .
+TRG:he throw -s the key to the mother .
+AGENT=BROTHER,PRON;ACTION=THROW;PATIENT=DEF,KEY;RECIPIENT=DEF,MOTHER;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she present -s the ball to the the .
+TRG:he give -s the ball to the woman .
+AGENT=BROTHER,PRON;ACTION=GIVE;PATIENT=DEF,BALL;RECIPIENT=DEF,WOMAN;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:he show -s the kite to a kite .
+TRG:she throw -s the kite to a boy .
+AGENT=CAT,PRON;ACTION=THROW;PATIENT=DEF,KITE;RECIPIENT=INDEF,BOY;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she show -s a kite to a kite .
+TRG:he show -s a kite to a girl .
+AGENT=DOG,PRON;ACTION=SHOW;PATIENT=INDEF,KITE;RECIPIENT=INDEF,GIRL;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:he present -s a key to the key .
+TRG:she give -s a key to the boy .
+AGENT=CAT,PRON;ACTION=GIVE;PATIENT=INDEF,KEY;RECIPIENT=DEF,BOY;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she show -s the toy to a toy .
+TRG:he show -s the toy to a sister .
+AGENT=DOG,PRON;ACTION=SHOW;PATIENT=DEF,TOY;RECIPIENT=INDEF,SISTER;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she show -s a ball to a a .
+TRG:he throw -s a ball to a cat .
+AGENT=DOG,PRON;ACTION=THROW;PATIENT=INDEF,BALL;RECIPIENT=INDEF,CAT;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)
+OUT:she show -s a bag to a a .
+TRG:he present -s a bag to a mother .
+AGENT=DOG,PRON;ACTION=PRESENT;PATIENT=INDEF,BAG;RECIPIENT=INDEF,MOTHER;E=EN,SIMPLE,PAT,-1,REC,PRESENT
+----------------(0)

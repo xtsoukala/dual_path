@@ -1,0 +1,20 @@
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is kick -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=MAN,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is kick -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)

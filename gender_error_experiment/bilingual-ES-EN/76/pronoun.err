@@ -1,0 +1,16 @@
+OUT:he kick -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she kick -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:he . -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)

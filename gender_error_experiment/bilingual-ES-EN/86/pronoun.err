@@ -1,0 +1,512 @@
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(0)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(0)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(2000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(2000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(2000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(2000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(2000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(4000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(4000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he hit -s a brother .
+TRG:she hit -s a brother .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=WOMAN,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(4000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(4000)
+OUT:she is carry -ing the sister .
+TRG:he is carry -ing the sister .
+AGENT=MAN,PRON;ACTION=CARRY;PATIENT=DEF,SISTER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(6000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=MAN,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(6000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(8000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(8000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(8000)
+OUT:he hit -s a brother .
+TRG:she hit -s a brother .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(8000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(8000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(10000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(10000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(10000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(10000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(10000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(10000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(10000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(10000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(10000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=WOMAN,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(12000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he hit -s a brother .
+TRG:she hit -s a brother .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(12000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he is carry -ing the brother .
+TRG:she is carry -ing the brother .
+AGENT=WOMAN,PRON;ACTION=CARRY;PATIENT=DEF,BROTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=WOMAN,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(14000)
+OUT:he hit -s a brother .
+TRG:she hit -s a brother .
+AGENT=MOTHER,PRON;ACTION=HIT;PATIENT=INDEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(14000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=MAN,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(16000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(16000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(16000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(16000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=MAN,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(18000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(18000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(20000)
+OUT:he push -s the brother .
+TRG:she push -s the brother .
+AGENT=WOMAN,PRON;ACTION=PUSH;PATIENT=DEF,BROTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(20000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(20000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(20000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(20000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(20000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(20000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(20000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(20000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(20000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:he push -s the man .
+TRG:she push -s the man .
+AGENT=MOTHER,PRON;ACTION=PUSH;PATIENT=DEF,MAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she kick -s a woman .
+TRG:he kick -s a woman .
+AGENT=BROTHER,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she hit -s a mother .
+TRG:he hit -s a mother .
+AGENT=BROTHER,PRON;ACTION=HIT;PATIENT=INDEF,MOTHER;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(22000)
+OUT:he push -s a dog .
+TRG:she push -s a dog .
+AGENT=CAT,PRON;ACTION=PUSH;PATIENT=INDEF,DOG;E=EN,SIMPLE,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(22000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(24000)
+OUT:he is push -ing the boy .
+TRG:she is push -ing the boy .
+AGENT=SISTER,PRON;ACTION=PUSH;PATIENT=DEF,BOY;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:he is kick -ing the father .
+TRG:she is kick -ing the father .
+AGENT=CAT,PRON;ACTION=KICK;PATIENT=DEF,FATHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(26000)
+OUT:she is carry -ing a woman .
+TRG:he is carry -ing a woman .
+AGENT=DOG,PRON;ACTION=CARRY;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(28000)
+OUT:she is kick -ing a woman .
+TRG:he is kick -ing a woman .
+AGENT=DOG,PRON;ACTION=KICK;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(28000)
+OUT:she is push -ing a woman .
+TRG:he is push -ing a woman .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,WOMAN;E=EN,PROG,AGT,PAT,PRESENT
+----------------(28000)
+OUT:she is push -ing a mother .
+TRG:he is push -ing a mother .
+AGENT=BROTHER,PRON;ACTION=PUSH;PATIENT=INDEF,MOTHER;E=EN,PROG,AGT,PAT,PRESENT
+----------------(28000)
