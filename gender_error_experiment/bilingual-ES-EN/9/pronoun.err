@@ -1,4 +1,0 @@
-OUT:lanz throw -s a boy . bag .
-TRG:she throw -s a boy a bag .
-AGENT=CAT,PRON;ACTION=THROW;RECIPIENT=INDEF,BOY;PATIENT=INDEF,BAG;E=EN,SIMPLE,AGT,PAT,REC,PRESENT
-----------------(10000)
