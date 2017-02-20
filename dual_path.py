@@ -343,7 +343,7 @@ class DualPath:
             reslt['pronoun_errors']['train'].append(pr)
 
         # ONLY include simulations that have learned successfully! POS accuracy at the end should be at least 75%
-        if np.true_divide(reslt['correct_pos']['test'][-1] * 100, self.num_test) > 5 or self.simulation_num is None:
+        if np.true_divide(reslt['correct_pos']['test'][-1] * 100, self.num_test) > 75 or self.simulation_num is None:
             res_name = "results.pickled"
         else:  # rename folder and don't take data into consideration
             res_name = "results.discarded"
