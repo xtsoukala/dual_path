@@ -9,9 +9,9 @@ class Plotter:
     def __init__(self, results_dir):
         self.results_dir = results_dir
 
-    def plot_results(self, results, title=None, summary_sim=None):
-        num_train = 2000
-        num_test = 500
+    def plot_results(self, results, num_train=2000, num_test=500, title=None, summary_sim=None):
+        num_train = num_train
+        num_test = num_test
 
         epochs = range(len(results['correct_sentences']['train']))
         plt.plot(epochs, [percentage(x, num_train) for x in results['correct_sentences']['train']], linestyle='--',

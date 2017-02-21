@@ -342,14 +342,7 @@ class DualPath:
             reslt['pronoun_errors_flex']['train'].append(a_p)
             reslt['pronoun_errors']['train'].append(pr)
 
-        # ONLY include simulations that have learned successfully! POS accuracy at the end should be at least 75%
-        if np.true_divide(reslt['correct_pos']['test'][-1] * 100, self.num_test) > 75 or self.simulation_num is None:
-            res_name = "results.pickled"
-        else:  # rename folder and don't take data into consideration
-            res_name = "results.discarded"
-            os.rename("%s/%s" % (os.getcwd(), self.results_dir), "%s/%s_discarded" % (os.getcwd(), self.results_dir))
-            self.results_dir += "_discarded"
-        with open("%s/%s" % (self.results_dir, res_name), 'w') as f:
+        with open("%s/results.pickled" % self.results_dir, 'w') as f:  # write results to a (pickled) file
             pickle.dump(reslt, f)
 
         if plot_results:
@@ -625,7 +618,7 @@ if __name__ == "__main__":
             copy_dir(args.input, '%s/input_cp' % results_dir)
             args.input = '%s/input_cp' % results_dir
         else:
-            from corpora.corpus_generator.generator import SetsGenerator
+            from corpus_generator.generator import SetsGenerator
 
             args.input = "%s/input/" % results_dir
             sets = SetsGenerator(results_dir=args.input)
@@ -654,6 +647,8 @@ if __name__ == "__main__":
         elif testset.endswith('.enes'):
             args.title = 'Bilingual EN-ES model'
 
+    num_valid_simulations = None
+    simulations_with_pron_err = 0
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, results_dir=results_dir, epochs=args.epochs,
                          input_dir=args.input, lex_fname=args.lexicon, concept_fname=args.concepts,
@@ -664,8 +659,6 @@ if __name__ == "__main__":
                          semantic_gender=args.gender, emphasis=args.emphasis, prodrop=args.prodrop, trainset=trainset,
                          testset=testset)
         dualp.train_network(decrease_lrate=args.decrease_lrate)
-        # if we want to see whether the single simulation failed, we can add a bool in the train_network function
-        num_valid_simulations = 1
     else:  # start batch training to take the average of results
         processes = []
         for sim in range(args.sim):
@@ -685,23 +678,26 @@ if __name__ == "__main__":
         for p in processes:
             p.join()
 
-        # read the results from all simulations
         all_results = []
-        for sim in range(args.sim):
+        for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'r') as f:
                     all_results.append(pickle.load(f))
-            else:
+            else:  # this would mean "missing data" though, we could raise a message
                 print 'Simulation #%s was problematic' % sim
 
-        num_valid_simulations = len(all_results)  # some might have been discarded
         if all_results:
-            from operator import add, truediv
+            from operator import add
 
-            simulations_with_pron_err = len([simulation for simulation in all_results
-                                         if sum(simulation['pronoun_errors']['test']) > 0])
+            # a simulation is valid only if the performance on the POS of the test set was over 75%
+            valid_results = [simulation for simulation in all_results
+                             if np.true_divide(simulation['correct_pos']['test'][-1] * 100, dualp.num_test) > 75]
+            num_valid_simulations = len(valid_results)  # some might have been discarded
+
+            simulations_with_pron_err = len([simulation for simulation in valid_results
+                                             if sum(simulation['pronoun_errors']['test']) > 0])
             results = {}
-            for d in all_results:
+            for d in valid_results:
                 for k, v in d.iteritems():
                     if k not in results:
                         results[k] = {}
@@ -719,8 +715,8 @@ if __name__ == "__main__":
         f.write(("Input: %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
                  "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
                  "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
-                 "lang during testing:%s\nSuccessful simulations:%s/%s\nSimulations with pronoun errors:%s/%s") %
+                 "lang during testing:%s\nSimulations with pronoun errors:%s/%s\n%s") %
                 (args.input, args.title, args.hidden, args.lrate, args.decrease_lrate, dualp.compress_size,
                  args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, dualp.fixed_weight, args.set_weights,
-                 args.set_weights_epoch, args.nolang, num_valid_simulations, args.sim, simulations_with_pron_err,
-                 args.sim))
+                 args.set_weights_epoch, args.nolang, simulations_with_pron_err, args.sim,
+                 "Successful simulations:%s/%s\n" % (num_valid_simulations, args.sim) if num_valid_simulations else ""))
