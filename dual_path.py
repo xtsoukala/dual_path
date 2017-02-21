@@ -7,6 +7,7 @@ from datetime import datetime
 from elman_network import ElmanNetwork
 from plotter import Plotter
 from multiprocessing import Process, Manager
+from operator import add
 import shutil
 import re
 
@@ -34,6 +35,7 @@ class DualPath:
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
         self.concepts = self._read_concepts(concept_fname)
         self.identif = self._read_file_to_list('identifiability.in')
+        self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
         self.event_semantics = self._read_file_to_list(evsem_fname)
         self.results_dir = results_dir  # directory where the results are saved
@@ -45,7 +47,7 @@ class DualPath:
         self.num_train = len(self.trainlines)
         self.testlines = self._read_set(test=True)
         self.num_test = len(self.testlines)
-        self.test_sentences_with_pronoun = self._number_of_pronouns()
+        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
 
         self.event_sem_size = len(self.event_semantics)
@@ -56,7 +58,6 @@ class DualPath:
         self.roles_size = len(self.roles)
 
         self.lang = language
-        self.languages = self._read_file_to_list('target_lang.in')
         self.exclude_lang = exclude_lang
         # self.determiners = [self.lexicon[i] for i in self.pos['DET']]
         # self.det_pattern = re.compile(r'\b(%s)\b' % "|".join(self.determiners))
@@ -80,7 +81,6 @@ class DualPath:
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
         # |----------!PARAMS----------|
-
         self.test_every = test_every  # test every x epochs (default: 2000)
         self.plot_title = plot_title
         self.role_copy = role_copy
@@ -96,10 +96,8 @@ class DualPath:
         self.semantic_gender = semantic_gender
         self.all_roles = dict()
 
-    def _number_of_pronouns(self):
-        with open(self.testset) as f:
-            testl = f.readlines()
-        return len([line for line in testl if line.startswith('he ') or line.startswith('she ')])
+    def _number_of_test_pronouns(self):
+        return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
 
     def _read_set(self, test=False, set_name=None, skip_period=True):
         if not set_name:
@@ -107,18 +105,20 @@ class DualPath:
                 set_name = self.testset
             else:
                 set_name = self.trainset
+
         with open(set_name, 'r+') as f:
-            trainlines = f.readlines()
+            lines = f.readlines()
+
         if self.prodrop:  # make prodrop
             if self.emphasis:  # keep pronoun if emphasized
-                trainlines = [re.sub(r'^(él|ella) ', '', line) if ',EMPH' not in line else line for line in trainlines]
+                lines = [re.sub(r'^(él|ella) ', '', line) if ',EMPH' not in line else line for line in lines]
             else:
-                trainlines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in trainlines]
+                lines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in lines]
         elif not self.emphasis:
-            trainlines = [re.sub(r',EMPH', '', sentence) for sentence in trainlines]
+            lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
         if skip_period:
-            trainlines = [re.sub(r' \.', '', line) for line in trainlines]
-        return trainlines
+            lines = [re.sub(r' \.', '', line) for line in lines]
+        return lines
 
     def _read_allowed_structures(self):
         return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
@@ -144,7 +144,7 @@ class DualPath:
                             pos[prev_pos] = range(pos_start, pos_end)
                         pos_start = pos_end
                     prev_pos = line[:-1]  # remove the colon
-                elif line not in lexicon:  # THERE WERE DUPLICATE WORDS!!
+                elif line not in lexicon:  # make sure there are no duplicate words
                     lexicon.append(line)
                     pos_end += 1
             if prev_pos in pos:
@@ -347,7 +347,7 @@ class DualPath:
 
         if plot_results:
             plt = Plotter(results_dir=self.results_dir)
-            plt.plot_results(reslt, title=self.plot_title)
+            plt.plot_results(reslt, title=self.plot_title, num_test=self.num_test, num_train=self.num_train)
 
     def evaluate_network(self, results_dict, epoch, eval_set=None, is_test_set=True, check_pron=True):
         """
@@ -687,8 +687,6 @@ if __name__ == "__main__":
                 print 'Simulation #%s was problematic' % sim
 
         if all_results:
-            from operator import add
-
             # a simulation is valid only if the performance on the POS of the test set was over 75%
             valid_results = [simulation for simulation in all_results
                              if np.true_divide(simulation['correct_pos']['test'][-1] * 100, dualp.num_test) > 75]
