@@ -9,7 +9,8 @@ class Plotter:
     def __init__(self, results_dir):
         self.results_dir = results_dir
 
-    def plot_results(self, results, num_train=2000, num_test=500, title=None, summary_sim=None):
+    def plot_results(self, results, num_train=2000, num_test=500, test_sentences_with_pronoun=None,
+                     title=None, summary_sim=None):
         num_train = num_train
         num_test = num_test
 
@@ -58,10 +59,10 @@ class Plotter:
             plt.close()
 
             # same using percentages
-            if results['test_sentences_with_pronoun']:  # in ES case there are no sentences with 'he' and 'she'
-                percentage_pronoun_errors = [np.true_divide(x * 100, results['test_sentences_with_pronoun'])
+            if test_sentences_with_pronoun:  # in ES case there are no sentences with 'he' and 'she'
+                percentage_pronoun_errors = [np.true_divide(x * 100, test_sentences_with_pronoun)
                                              for x in results['pronoun_errors']['test']]
-                percentage_pronoun_errors_flex = [np.true_divide(x * 100, results['test_sentences_with_pronoun'])
+                percentage_pronoun_errors_flex = [np.true_divide(x * 100, test_sentences_with_pronoun)
                                                   for x in results['pronoun_errors_flex']['test']]
             else:
                 percentage_pronoun_errors = results['pronoun_errors']['test']

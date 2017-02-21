@@ -41,6 +41,7 @@ class DualPath:
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis = emphasis
+        self.semantic_gender = semantic_gender
         self.testset = testset
         self.trainset = trainset  # names of train and test set file names
         self.trainlines = self._read_set()
@@ -93,7 +94,6 @@ class DualPath:
 
         self.period_idx = self.lexicon.index('.')
         self.code_switched_idx = self.lexicon.index('-a')  # the verb suffix is the first entry in the ES lexicon
-        self.semantic_gender = semantic_gender
         self.all_roles = dict()
 
     def _number_of_test_pronouns(self):
@@ -116,8 +116,13 @@ class DualPath:
                 lines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in lines]
         elif not self.emphasis:
             lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
+
         if skip_period:
             lines = [re.sub(r' \.', '', line) for line in lines]
+
+        if not self.semantic_gender:
+            lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)
+
         return lines
 
     def _read_allowed_structures(self):
@@ -207,8 +212,6 @@ class DualPath:
         :param test_phase: Set to True during evaluation and False during training
         """
         message = message.strip()
-        if not self.semantic_gender:
-            message = re.sub(',(M|F)(,|;|$)', r'\2', message)
 
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
@@ -248,10 +251,6 @@ class DualPath:
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
                     self.all_roles[concept] = role
-                    ''' or reduce activation of gender info
-                        weights_role_concept[self.roles.index(role)][self.concepts.index(concept)] = \
-                            self.fixed_weight / 2
-                    '''
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_weight
                     else:
@@ -287,7 +286,7 @@ class DualPath:
                  'correct_pos': {'test': [], 'train': []},
                  'pronoun_errors_flex': {'test': [], 'train': []},
                  'pronoun_errors': {'test': [], 'train': []}
-                }
+                 }
 
         epoch = 0
         while epoch <= self.epochs:  # start training for x epochs
@@ -307,8 +306,8 @@ class DualPath:
                 subprocess = Process(target=self.evaluate_network, args=(train_results, epoch, trainset, False))
                 subprocess.start()
                 subprocesses.append(subprocess)
-                for p in subprocesses:
-                    p.join()
+                for sp in subprocesses:
+                    sp.join()
 
             for line in self.trainlines:  # start training
                 sentence, message = line.split('##')
@@ -347,7 +346,8 @@ class DualPath:
 
         if plot_results:
             plt = Plotter(results_dir=self.results_dir)
-            plt.plot_results(reslt, title=self.plot_title, num_test=self.num_test, num_train=self.num_train)
+            plt.plot_results(reslt, title=self.plot_title, num_test=self.num_test, num_train=self.num_train,
+                             test_sentences_with_pronoun=self.test_sentences_with_pronoun)
 
     def evaluate_network(self, results_dict, epoch, eval_set=None, is_test_set=True, check_pron=True):
         """
@@ -706,7 +706,9 @@ if __name__ == "__main__":
                             results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
 
             plot = Plotter(results_dir=results_dir)
-            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations)
+            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations,
+                              num_test=dualp.num_test, num_train=dualp.num_train,
+                              test_sentences_with_pronoun=dualp.test_sentences_with_pronoun)
 
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:  # Write simulation details to a file
