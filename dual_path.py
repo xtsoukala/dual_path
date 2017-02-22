@@ -1,72 +1,25 @@
 # -*- coding: utf-8 -*-
-import os
 import random
 import pickle
 import numpy as np
 from datetime import datetime
 from elman_network import ElmanNetwork
 from plotter import Plotter
+from formatter import InputFormatter, os
 from multiprocessing import Process, Manager
 from operator import add
 import shutil
-import re
 
 
 class DualPath:
-    def __init__(self, hidden_size, learn_rate, results_dir, epochs, input_dir, lex_fname, concept_fname, role_fname,
-                 evsem_fname, role_copy, elman_debug_mess, test_every, plot_title, compress_size, set_weights_folder,
-                 set_weights_epoch, fixed_weight, exclude_lang, language, trainset=None, testset=None,
-                 simulation_num=None, semantic_gender=False, emphasis=False, prodrop=False):
-        """ This class mostly contains helper functions that set the I/O for the model (SRN).
-        Dual Path has the following layers (plus hidden & context)
-        word, compress, concept & role, target language and event-semantics.
-
-        The event-semantics unit is the only unit that provides information
-        about the target sentence order
-        e.g. for the dative sentence "A man bakes a cake for the cafe" there are
-        3 event-sem units: CAUSE, CREATE, TRANSFER
-
-        role-concept and prev_role-prev_concept links are used to store the message
-
-        role, concept and prev_concept units are unbiased to make them more
-        input driven (all other units except concept have bias)
-        """
-        self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
-        self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
-        self.concepts = self._read_concepts(concept_fname)
-        self.identif = self._read_file_to_list('identifiability.in')
-        self.languages = self._read_file_to_list('target_lang.in')
-        self.roles = self._read_file_to_list(role_fname)
-        self.event_semantics = self._read_file_to_list(evsem_fname)
-        self.results_dir = results_dir  # directory where the results are saved
-        self.prodrop = prodrop
-        self.emphasis = emphasis
-        self.semantic_gender = semantic_gender
-        self.testset = testset
-        self.trainset = trainset  # names of train and test set file names
-        self.trainlines = self._read_set()
-        self.num_train = len(self.trainlines)
-        self.testlines = self._read_set(test=True)
-        self.num_test = len(self.testlines)
-        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
-        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
-
-        self.event_sem_size = len(self.event_semantics)
-        self.lexicon_size = len(self.lexicon)
-        self.concept_size = len(self.concepts)
-        self.identif_size = len(self.identif)
-        self.compress_idx = list(self.pos.keys())  # basically accounts for POS (syntactic categories)
-        self.roles_size = len(self.roles)
-
-        self.lang = language
-        self.exclude_lang = exclude_lang
-        # self.determiners = [self.lexicon[i] for i in self.pos['DET']]
-        # self.det_pattern = re.compile(r'\b(%s)\b' % "|".join(self.determiners))
-        # |----------PARAMS----------|
+    def __init__(self, hidden_size, learn_rate, plot_title, compress_size, set_weights_folder, role_copy,
+                 elman_debug_mess, test_every, epochs, set_weights_epoch, fixed_weight, input_format,
+                 simulation_num=None):
+        self.inputs = input_format
         if compress_size:
             self.compress_size = compress_size
         else:  # or hidden/3 ? hidden: 45+13 (lex+compress) 58 compress = args.hidden / 3
-            self.compress_size = len(self.compress_idx)  # Abstracts syntactic categories
+            self.compress_size = len(self.inputs.compress_idx)
         self.hidden_size = hidden_size
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult for the model to learn the associations
@@ -92,117 +45,47 @@ class DualPath:
                                 include_role_copy=self.role_copy)
         self.initialize_network()
 
-        self.period_idx = self.lexicon.index('.')
-        self.code_switched_idx = self.lexicon.index('-a')  # the verb suffix is the first entry in the ES lexicon
-        self.all_roles = dict()
+    def initialize_network(self):
+        # The where, what, and cwhat units were unbiased to make them more input driven
+        self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
+        self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
+        self.srn.add_layer("identif", self.inputs.identif_size, has_bias=False)
+        self.srn.add_layer("role", self.inputs.roles_size, has_fixed_weights=True)  # has_bias=False, "softmax"
+        self.srn.add_layer("compress", self.compress_size)
+        self.srn.add_layer("eventsem", self.inputs.event_sem_size)  # convert_input=True -- it doesn't really matter
+        self.srn.add_layer("target_lang", len(self.inputs.languages))
+        self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
+        # If pred_role is not softmax the model performs poorly on determiners.
+        self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_fixed_weights=True, has_bias=False)
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_fixed_weights=True, has_bias=False)
+        self.srn.add_layer("pred_compress", self.compress_size)
+        self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
-    def _number_of_test_pronouns(self):
-        return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
-
-    def _read_set(self, test=False, set_name=None, skip_period=True):
-        if not set_name:
-            if test:
-                set_name = self.testset
-            else:
-                set_name = self.trainset
-
-        with open(set_name, 'r+') as f:
-            lines = f.readlines()
-
-        if self.prodrop:  # make prodrop
-            if self.emphasis:  # keep pronoun if emphasized
-                lines = [re.sub(r'^(él|ella) ', '', line) if ',EMPH' not in line else line for line in lines]
-            else:
-                lines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in lines]
-        elif not self.emphasis:
-            lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
-
-        if skip_period:
-            lines = [re.sub(r' \.', '', line) for line in lines]
-
-        if not self.semantic_gender:
-            lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)
-
-        return lines
-
-    def _read_allowed_structures(self):
-        return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
-
-    def _read_lexicon_and_pos(self, fname):
-        """
-        :param fname: the name of the file that contains a list of categories (eg. noun, verb) and the lexicon
-        :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
-        (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
-        """
-        pos = dict()
-        lexicon = ['']  # FIXME: position 0 is >almost< never predicted, so we start lexicon from 1. Check why.
-        prev_pos = ''
-        pos_start = pos_end = 1
-        with open(os.path.join(self.input_dir, fname)) as f:
-            for line in f:  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
-                line = line.rstrip('\n')
-                if line.endswith(":"):
-                    if prev_pos:
-                        if prev_pos in pos:
-                            pos[prev_pos] += range(pos_start, pos_end)
-                        else:
-                            pos[prev_pos] = range(pos_start, pos_end)
-                        pos_start = pos_end
-                    prev_pos = line[:-1]  # remove the colon
-                elif line not in lexicon:  # make sure there are no duplicate words
-                    lexicon.append(line)
-                    pos_end += 1
-            if prev_pos in pos:
-                pos[prev_pos] += range(pos_start, pos_end)
-            else:
-                pos[prev_pos] = range(pos_start, pos_end)  # to add the last syntactic category
-        return pos, lexicon
-
-    def _read_concepts(self, fname):
-        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2) it
-        seems that "where" is renamed to "role" and "what" to concept
-
-        If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon
-        and uppercase it i.e. concepts = [x.upper() for x in lexicon],
-        otherwise read the file and ignore lines that start with a colon """
-        with open(os.path.join(self.input_dir, fname)) as f:
-            lines = f.readlines()
-        # return [''] + [line.rstrip() for line in lines if not line.startswith(":")] Should we add an empty concept?
-        return [line.rstrip() for line in lines if not line.startswith(":")]
-
-    def _read_file_to_list(self, fname):
-        """
-        Simply read the roles or event-semantics files into a list
-        """
-        return [line.rstrip('\n') for line in open(os.path.join(self.input_dir, fname))]
-
-    def pos_lookup(self, word):
-        """
-        :param word_idx: The index of a given word (as stored in the lexicon)
-        :return: It looks up the pos dictionary and returns the category of
-        the word (noun, verb etc)
-        """
-        word_idx = self.lexicon.index(word)
-        for pos, idx in self.pos.iteritems():
-            if word_idx in idx:
-                return pos
-        import sys  # in case the word index is not available
-        sys.exit("No POS found for word %s %s" % (word_idx, self.lexicon[word_idx]))
-
-    def sentence_indeces(self, sentence):
-        """
-        :param sentence: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'was', 'walk', '-ing']
-        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20, 40]
-        """
-        return [self.lexicon.index(w) for w in sentence]
-
-    def sentence_pos_str(self, sentence):
-        """
-        :param sentence: sentence string
-        :param remove_period: whether to remove the period from the end of the sentence
-        :return: returns a list of the POS of every word in the sentence
-        """
-        return " ".join([self.pos_lookup(word) for word in sentence.split()])
+        # Connect layers
+        self.srn.connect_layers("input", "identif")
+        self.srn.connect_layers("input", "concept")
+        self.srn.connect_layers("input", "compress")
+        self.srn.connect_layers("identif", "role")
+        self.srn.connect_layers("concept", "role")
+        # hidden layer
+        if self.role_copy:  # it does not seem to improve this model, set default to False for simplicity
+            self.srn.add_layer("role_copy", self.inputs.roles_size)
+            self.srn.connect_layers("role_copy", "hidden")
+        self.srn.connect_layers("role", "hidden")
+        self.srn.connect_layers("compress", "hidden")
+        self.srn.connect_layers("eventsem", "hidden")
+        self.srn.connect_layers("target_lang", "hidden")
+        # hidden to predicted and output layers
+        self.srn.connect_layers("hidden", "pred_role")
+        self.srn.connect_layers("hidden", "pred_compress")
+        self.srn.connect_layers("pred_role", "pred_identifiability")
+        self.srn.connect_layers("pred_role", "pred_concept")
+        self.srn.connect_layers("pred_identifiability", "output")
+        self.srn.connect_layers("pred_concept", "output")
+        self.srn.connect_layers("pred_compress", "output")
+        self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch,
+                               set_weights_folder=self.set_weights_folder, simulation_num=self.simulation_num)
 
     def get_message_info(self, message, test_phase=False):
         """
@@ -217,12 +100,12 @@ class DualPath:
         reduced_activation = 0  # 0.1-4
         increased_activation = 2
         lang = 'en' if '=EN,' in message else 'es'
-        event_sem_activations = np.array([-1] * self.event_sem_size)  # or np.zeros(self.event_sem_size)
+        event_sem_activations = np.array([-1] * self.inputs.event_sem_size)  # or np.zeros(self.event_sem_size)
         # include the identifiness (first), i.e. def, indef, pronoun, emph
-        weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))  # , dtype=bool)
-        target_lang_activations = np.zeros(len(self.languages))
+        weights_role_concept = np.zeros((self.inputs.roles_size, self.inputs.identif_size + self.inputs.concept_size))
+        target_lang_activations = np.zeros(len(self.inputs.languages))
         # topic_emphasis_activation = np.array([-1])
-        self.all_roles = dict()
+        self.inputs.all_roles = dict()
         for info in message.split(';'):
             role, what = info.split("=")
             if role == "E":  # retrieve activations for the event-sem layer
@@ -233,60 +116,59 @@ class DualPath:
                         break
                     if event in ['PRESENT', 'PAST']:
                         activation = increased_activation
-                    if event in self.languages:
-                        if test_phase and self.exclude_lang:
+                    if event in self.inputs.languages:
+                        if test_phase and self.inputs.exclude_lang:
                             if event == 'ES':
-                                target_lang_activations[self.languages.index('ES')] = 0.8  # more active
-                                target_lang_activations[self.languages.index('EN')] = 0.2  # less active
+                                target_lang_activations[self.inputs.languages.index('ES')] = 0.8  # more active
+                                target_lang_activations[self.inputs.languages.index('EN')] = 0.2  # less active
                             else:
-                                target_lang_activations[self.languages.index('ES')] = 0.2
-                                target_lang_activations[self.languages.index('EN')] = 0.8
+                                target_lang_activations[self.inputs.languages.index('ES')] = 0.2
+                                target_lang_activations[self.inputs.languages.index('EN')] = 0.8
                         else:
-                            target_lang_activations[self.languages.index(event)] = activation
+                            target_lang_activations[self.inputs.languages.index(event)] = activation
                     else:  # activate
-                        event_sem_activations[self.event_semantics.index(event)] = activation
+                        event_sem_activations[self.inputs.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
             else:
                 # there's usually only one concept per role unless it's a noun with a det, e.g. (MAN, THE). We want to
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
-                    self.all_roles[concept] = role
-                    if concept in self.identif:
-                        weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_weight
+                    self.inputs.all_roles[concept] = role
+                    if concept in self.inputs.identif:
+                        weights_role_concept[self.inputs.roles.index(role)][self.inputs.identif.index(concept)] = \
+                            self.fixed_weight
                     else:
-                        idx_concept = self.identif_size + self.concepts.index(concept)
-                        weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weight
+                        idx_concept = self.inputs.identif_size + self.inputs.concepts.index(concept)
+                        weights_role_concept[self.inputs.roles.index(role)][idx_concept] = self.fixed_weight
         return weights_role_concept, event_sem_activations, target_lang_activations, lang, message
 
-    def train_network(self, decrease_lrate=False, trainset=None, shuffle_set=True, plot_results=True):
+    def train_network(self, decrease_lrate=False, shuffle_set=True, plot_results=True, evaluate=True):
         """
         decrease_lrate: whether to decrease the learning rate or not
         shuffle_set: Whether to shuffle the training set after each iteration
         plot_results: Whether to plot the performance
-        trainset: the name of the training file (inc. the path). Contains target sentence and the message (A=THROW etc).
+        evaluate: Whether to evaluate train and test sets every x epochs. The only reason NOT to evaluate is for speed,
+                  if we want to train network and save weights
 
-        For each word of input sentence:
+        Training: for each word of input sentence:
             - compute predicted response
-            - determine error, propagate and update weights
+            - determine error, (back)propagate and update weights
             - copy hidden units to context
 
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its trainset and was
         tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
-        if trainset:  # in case we want to use a different train set that the one set in DualPath()
-            self.trainlines = self._read_set(set_name=trainset)
-            self.num_train = len(self.trainlines)
+        if evaluate:
+            manager = Manager()
+            train_results = manager.dict()
+            test_results = manager.dict()
 
-        manager = Manager()
-        train_results = manager.dict()
-        test_results = manager.dict()
-
-        reslt = {'correct_sentences': {'test': [], 'train': []},
-                 'correct_pos': {'test': [], 'train': []},
-                 'pronoun_errors_flex': {'test': [], 'train': []},
-                 'pronoun_errors': {'test': [], 'train': []}
-                 }
+            reslt = {'correct_sentences': {'test': [], 'train': []},
+                     'correct_pos': {'test': [], 'train': []},
+                     'pronoun_errors_flex': {'test': [], 'train': []},
+                     'pronoun_errors': {'test': [], 'train': []}
+                     }
 
         epoch = 0
         while epoch <= self.epochs:  # start training for x epochs
@@ -294,9 +176,9 @@ class DualPath:
                 self.srn.save_weights(epochs=epoch)
 
             if shuffle_set:
-                random.shuffle(self.trainlines)
+                random.shuffle(self.inputs.trainlines)
 
-            if epoch % self.test_every == 0:  # evaluate train AND testset
+            if evaluate and epoch % self.test_every == 0:  # evaluate train AND testset
                 subprocesses = []
                 # test set
                 subprocess = Process(target=self.evaluate_network, args=(test_results, epoch,))
@@ -309,14 +191,14 @@ class DualPath:
                 for sp in subprocesses:
                     sp.join()
 
-            for line in self.trainlines:  # start training
+            for line in self.inputs.trainlines:  # start training
                 sentence, message = line.split('##')
                 target_sentence = sentence.split()
                 weights_role_concept, evsem_act, target_lang_act, lang, message = self.get_message_info(message)
                 self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
                                                    event_sem_activations=evsem_act, target_lang_act=target_lang_act)
                 prod_idx = None  # previously produced word (at the beginning of sentence: None)
-                for enum_idx, trg_idx in enumerate(self.sentence_indeces(target_sentence)):
+                for enum_idx, trg_idx in enumerate(self.inputs.sentence_indeces(target_sentence)):
                     self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx)
                     self.srn.feed_forward(start_of_sentence=(prod_idx is None))
                     prod_idx = trg_idx  # Train with target word, NOT produced one
@@ -327,58 +209,57 @@ class DualPath:
 
             epoch += 1  # increase number of epochs, begin new iteration
 
-        for sim in test_results.values():
-            s, p, a_p, pr = sim
-            reslt['correct_sentences']['test'].append(s)
-            reslt['correct_pos']['test'].append(p)
-            reslt['pronoun_errors_flex']['test'].append(a_p)
-            reslt['pronoun_errors']['test'].append(pr)
+        if evaluate:
+            for sim in test_results.values():
+                s, p, a_p, pr = sim
+                reslt['correct_sentences']['test'].append(s)
+                reslt['correct_pos']['test'].append(p)
+                reslt['pronoun_errors_flex']['test'].append(a_p)
+                reslt['pronoun_errors']['test'].append(pr)
 
-        for sim in train_results.values():
-            s, p, a_p, pr = sim
-            reslt['correct_sentences']['train'].append(s)
-            reslt['correct_pos']['train'].append(p)
-            reslt['pronoun_errors_flex']['train'].append(a_p)
-            reslt['pronoun_errors']['train'].append(pr)
+            for sim in train_results.values():
+                s, p, a_p, pr = sim
+                reslt['correct_sentences']['train'].append(s)
+                reslt['correct_pos']['train'].append(p)
+                reslt['pronoun_errors_flex']['train'].append(a_p)
+                reslt['pronoun_errors']['train'].append(pr)
 
-        with open("%s/results.pickled" % self.results_dir, 'w') as f:  # write results to a (pickled) file
-            pickle.dump(reslt, f)
+            with open("%s/results.pickled" % self.inputs.results_dir, 'w') as f:  # write results to a (pickled) file
+                pickle.dump(reslt, f)
 
-        if plot_results:
-            plt = Plotter(results_dir=self.results_dir)
-            plt.plot_results(reslt, title=self.plot_title, num_test=self.num_test, num_train=self.num_train,
-                             test_sentences_with_pronoun=self.test_sentences_with_pronoun)
+            if plot_results:
+                plt = Plotter(inputs=self.inputs)
+                plt.plot_results(reslt, title=self.plot_title)
 
     def evaluate_network(self, results_dict, epoch, eval_set=None, is_test_set=True, check_pron=True):
         """
         :param results_dict: Dictionary that contains evaluation results for all epochs
         :param epoch: Number of epoch
-        :param eval_set: Which set needs to be evaluated (optional, if not set the train/test set is used)
+        :param eval_set: We can set a brand new set for evaluation (optional, if not set the train/test set is used)
         :param is_test_set: Whether it is a test set (otherwise a train set is used)
         :param check_pron: Whether to evaluate pronoun production
         :return:
         """
 
         if eval_set:
-            lines = self._read_set(set_name=trainset)
+            lines = self.inputs.read_set(set_name=trainset)
             num_sentences = len(lines)
         elif is_test_set:
-            lines = self.testlines
-            num_sentences = self.num_test
+            lines = self.inputs.testlines
+            num_sentences = self.inputs.num_test
         else:  # train set
-            lines = self.trainlines
-            num_sentences = self.num_train
+            lines = self.inputs.trainlines
+            num_sentences = self.inputs.num_train
 
         sentences_correct = 0
         words_correct = 0
         correct_pos = 0
         trg_sentences = []
 
-        if check_pron:
-            all_pron_err = 0  # all sentences that have he/she errors, even the ungrammatical ones
-            pos_pron_err = 0  # grammatical sentence with gender pronoun error (and potentially other semantic errors)
-            pron_err = 0  # sentence with gender pronoun error only (and otherwise correct)
-            idx_en_pron = [self.lexicon.index('he'), self.lexicon.index('she')]
+        all_pron_err = 0  # all sentences that have he/she errors, even the ungrammatical ones
+        pos_pron_err = 0  # grammatical sentence with gender pronoun error (and potentially other semantic errors)
+        pron_err = 0  # sentence with gender pronoun error only (and otherwise correct)
+        idx_en_pron = [self.inputs.lexicon.index('he'), self.inputs.lexicon.index('she')]
 
         for line in lines:
             sentence, message = line.split('##')
@@ -393,7 +274,7 @@ class DualPath:
             code_switched = False
             has_pronoun_error = False
             flexible_order = False
-            for enum_idx, trg_idx in enumerate(self.sentence_indeces(target_sentence)):
+            for enum_idx, trg_idx in enumerate(self.inputs.sentence_indeces(target_sentence)):
                 self.srn.set_inputs(input_idx=prod_idx)
                 self.srn.feed_forward(start_of_sentence=(prod_idx is None))
                 prod_idx = self.srn.get_max_output_activation()
@@ -402,11 +283,12 @@ class DualPath:
                 else:
                     if check_pron and trg_idx in idx_en_pron and prod_idx in idx_en_pron:  # case gender error
                         has_pronoun_error = True
-                    if prod_idx != self.period_idx and ((lang == 'EN' and prod_idx >= self.code_switched_idx) or
-                                                        (lang == 'ES' and prod_idx < self.code_switched_idx)):
+                    if prod_idx != self.inputs.period_idx and \
+                            ((lang == 'EN' and prod_idx >= self.inputs.code_switched_idx) or
+                                 (lang == 'ES' and prod_idx < self.inputs.code_switched_idx)):
                         code_switched = True
-                produced_sentence.append(self.lexicon[prod_idx])  # add word to the total sentence
-                if prod_idx == self.period_idx:  # end sentence if a period was produced
+                produced_sentence.append(self.inputs.lexicon[prod_idx])  # add word to the total sentence
+                if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
                     break
                 """ will be removed (solved due to softmax)
                 if check_determiners:
@@ -453,92 +335,58 @@ class DualPath:
             trg_sentences.append(sentence)
             if out_sentence == sentence:
                 sentences_correct += 1
+            else:
+                flexible_order = test_for_flexible_order(out_sentence.split(), sentence.split())
+                if flexible_order:
+                    sentences_correct += 1  # regard sentence as correct (grammatical and conveys same meaning)
 
-            out_pos = self.sentence_pos_str(out_sentence)
+            out_pos = self.inputs.sentence_pos_str(out_sentence)
             corr_pos = False
-            if out_pos in self.allowed_structures:
+            if out_pos in self.inputs.allowed_structures:
                 corr_pos = True
                 correct_pos += 1
-                # if POS was correct but produced sentence was not identical to the target one, check if
-                # the meaning was correct but expressed with a different syntactic structure (due to, e.g., priming)
-                if out_sentence != sentence:
-                    produced_sentence = [x for x in produced_sentence if x not in ["to", "."]]
-                    target_sentence = [x for x in target_sentence if x not in ["to", "."]]
-                    if set(produced_sentence) == set(target_sentence):
-                        flexible_order = True
-                        # regard it as a correct sentence (it is grammatical and it conveys the same meaning)
-                        sentences_correct += 1
+            # if POS was correct but produced sentence was not identical to the target one, check if
+            # the meaning was correct but expressed with a different syntactic structure (due to, e.g., priming)
             if epoch > 0:
                 suffix = "flex-" if flexible_order else "in" if out_sentence != sentence else ""
-                with open("%s/%s.eval" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
+                with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nCS:%s POS:%s (%scorrect sentence)\n%s\n" %
                             (epoch, out_sentence, sentence, code_switched, corr_pos, suffix, message))
             if check_pron and has_pronoun_error:
                 all_pron_err += 1
-                with open("%s/all_pronoun_%s.err" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
+                with open("%s/all_pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
+                          'a') as f:
                     f.write("OUT:%s\nTRG:%s\n%s"
                             "\n---------------- %s\n" % (out_sentence, sentence, message, epoch))
                 if corr_pos:
                     pos_pron_err += 1
-                    with open("%s/pos_pronoun_%s.err" % (self.results_dir, "test" if is_test_set else "train"),
+                    with open("%s/pos_pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
                               'a') as f:
                         f.write("OUT:%s\nTRG:%s\n%s\n"
                                 "---------------- %s\n" % (out_sentence, sentence, message, epoch))
                 # to be even more strict, check if the rest of the sentence is correct
                 if sentence.split()[1:] == produced_sentence[1:]:  # everything but the subject pronoun is the same
                     pron_err += 1  # only the REAL pronoun errors (hopefully it's the same as the ones above)
-                    with open("%s/pronoun_%s.err" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
+                    with open("%s/pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
+                              'a') as f:
                         f.write("OUT:%s\nTRG:%s\n%s"
                                 "\n---------------- %s\n" % (out_sentence, sentence, message, epoch))
 
         # Correct words: %s/%s\n  words_correct, words_total[sum([len(sentence.split()) for sentence in trg_sentences])]
-        with open("%s/%s.eval" % (self.results_dir, "test" if is_test_set else "train"), 'a') as f:
+        with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, sentences_correct, num_sentences, correct_pos, num_sentences))
 
         results_dict[epoch] = (sentences_correct, correct_pos, all_pron_err, pron_err)
 
-    def initialize_network(self):
-        # The where, what, and cwhat units were unbiased to make them more input driven
-        self.srn.add_layer("input", self.lexicon_size)#, convert_input=True)
-        self.srn.add_layer("concept", self.concept_size, has_bias=False)
-        self.srn.add_layer("identif", self.identif_size, has_bias=False)
-        self.srn.add_layer("role", self.roles_size, has_fixed_weights=True)  # has_bias=False, "softmax"
-        self.srn.add_layer("compress", self.compress_size)
-        self.srn.add_layer("eventsem", self.event_sem_size)  # convert_input=True -- it doesn't really matter
-        self.srn.add_layer("target_lang", len(self.languages))
-        self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
-        # If pred_role is not softmax the model performs poorly on determiners.
-        self.srn.add_layer("pred_role", self.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.identif_size, has_fixed_weights=True, has_bias=False)
-        self.srn.add_layer("pred_concept", self.concept_size, has_fixed_weights=True, has_bias=False)
-        self.srn.add_layer("pred_compress", self.compress_size)
-        self.srn.add_layer("output", self.lexicon_size, activation_function="softmax")
 
-        # Connect layers
-        self.srn.connect_layers("input", "identif")
-        self.srn.connect_layers("input", "concept")
-        self.srn.connect_layers("input", "compress")
-        self.srn.connect_layers("identif", "role")
-        self.srn.connect_layers("concept", "role")
-        # hidden layer
-        if self.role_copy:  # it does not seem to improve this model, set default to False for simplicity
-            self.srn.add_layer("role_copy", self.roles_size)
-            self.srn.connect_layers("role_copy", "hidden")
-        self.srn.connect_layers("role", "hidden")
-        self.srn.connect_layers("compress", "hidden")
-        self.srn.connect_layers("eventsem", "hidden")
-        self.srn.connect_layers("target_lang", "hidden")
-        # hidden to predicted and output layers
-        self.srn.connect_layers("hidden", "pred_role")
-        self.srn.connect_layers("hidden", "pred_compress")
-        self.srn.connect_layers("pred_role", "pred_identifiability")
-        self.srn.connect_layers("pred_role", "pred_concept")
-        self.srn.connect_layers("pred_identifiability", "output")
-        self.srn.connect_layers("pred_concept", "output")
-        self.srn.connect_layers("pred_compress", "output")
-        self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
-                               simulation_num=self.simulation_num)
+def test_for_flexible_order(out_sentence, trg_sentence):
+    flexible_order = False
+    if set([x for x in out_sentence if x not in ["to", "."]]) == set([x for x in trg_sentence if x not in ["to", "."]]):
+        flexible_order = True
+    elif set(out_sentence[:-1]) == set(trg_sentence[:-1]):  # remove the last word
+        flexible_order = True
+    return flexible_order
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -563,7 +411,7 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='es')
+                                      'or any other string for bilingual)', default='en')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
@@ -647,31 +495,29 @@ if __name__ == "__main__":
         elif testset.endswith('.enes'):
             args.title = 'Bilingual EN-ES model'
 
+    inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
+                            concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
+                            language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
+                            emphasis=args.emphasis, prodrop=args.prodrop, trainset=trainset, testset=testset)
     num_valid_simulations = None
     simulations_with_pron_err = 0
+    failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
-        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, results_dir=results_dir, epochs=args.epochs,
-                         input_dir=args.input, lex_fname=args.lexicon, concept_fname=args.concepts,
-                         role_fname=args.role, evsem_fname=args.eventsem, role_copy=args.rcopy,
+        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
                          elman_debug_mess=args.debug, test_every=args.test_every, plot_title=args.title,
-                         compress_size=args.compress, set_weights_folder=args.set_weights, language=args.lang,
-                         set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, exclude_lang=args.nolang,
-                         semantic_gender=args.gender, emphasis=args.emphasis, prodrop=args.prodrop, trainset=trainset,
-                         testset=testset)
+                         compress_size=args.compress, set_weights_folder=args.set_weights,
+                         set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, input_format=inputs)
         dualp.train_network(decrease_lrate=args.decrease_lrate)
     else:  # start batch training to take the average of results
         processes = []
         for sim in range(args.sim):
             rdir = "%s/%s" % (results_dir, sim)
             os.makedirs(rdir)
-            dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, results_dir=rdir, epochs=args.epochs,
-                             input_dir=args.input, lex_fname=args.lexicon, concept_fname=args.concepts,
-                             role_fname=args.role, evsem_fname=args.eventsem, role_copy=args.rcopy,
-                             elman_debug_mess=args.debug, compress_size=args.compress, plot_title=args.title,
-                             test_every=args.test_every, set_weights_folder=args.set_weights, language=args.lang,
-                             set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, exclude_lang=args.nolang,
-                             semantic_gender=args.gender, emphasis=args.emphasis, simulation_num=sim,
-                             prodrop=args.prodrop, trainset=trainset, testset=testset)
+            inputs.results_dir = rdir
+            dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
+                             elman_debug_mess=args.debug, test_every=args.test_every, plot_title=args.title,
+                             compress_size=args.compress, set_weights_folder=args.set_weights, simulation_num=sim,
+                             set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, input_format=inputs)
             process = Process(target=dualp.train_network, args=(args.decrease_lrate,))
             process.start()
             processes.append(process)
@@ -687,9 +533,14 @@ if __name__ == "__main__":
                 print 'Simulation #%s was problematic' % sim
 
         if all_results:
+            valid_results = []
             # a simulation is valid only if the performance on the POS of the test set was over 75%
-            valid_results = [simulation for simulation in all_results
-                             if np.true_divide(simulation['correct_pos']['test'][-1] * 100, dualp.num_test) > 75]
+            for i, simulation in enumerate(all_results):
+                if np.true_divide(simulation['correct_pos']['test'][-1] * 100, inputs.num_test) > 75:
+                    valid_results.append(simulation)
+                else:
+                    failed_sim_id.append(str(i))  # keep track of simulations that failed
+
             num_valid_simulations = len(valid_results)  # some might have been discarded
 
             simulations_with_pron_err = len([simulation for simulation in valid_results
@@ -705,18 +556,19 @@ if __name__ == "__main__":
                         else:
                             results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
 
-            plot = Plotter(results_dir=results_dir)
-            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations,
-                              num_test=dualp.num_test, num_train=dualp.num_train,
-                              test_sentences_with_pronoun=dualp.test_sentences_with_pronoun)
+            inputs.results_dir = os.path.split(inputs.results_dir)[0]
+            plot = Plotter(inputs=inputs)
+            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations)
 
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:  # Write simulation details to a file
         f.write(("Input: %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
                  "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
                  "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
-                 "lang during testing:%s\nSimulations with pronoun errors:%s/%s\n%s") %
+                 "lang during testing:%s\nSimulations with pronoun errors:%s/%s\n%s\n%s") %
                 (args.input, args.title, args.hidden, args.lrate, args.decrease_lrate, dualp.compress_size,
-                 args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, dualp.fixed_weight, args.set_weights,
-                 args.set_weights_epoch, args.nolang, simulations_with_pron_err, args.sim,
-                 "Successful simulations:%s/%s\n" % (num_valid_simulations, args.sim) if num_valid_simulations else ""))
+                 args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis,
+                 dualp.fixed_weight, args.set_weights, args.set_weights_epoch, args.nolang,
+                 simulations_with_pron_err, args.sim,
+                 "Successful simulations:%s/%s\n" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
+                 ", ".join(failed_sim_id) if failed_sim_id else ""))

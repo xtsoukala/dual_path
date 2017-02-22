@@ -6,13 +6,12 @@ import matplotlib.pyplot as plt
 
 
 class Plotter:
-    def __init__(self, results_dir):
-        self.results_dir = results_dir
+    def __init__(self, inputs):
+        self.inputs = inputs
 
-    def plot_results(self, results, num_train=2000, num_test=500, test_sentences_with_pronoun=None,
-                     title=None, summary_sim=None):
-        num_train = num_train
-        num_test = num_test
+    def plot_results(self, results, title, summary_sim=None):
+        num_train = self.inputs.num_train
+        num_test = self.inputs.num_test
 
         epochs = range(len(results['correct_sentences']['train']))
         plt.plot(epochs, [percentage(x, num_train) for x in results['correct_sentences']['train']], linestyle='--',
@@ -31,9 +30,9 @@ class Plotter:
             plt.title(title)
         plt.legend(loc='lower right', ncol=2, fancybox=True, shadow=True)
         if summary_sim:
-            fname = '%s/performance_%s_simulations.pdf' % (self.results_dir, summary_sim)
+            fname = '%s/performance_%s_simulations.pdf' % (self.inputs.results_dir, summary_sim)
         else:
-            fname = '%s/performance.pdf' % self.results_dir
+            fname = '%s/performance.pdf' % self.inputs.results_dir
         plt.savefig(fname)
         plt.close()
 
@@ -42,7 +41,7 @@ class Plotter:
         plt.xlabel('Epochs')
         plt.ylabel('Mean Square Error')
         plt.ylim([0, 0.007])
-        plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
+        plt.savefig('%s/all_mse_err.pdf' % self.inputs.results_dir)
         plt.close() """
 
         if sum(results['pronoun_errors_flex']['test']) > 0:  # only plot if there's something to be plotted!
@@ -52,17 +51,17 @@ class Plotter:
             plt.xlabel('Epochs')
             plt.ylabel('Sum of subject pronoun errors')
             if summary_sim:
-                fname = '%s/summary_%s_all_pronoun_err.pdf' % (self.results_dir, summary_sim)
+                fname = '%s/summary_%s_all_pronoun_err.pdf' % (self.inputs.results_dir, summary_sim)
             else:
-                fname = '%s/all_pronoun_err.pdf' % self.results_dir
+                fname = '%s/all_pronoun_err.pdf' % self.inputs.results_dir
             plt.savefig(fname)
             plt.close()
 
             # same using percentages
-            if test_sentences_with_pronoun:  # in ES case there are no sentences with 'he' and 'she'
-                percentage_pronoun_errors = [np.true_divide(x * 100, test_sentences_with_pronoun)
+            if self.inputs.test_sentences_with_pronoun:  # in ES case there are no sentences with 'he' and 'she'
+                percentage_pronoun_errors = [np.true_divide(x * 100, self.inputs.test_sentences_with_pronoun)
                                              for x in results['pronoun_errors']['test']]
-                percentage_pronoun_errors_flex = [np.true_divide(x * 100, test_sentences_with_pronoun)
+                percentage_pronoun_errors_flex = [np.true_divide(x * 100, self.inputs.test_sentences_with_pronoun)
                                                   for x in results['pronoun_errors_flex']['test']]
             else:
                 percentage_pronoun_errors = results['pronoun_errors']['test']
@@ -72,9 +71,9 @@ class Plotter:
             plt.xlabel('Epochs')
             plt.ylabel('Percentage (%) of subject pronoun errors in test set')
             if summary_sim:
-                fname = '%s/summary_%s_perc_all_pronoun_err.pdf' % (self.results_dir, summary_sim)
+                fname = '%s/summary_%s_perc_all_pronoun_err.pdf' % (self.inputs.results_dir, summary_sim)
             else:
-                fname = '%s/perc_all_pronoun_err.pdf' % self.results_dir
+                fname = '%s/perc_all_pronoun_err.pdf' % self.inputs.results_dir
             plt.savefig(fname)
             plt.close()
 
@@ -83,7 +82,7 @@ class Plotter:
         fig, ax = plt.subplots()
         ax.bar(layers, means, color='r', yerr=std)
         ax.set_xticklabels(labels)
-        plt.savefig('%s/weights/summary_weights.pdf' % self.results_dir)
+        plt.savefig('%s/weights/summary_weights.pdf' % self.inputs.results_dir)
         plt.close()
 
 
