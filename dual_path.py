@@ -84,8 +84,8 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch,
-                               set_weights_folder=self.set_weights_folder, simulation_num=self.simulation_num)
+        self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
+                               simulation_num=self.simulation_num, results_dir=self.inputs.results_dir)
 
     def get_message_info(self, message, test_phase=False):
         """
@@ -173,7 +173,7 @@ class DualPath:
         epoch = 0
         while epoch <= self.epochs:  # start training for x epochs
             if epoch % 10 == 0:  # check whether to save weights or not (only every 10 epochs)
-                self.srn.save_weights(epochs=epoch)
+                self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
                 random.shuffle(self.inputs.trainlines)
@@ -228,8 +228,10 @@ class DualPath:
                 pickle.dump(reslt, f)
 
             if plot_results:
-                plt = Plotter(inputs=self.inputs)
-                plt.plot_results(reslt, title=self.plot_title)
+                plt = Plotter(results_dir=self.inputs.results_dir)
+                plt.plot_results(reslt, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
+                                 title=self.plot_title,
+                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def evaluate_network(self, results_dict, epoch, eval_set=None, is_test_set=True, check_pron=True):
         """
@@ -557,8 +559,10 @@ if __name__ == "__main__":
                             results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
 
             inputs.results_dir = os.path.split(inputs.results_dir)[0]
-            plot = Plotter(inputs=inputs)
-            plot.plot_results(results, title=dualp.plot_title, summary_sim=num_valid_simulations)
+            plot = Plotter(results_dir=results_dir)
+            plot.plot_results(results, title=dualp.plot_title, num_train=inputs.num_train,
+                              num_test=inputs.num_test, test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
+                              summary_sim=num_valid_simulations)
 
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:  # Write simulation details to a file

@@ -44,9 +44,10 @@ class ElmanNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def reset_weights(self, set_weights_folder=None, set_weights_epoch=0, plot_stats=False, simulation_num=None):
-        if not os.path.isdir('%s/weights' % self.dir):
-            os.mkdir('%s/weights' % self.dir)
+    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=False,
+                      simulation_num=None):
+        if not os.path.isdir('%s/weights' % results_dir):
+            os.mkdir('%s/weights' % results_dir)
         means = []
         std = []
         labels = []
@@ -60,9 +61,6 @@ class ElmanNetwork:
                 else:  # if set weights, previous simulation should have the same num (or more) of simulations
                     w_dir = os.path.join(set_weights_folder, str(simulation_num) if simulation_num is not None else "",
                                          "weights")
-                    if not os.path.isdir(w_dir):
-                        w_dir = os.path.join(set_weights_folder, "%s_discarded" % simulation_num, "weights")
-
                     weights_fname = "weights_%s%s.in" % (layer.name, "_%s" % set_weights_epoch if set_weights_epoch
                                                                                                   is not None else "")
                     layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
@@ -78,8 +76,8 @@ class ElmanNetwork:
                 means.append(layer.in_weights.mean())
                 std.append(layer.in_weights.std())
                 labels.append(layer.name)
-                np.savetxt("%s/weights/weights_%s.in" % (self.dir, layer.name), layer.in_weights)
-                with open('%s/weights/weight_stats.out' % self.dir, 'a') as f:
+                np.savetxt("%s/weights/weights_%s.in" % (results_dir, layer.name), layer.in_weights)
+                with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
                     f.write("name, max, min, mean, std\n"
                             "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
                                                   layer.in_weights.mean(), layer.in_weights.std()))
@@ -87,13 +85,13 @@ class ElmanNetwork:
         self._complete_initialization()
 
         if plot_stats:
-            plt = Plotter(results_dir=self.dir)
+            plt = Plotter(results_dir=results_dir)
             plt.plot_layer_stats(labels=labels, std=std, means=means)
 
-    def save_weights(self, epochs=0):
+    def save_weights(self, results_dir, epochs=0):
         for layer in self.layers:
             if not layer.has_fixed_weights and np.all(layer.in_weights):
-                np.savetxt("%s/weights/weights_%s_%s.in" % (self.dir, layer.name, epochs), layer.in_weights)
+                np.savetxt("%s/weights/weights_%s_%s.in" % (results_dir, layer.name, epochs), layer.in_weights)
 
     def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act=None,
                                   topic_emphasis=None, reset=True):
