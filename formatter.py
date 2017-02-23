@@ -4,9 +4,8 @@ import os
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname,
-                 evsem_fname, exclude_lang, language, trainset=None, testset=None,
-                 semantic_gender=False, emphasis=False, prodrop=False):
+    def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, exclude_lang,
+                 language, trainset, testset, semantic_gender, emphasis, prodrop):
         """ This class mostly contains helper functions that set the I/O for the model (SRN).
         Dual Path has the following layers (plus hidden & context)
         word, compress, concept & role, target language and event-semantics.
@@ -23,7 +22,7 @@ class InputFormatter:
         """
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
-        self.concepts = self._read_concepts(concept_fname)
+        self.concepts = self._read_file_to_list(concept_fname)
         self.identif = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
@@ -39,7 +38,7 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
-        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures
+        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
 
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -66,9 +65,7 @@ class InputFormatter:
                 set_name = self.testset
             else:
                 set_name = self.trainset
-
-        with open(set_name, 'r+') as f:
-            lines = f.readlines()
+        lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make prodrop
             if self.emphasis:  # keep pronoun if emphasized
@@ -87,82 +84,69 @@ class InputFormatter:
         return lines
 
     def _read_allowed_structures(self):
-        return set([self.sentence_pos_str(sentence.split("##")[0]) for sentence in self.trainlines])
+        return set([self.sentence_pos(sentence.split("##")[0].split()) for sentence in self.trainlines])
 
     def _read_lexicon_and_pos(self, fname):
         """
         :param fname: the name of the file that contains a list of categories (eg. noun, verb) and the lexicon
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
-        (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
+                 (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
         """
         pos = dict()
-        lexicon = ['']  # FIXME: position 0 is >almost< never predicted, so we start lexicon from 1. Check why.
+        lexicon = ['']  # position 0 is almost never predicted! Check why
+        pos['NULL'] = [0]  # made-up POS for position 0 (empty string)
         prev_pos = ''
         pos_start = pos_end = 1
-        with open(os.path.join(self.input_dir, fname)) as f:
-            for line in f:  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
-                line = line.rstrip('\n')
-                if line.endswith(":"):
-                    if prev_pos:
-                        if prev_pos in pos:
-                            pos[prev_pos] += range(pos_start, pos_end)
-                        else:
-                            pos[prev_pos] = range(pos_start, pos_end)
-                        pos_start = pos_end
-                    prev_pos = line[:-1]  # remove the colon
-                elif line not in lexicon:  # make sure there are no duplicate words
-                    lexicon.append(line)
-                    pos_end += 1
-            if prev_pos in pos:
-                pos[prev_pos] += range(pos_start, pos_end)
-            else:
-                pos[prev_pos] = range(pos_start, pos_end)  # to add the last syntactic category
+        for line in self._read_file_to_list(fname):
+            if line.endswith(":"):  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
+                if prev_pos:
+                    if prev_pos in pos:
+                        pos[prev_pos] += range(pos_start, pos_end)
+                    else:
+                        pos[prev_pos] = range(pos_start, pos_end)
+                    pos_start = pos_end
+                prev_pos = line[:-1]  # remove the colon, use it as a dict key for pos (dictionary)
+            elif line not in lexicon:  # make sure there are no duplicate words
+                lexicon.append(line)
+                pos_end += 1
+        if prev_pos in pos:
+            pos[prev_pos] += range(pos_start, pos_end)
+        else:
+            pos[prev_pos] = range(pos_start, pos_end)  # this adds the last syntactic category
         return pos, lexicon
 
-    def _read_concepts(self, fname):
-        """ Comparing Chang, 2002 (Fig.1) and Chang&Fitz, 2014 (Fig. 2) it
-        seems that "where" is renamed to "role" and "what" to concept
-
-        If lexicon-concepts are always mapped 1-to-1 we can simply take lexicon
-        and uppercase it i.e. concepts = [x.upper() for x in lexicon],
-        otherwise read the file and ignore lines that start with a colon """
-        with open(os.path.join(self.input_dir, fname)) as f:
-            lines = f.readlines()
-        # return [''] + [line.rstrip() for line in lines if not line.startswith(":")] Should we add an empty concept?
-        return [line.rstrip() for line in lines if not line.startswith(":")]
-
     def _read_file_to_list(self, fname):
-        """
-        Simply read the roles or event-semantics files into a list
-        """
-        return [line.rstrip('\n') for line in open(os.path.join(self.input_dir, fname))]
+        """ Simply reads a file into a list while stripping newlines """
+        with open(os.path.join(self.input_dir, fname)) as f:
+            lines = [line.rstrip('\n') for line in f]
+        return lines
 
     def pos_lookup(self, word):
         """
-        :param word_idx: The index of a given word (as stored in the lexicon)
+        :param word: the word in str format
         :return: It looks up the pos dictionary and returns the category of
         the word (noun, verb etc)
         """
-        word_idx = self.lexicon.index(word)
+        word_idx = self.lexicon.index(word)  # look up the word id
         for pos, idx in self.pos.iteritems():
             if word_idx in idx:
                 return pos
         import sys  # in case the word index is not available
         sys.exit("No POS found for word %s %s" % (word_idx, self.lexicon[word_idx]))
 
-    def sentence_indeces(self, sentence):
+    def sentence_indeces(self, sentence_lst):
         """
-        :param sentence: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'was', 'walk', '-ing']
-        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20, 40]
+        :param sentence_lst: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'walk', '-s']
+        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
         """
-        return [self.lexicon.index(w) for w in sentence]
+        return [self.lexicon.index(w) for w in sentence_lst]
 
-    def sentence_pos_str(self, sentence, remove_period=True):
+    def sentence_pos(self, sentence_lst, remove_period=True):
         """
-        :param sentence: sentence string
-        :param remove_period: whether to remove the period from the end of the sentence (useful when checking POS only)
+        :param sentence_lst: sentence in list format ['she', 'is', 'kick', '-ing', 'the', 'kite', '.']
+        :param remove_period: whether to remove the period (last element) from the sentence (useful when checking POS)
         :return: returns a list of the POS of every word in the sentence
         """
-        if remove_period:
-            sentence = re.sub(r' \.', '', sentence)
-        return " ".join([self.pos_lookup(word) for word in sentence.split()])
+        if remove_period and sentence_lst[-1] == '.':
+            sentence_lst = sentence_lst[:-1]
+        return " ".join([self.pos_lookup(word) for word in sentence_lst])
