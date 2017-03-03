@@ -55,17 +55,17 @@ class DualPath:
     def initialize_network(self):
         # The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
-        self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
         self.srn.add_layer("identif", self.inputs.identif_size, has_bias=False)
+        self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
         self.srn.add_layer("role", self.inputs.roles_size, has_fixed_weights=True)  # has_bias=False, "softmax"
         self.srn.add_layer("compress", self.compress_size)
-        self.srn.add_layer("eventsem", self.inputs.event_sem_size)  # convert_input=True -- it doesn't really matter
+        self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_fixed_weights=True, has_bias=False)
         self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_fixed_weights=True, has_bias=False)
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_fixed_weights=True, has_bias=False)
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
@@ -103,7 +103,7 @@ class DualPath:
         """
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
-        increased_activation = 2
+        increased_activation = 6
         event_sem_activations = np.array([-1] * self.inputs.event_sem_size)  # or np.zeros(self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.inputs.roles_size, self.inputs.identif_size + self.inputs.concept_size))
@@ -425,7 +425,10 @@ if __name__ == "__main__":
     parser.set_defaults(gender=True)
     parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
                                                                              'level 20%% of the time')
-    parser.set_defaults(emphasis=False)
+    parser.add_argument('--allow_free_structure', dest='free_pos', action='store_true',
+                        help='The model is not given role information in the event semantics and it it therefore '
+                             'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
+    parser.set_defaults(free_pos=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s" % ((args.resdir if args.resdir else ""),
@@ -452,7 +455,7 @@ if __name__ == "__main__":
             from modules.corpus_generator import SetsGenerator
 
             args.input = "%s/input/" % results_dir
-            sets = SetsGenerator(results_dir=args.input)
+            sets = SetsGenerator(results_dir=args.input, allow_free_structure_production=args.free_pos)
             sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
                                include_bilingual_lex=True)
 
