@@ -49,7 +49,8 @@ class DualPath:
         self.results = {'correct_sentences': {'test': [], 'train': []},
                         'correct_pos': {'test': [], 'train': []},
                         'pronoun_errors_flex': {'test': [], 'train': []},
-                        'pronoun_errors': {'test': [], 'train': []}}
+                        'pronoun_errors': {'test': [], 'train': []},
+                        'mse': {}}
 
     def initialize_network(self):
         # The where, what, and cwhat units were unbiased to make them more input driven
@@ -63,8 +64,8 @@ class DualPath:
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_fixed_weights=True, has_bias=False)
         self.srn.add_layer("pred_concept", self.inputs.concept_size, has_fixed_weights=True, has_bias=False)
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_fixed_weights=True, has_bias=False)
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
@@ -75,7 +76,7 @@ class DualPath:
         self.srn.connect_layers("identif", "role")
         self.srn.connect_layers("concept", "role")
         # hidden layer
-        if self.role_copy:  # it does not seem to improve this model, set default to False for simplicity
+        if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
             self.srn.add_layer("role_copy", self.inputs.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
         self.srn.connect_layers("role", "hidden")
@@ -103,9 +104,8 @@ class DualPath:
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
         increased_activation = 2
-        lang = 'en' if '=EN,' in message else 'es'
         event_sem_activations = np.array([-1] * self.inputs.event_sem_size)  # or np.zeros(self.event_sem_size)
-        # include the identifiness (first), i.e. def, indef, pronoun, emph
+        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.inputs.roles_size, self.inputs.identif_size + self.inputs.concept_size))
         target_lang_activations = np.zeros(len(self.inputs.languages))
         for info in message.split(';'):
@@ -141,16 +141,16 @@ class DualPath:
                     else:
                         idx_concept = self.inputs.identif_size + self.inputs.concepts.index(concept)
                         weights_role_concept[self.inputs.roles.index(role)][idx_concept] = self.fixed_weight
-        return weights_role_concept, event_sem_activations, target_lang_activations, lang, message
+        return weights_role_concept, event_sem_activations, target_lang_activations, message
 
     def feed_line(self, line, epoch=None, backpropagate=False):
         produced_sent_ids = []
         sentence, message = line.split('## ')
         target_sentence_ids = self.inputs.sentence_indeces(sentence.split())
-        weights_role_concept, evsem_act, target_lang_act, lang, message = \
+        weights_role_concept, evsem_act, target_lang_act, message = \
             self.get_message_info(message, test_phase=(not backpropagate))
-        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
-                                           event_sem_activations=evsem_act, target_lang_act=target_lang_act)
+        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, event_sem_activations=evsem_act,
+                                           target_lang_act=target_lang_act)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         if not backpropagate:
             ids = target_sentence_ids + [self.inputs.period_idx] * 2  # allow it to complete sentence.
@@ -170,7 +170,7 @@ class DualPath:
                     break
         return produced_sent_ids, target_sentence_ids, message
 
-    def train_network(self, decrease_lrate=False, shuffle_set=True, plot_results=True, evaluate=True):
+    def train_network(self, decrease_lrate, shuffle_set=True, plot_results=True, evaluate=True):
         """
         decrease_lrate: whether to decrease the learning rate or not
         shuffle_set: Whether to shuffle the training set after each iteration
@@ -241,13 +241,14 @@ class DualPath:
                 pickle.dump(self.results, pckl)
 
             if plot_results:
+                self.results['mse'] = self.srn.mse
                 plt = Plotter(results_dir=self.inputs.results_dir)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
                                  title=self.inputs.plot_title,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def is_code_switched(self, sentence_indeces):
-        sentence_no_period = [x for x in sentence_indeces if x != self.inputs.period_idx]
+        sentence_no_period = [x for x in sentence_indeces if x != self.inputs.period_idx]  # period common in all lang
         if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period) or
                 all(i < self.inputs.code_switched_idx for i in sentence_no_period)):
                 return False
@@ -336,10 +337,8 @@ class DualPath:
         if out_sentence_idx == trg_sentence_idx and not allow_identical:  # only check non identical sentences
             return False
         flexible_order = False
-        if self.compare_unordered([x for x in out_sentence_idx if x not in [self.inputs.to_preposition_idx,
-                                                                            self.inputs.period_idx]],
-                                  [x for x in trg_sentence_idx if x not in [self.inputs.to_preposition_idx,
-                                                                            self.inputs.period_idx]]):
+        if self.compare_unordered([x for x in out_sentence_idx if x != self.inputs.to_preposition_idx],
+                                  [x for x in trg_sentence_idx if x != self.inputs.to_preposition_idx]):
             flexible_order = True
         elif remove_last_word and self.compare_unordered(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
             flexible_order = True
@@ -364,7 +363,7 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
 
 
 def take_average_of_valid_results(v_results):
-    clean_results = {}
+    results = {}
     for d in v_results:
         for k, v in d.iteritems():
             if k not in results:
@@ -374,7 +373,7 @@ def take_average_of_valid_results(v_results):
                     results[k][s] = np.array(j)
                 else:
                     results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
-    return clean_results
+    return results
 
 if __name__ == "__main__":
     import argparse
@@ -399,7 +398,7 @@ if __name__ == "__main__":
                                                                       '(if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=1, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
