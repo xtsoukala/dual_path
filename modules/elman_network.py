@@ -11,7 +11,7 @@ class SimpleRecurrentNetwork:
         self.layers = []
         self.context_init = context_init  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
-        self.initialization_completed = False  # if it is not set to True the model does not start training
+        self.initialization_completed = False  # needs to be set to True for the model to start training
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
@@ -65,7 +65,7 @@ class SimpleRecurrentNetwork:
                                                                                                   is not None else "")
                     layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
             else:
-                layer.sd = input_sd(layer.size)
+                layer.sd = input_sd(layer.in_size)
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
@@ -172,12 +172,10 @@ class SimpleRecurrentNetwork:
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
                 layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
-            else:  # elif layer.activation_function == "tanh":
+            elif layer.activation_function == "tanh":
                 layer.activation = tanh_activation(np.dot(layer.in_activation, layer.in_weights))
-            '''elif layer.activation_function == "relu":
-                layer.activation = relu(np.dot(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "sigmoid":
-                layer.activation = sigmoid(np.dot(layer.in_activation, layer.in_weights))'''
+                layer.activation = sigmoid(np.dot(layer.in_activation, layer.in_weights))
             if self.debug_messages:
                 print "Layer: %s. Activation %s" % (layer.name, layer.activation)
         # Copy output of the hidden to "context" (activation of t-1)
@@ -202,7 +200,7 @@ class SimpleRecurrentNetwork:
         # Calculate error[Eo](target - output)
         output_layer = self.get_layer("output")
 
-        self._calculate_mean_square_and_divergence_error(epoch, output_layer.activation, self.target_activation)
+        self._calculate_mean_square_and_divergence_error(epoch, output_layer.activation)
 
         if output_layer.activation_function == "softmax":
             output_layer.gradient = self.target_activation - output_layer.activation
@@ -213,7 +211,7 @@ class SimpleRecurrentNetwork:
             output_layer.gradient = ((self.target_activation - output_layer.activation) *
                                      sigmoid_derivative(output_layer.activation))
 
-    def _calculate_mean_square_and_divergence_error(self, epoch, output_activation, target_activation):
+    def _calculate_mean_square_and_divergence_error(self, epoch, output_activation):
         if epoch not in self.mse:
             self.mse[epoch] = []
         # perform element-wise average along the array (returns single value)
@@ -230,26 +228,22 @@ class SimpleRecurrentNetwork:
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
-            self.current_layer.total_error = sum(self.current_layer.error_out)
+            error_out = sum(self.current_layer.error_out)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
-                self.current_layer.gradient = self.current_layer.total_error * \
-                                              softmax_derivative(self.current_layer.activation)
+                self.current_layer.gradient = error_out * softmax_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "tanh":
-                self.current_layer.gradient = self.current_layer.total_error * \
-                                              tanh_derivative(self.current_layer.activation)
+                self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "sigmoid":
-                self.current_layer.gradient = self.current_layer.total_error * \
-                                              sigmoid_derivative(self.current_layer.activation)
+                self.current_layer.gradient = error_out * sigmoid_derivative(self.current_layer.activation)
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
         self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
                                           np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        sum_deltas = np.sum(self.current_layer.delta ** 2)
-        len_delta = np.sqrt(sum_deltas)
+        len_delta = np.sqrt(np.sum(self.current_layer.delta ** 2))
         if len_delta > 1:
             self.current_layer.delta = np.true_divide(self.current_layer.delta, len_delta)
         self.current_layer.delta *= self.learn_rate
@@ -262,7 +256,7 @@ class SimpleRecurrentNetwork:
 
     def _update_current_weights_and_previous_delta(self):
         # Update weights, unless they are given (i.e. between role and concept).
-        if not self.current_layer.has_fixed_weights:  # Update weights is False if we backpropagate at the eos
+        if not self.current_layer.has_fixed_weights:
             # Update weights (steepest descent) by adding deltas*learning rate to the previous weight
             self.current_layer.in_weights += self.current_layer.delta
             # momentum descent: model continues in same direction as previous weight change
@@ -357,8 +351,6 @@ def input_sd(number_of_inputs):
 
 def convert_range(matrix, min_val=-0.9, max_val=0.9):
     """ Converts range to fit between min and max values """
-    '''if len(matrix) == 1:
-        return [min_val] if matrix == [0] else [max_val]'''
     if np.sum(matrix) == 0:
         return matrix + min_val
     else:

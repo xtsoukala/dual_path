@@ -121,11 +121,11 @@ class DualPath:
                     if event in self.inputs.languages:
                         if test_phase and self.inputs.exclude_lang:
                             if event == 'ES':
-                                target_lang_activations[self.inputs.languages.index('ES')] = 0.8  # more active
-                                target_lang_activations[self.inputs.languages.index('EN')] = 0.2  # less active
+                                target_lang_activations[self.inputs.languages.index('ES')] = 0.6  # more active
+                                target_lang_activations[self.inputs.languages.index('EN')] = 0.4  # less active
                             else:
-                                target_lang_activations[self.inputs.languages.index('ES')] = 0.2
-                                target_lang_activations[self.inputs.languages.index('EN')] = 0.8
+                                target_lang_activations[self.inputs.languages.index('ES')] = 0.4
+                                target_lang_activations[self.inputs.languages.index('EN')] = 0.6
                         else:
                             target_lang_activations[self.inputs.languages.index(event)] = activation
                     else:  # activate
@@ -375,6 +375,18 @@ def take_average_of_valid_results(v_results):
                     results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
     return results
 
+def generate_title_from_file_extension(filename):
+    title = ''
+    if filename.endswith('.en'):
+        title = 'English monolingual model'
+    elif filename.endswith('.es'):
+        title = 'Spanish monolingual model'
+    elif filename.endswith('.el'):
+        title = 'Greek monolingual model'
+    elif filename.endswith('.enes'):
+        title = 'Bilingual EN-ES model'
+    return title
+
 if __name__ == "__main__":
     import argparse
 
@@ -435,44 +447,36 @@ if __name__ == "__main__":
                                                datetime.now().strftime("%Y-%m-%dt%H.%M.%S"), args.lang, args.hidden)
     os.makedirs(results_dir)
 
-    original_input_path = None  # to keep track of the original input in case it was copied
-    if args.generate_num:  # generate a new set (unless "input" was also set)
-        if args.input:
-            if 'input' not in args.input:
-                corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
-                if os.path.exists(corrected_dir):
-                    args.input = corrected_dir
-                elif os.path.exists(os.path.join(args.input, "input_cp")):
-                    args.input = os.path.join(args.input, "input_cp")
-                else:
-                    import sys
-                    sys.exit('No input folder found in the path (%s)' % args.input)
-            print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
-            copy_dir(args.input, '%s/input_cp' % results_dir)
-            original_input_path = args.input
-            args.input = '%s/input_cp' % results_dir
-        else:
-            from modules.corpus_generator import SetsGenerator
+    original_input_path = None  # keep track of the original input in case it was copied
+    if args.input:  # generate a new set (unless "input" was also set)
+        if 'input' not in args.input:
+            corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
+            if os.path.exists(corrected_dir):
+                args.input = corrected_dir
+            elif os.path.exists(os.path.join(args.input, "input_cp")):
+                args.input = os.path.join(args.input, "input_cp")
+            else:
+                import sys
+                sys.exit('No input folder found in the path (%s)' % args.input)
+        print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
+        copy_dir(args.input, '%s/input_cp' % results_dir)
+        original_input_path = args.input
+        args.input = '%s/input_cp' % results_dir
+    else:
+        from modules.corpus_generator import SetsGenerator
 
-            args.input = "%s/input/" % results_dir
-            sets = SetsGenerator(results_dir=args.input, allow_free_structure_production=args.free_pos)
-            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
-                               include_bilingual_lex=True)
+        args.input = "%s/input/" % results_dir
+        sets = SetsGenerator(results_dir=args.input, allow_free_structure_production=args.free_pos)
+        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
+                           include_bilingual_lex=True)
 
     if not args.trainset:
         args.trainset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
     if not args.testset:
         args.testset = [filename for filename in os.listdir(args.input) if filename.startswith("test")][0]
 
-    if not args.title:  # if there's no title use the file extension to add one
-        if args.testset.endswith('.en'):
-            args.title = 'English monolingual model'
-        elif args.testset.endswith('.es'):
-            args.title = 'Spanish monolingual model'
-        elif args.testset.endswith('.el'):
-            args.title = 'Greek monolingual model'
-        elif args.testset.endswith('.enes'):
-            args.title = 'Bilingual EN-ES model'
+    if not args.title:
+        args.title = generate_title_from_file_extension(args.testset)
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
@@ -510,7 +514,7 @@ if __name__ == "__main__":
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'r') as f:
                     all_results.append(pickle.load(f))
-            else:  # this would mean "missing data" though, we could raise a message
+            else:  # this would mean "missing data", we could raise a message
                 print 'Simulation #%s was problematic' % sim
 
         if all_results:
