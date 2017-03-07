@@ -50,6 +50,7 @@ class DualPath:
                         'correct_pos': {'test': [], 'train': []},
                         'pronoun_errors_flex': {'test': [], 'train': []},
                         'pronoun_errors': {'test': [], 'train': []},
+                        'code_switched': {'test': [], 'train': []},
                         'mse': {}}
 
     def initialize_network(self):
@@ -120,12 +121,7 @@ class DualPath:
                         activation = increased_activation
                     if event in self.inputs.languages:
                         if test_phase and self.inputs.exclude_lang:
-                            if event == 'ES':
-                                target_lang_activations[self.inputs.languages.index('ES')] = 0.6  # more active
-                                target_lang_activations[self.inputs.languages.index('EN')] = 0.4  # less active
-                            else:
-                                target_lang_activations[self.inputs.languages.index('ES')] = 0.4
-                                target_lang_activations[self.inputs.languages.index('EN')] = 0.6
+                            target_lang_activations = [0.5] * len(target_lang_activations)  # same activation for all
                         else:
                             target_lang_activations[self.inputs.languages.index(event)] = activation
                     else:  # activate
@@ -224,18 +220,20 @@ class DualPath:
 
         if evaluate:
             for sim in test_results.values():
-                s, p, pr, pr_pos = sim
+                s, p, pr, pr_pos, c = sim
                 self.results['correct_sentences']['test'].append(s)
                 self.results['correct_pos']['test'].append(p)
                 self.results['pronoun_errors']['test'].append(pr)
                 self.results['pronoun_errors_flex']['test'].append(pr_pos)
+                self.results['code_switched']['test'].append(c)
 
             for sim in train_results.values():
-                s, p, pr, pr_pos = sim
+                s, p, pr, pr_pos, c = sim
                 self.results['correct_sentences']['train'].append(s)
                 self.results['correct_pos']['train'].append(p)
                 self.results['pronoun_errors']['train'].append(pr)
                 self.results['pronoun_errors_flex']['train'].append(pr_pos)
+                self.results['code_switched']['train'].append(c)
 
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:  # write results to a (pickled) file
                 pickle.dump(self.results, pckl)
@@ -281,6 +279,7 @@ class DualPath:
         num_pron_err = 0
         # in addition to num_pron_err, count grammatically correct sentences with gender error that convey wrong meaning
         num_pron_err_flex = 0
+        num_code_switched = 0
 
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
@@ -294,6 +293,8 @@ class DualPath:
             if self.sentence_is_grammatical(produced_sentence_idx):
                 num_correct_pos += 1
                 has_correct_pos = True
+                if code_switched:  # only count grammatically correct sentences
+                    num_code_switched += 1
                 if check_pron:  # only check the grammatical sentences
                     has_pronoun_error = self.has_pronoun_error(produced_sentence_idx, target_sentence_idx)
                     has_correct_meaning = self.test_rest_of_meaning(produced_sentence_idx, target_sentence_idx)
@@ -323,7 +324,7 @@ class DualPath:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
-        results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex)
+        results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex, num_code_switched)
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False):
         """
@@ -397,7 +398,7 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='en')
+                                      'or any other string for bilingual)', default='es')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
@@ -410,7 +411,7 @@ if __name__ == "__main__":
                                                                       '(if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=1, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
@@ -437,7 +438,7 @@ if __name__ == "__main__":
     parser.set_defaults(gender=True)
     parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
                                                                              'level 20%% of the time')
-    parser.add_argument('--allow_free_structure', dest='free_pos', action='store_true',
+    parser.add_argument('--allow_free_structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)

@@ -21,7 +21,7 @@ class SetsGenerator:
         else:  # store under "generated/" if folder was not specified
             self.results_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
 
-        if os.path.isdir(self.results_dir):
+        if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
             os.makedirs(self.results_dir)
         else:  # create if it doesn't exist
@@ -106,8 +106,8 @@ class SetsGenerator:
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
         # semantic gender, which is a non language-specific concept.
-        # The syntactic genders "N(eutral" and "C(ommon)" are not included
-        self.concepts = {'M': 'M', 'F': 'F'}
+        # The syntactic genders "C(ommon)" is not included
+        self.concepts = {'M': 'M', 'F': 'F', 'N': 'N'}
         # note that sister = SIBLING + F, brother = SIBLING + M, etc
         self.concepts_en = {'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
                             'mother': 'PARENT', 'father': 'PARENT',  'daughter': 'OFFSPRING', 'son': 'OFFSPRING',
@@ -198,7 +198,7 @@ class SetsGenerator:
                             'κολυμπά': 'SWIM'}
 
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
-        self.target_lang = ['EN', 'ES']  # , 'EL']
+        self.target_lang = []
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
 
         if allow_free_structure_production:
@@ -211,7 +211,8 @@ class SetsGenerator:
                                   ('det noun::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'),
-                                  ('det noun::animate aux::singular verb::double ing det noun::animate det noun::inanimate',
+                                  ('det noun::animate aux::singular verb::double ing det noun::animate '
+                                   'det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'),
                                   ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'),
@@ -259,7 +260,8 @@ class SetsGenerator:
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,-1,REC'),
                                   # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,REC'),
                                   (
-                                  'det noun::animate aux::singular verb::double ing det noun::animate det noun::inanimate',
+                                  'det noun::animate aux::singular verb::double ing det noun::animate '
+                                  'det noun::inanimate',
                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,AGT,PAT,REC'),
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
                                   # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
@@ -359,20 +361,25 @@ class SetsGenerator:
         if lang.lower() == 'es':
             structures = self.structures_es
             self.lexicon = self.lexicon_es
+            self.target_lang = ['ES']
         elif lang.lower() == 'en':
             structures = self.structures_en
             self.lexicon = self.lexicon_en
+            self.target_lang = ['EN']
         elif lang == 'el':
             structures = self.structures_el
             self.lexicon = self.lexicon_el
+            self.target_lang = ['EL']
         elif "el" in lang and "en" in lang:
             structures = self.structures_en + self.structures_el
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_el)
+            self.target_lang.extend(['EL', 'EN'])
         else:  # the default mode is the Bilingual English-Spanish model
             structures = self.structures_en + self.structures_es
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_es)
+            self.target_lang.extend(['ES', 'EN'])
 
         # Use ALL concepts (there shouldn't be [m]any unique items)
         self.concepts.update(self.concepts_es)
@@ -412,17 +419,19 @@ class SetsGenerator:
             f.write("%s" % "\n".join(self.event_sem))
 
         with open('%s/target_lang.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.target_lang))
+            f.write("%s" % "\n".join(set(self.target_lang)))
 
         with open('%s/roles.in' % self.results_dir, 'w') as f:
             f.write("%s" % "\n".join(self.roles))
 
-        if include_bilingual_lex and lang is "el":
+        if include_bilingual_lex and "el" in lang:
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_el)
-        else:  # lang is "es":  # print bilingual EN ES lexicon
+            self.target_lang.extend(['EN', 'EL'])
+        elif include_bilingual_lex and "es" in lang:  # print bilingual EN ES lexicon
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_es)
+            self.target_lang.extend(['EN', 'ES'])
         self.print_lexicon(self.lexicon)
 
     def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
@@ -503,7 +512,6 @@ class SetsGenerator:
                             if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                                 message[0] = re.sub(r"def|indef", "", message[0]) + "PRON,"  # remove def/indef info
                                 message[0] = re.sub("=,", '=', message[0])
-                                #add_det = False
                                 # add pronoun
                                 sentence.append(lexicon[lang]['pron'][gender])
                             elif add_det or np[sen_idx] or msg_idx > 0:
@@ -607,5 +615,5 @@ class SetsGenerator:
 
 if __name__ == "__main__":
     sets = SetsGenerator()
-    sets.generate_sets(num_sentences=200, lang='enes', include_bilingual_lex=True, percentage_pronoun=50,
+    sets.generate_sets(num_sentences=200, lang='enel', include_bilingual_lex=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)

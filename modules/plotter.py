@@ -42,6 +42,19 @@ class Plotter:
             plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
             plt.close()
 
+        if sum(results['code_switched']['test']) > 0:
+            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switched']['test']])
+            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switched']['train']], linestyle='--')
+            plt.xlabel('Epochs')
+            plt.ylabel('Percentage of code-switches')
+            plt.ylim([0, 50])
+            if summary_sim:
+                fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
+            else:
+                fname = '%s/code_switches_percentage.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
         if sum(results['pronoun_errors_flex']['test']) > 0:  # only plot if there's something to be plotted!
             plt.plot(epochs, results['pronoun_errors']['test'], label='Subject pronoun errors')
             plt.plot(epochs, results['pronoun_errors_flex']['test'], linestyle='--')
