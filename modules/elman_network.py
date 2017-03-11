@@ -7,10 +7,11 @@ from plotter import Plotter
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, dir, context_init=0.5, debug_messages=True, include_role_copy=False):
+    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False):
         self.layers = []
         self.context_init = context_init  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
+        self.momentum = momentum
         self.initialization_completed = False  # needs to be set to True for the model to start training
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
@@ -30,11 +31,11 @@ class SimpleRecurrentNetwork:
                 self.initialization_completed = True
                 break
 
-    def add_layer(self, name, size, has_bias=True, momentum=0.9, activation_function="tanh",
-                  has_fixed_weights=False, convert_input=False, is_recurrent=False):
-        self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, momentum=momentum,
-                                       convert_input=convert_input, is_recurrent=is_recurrent,
-                                       activation_function=activation_function, has_fixed_weights=has_fixed_weights))
+    def add_layer(self, name, size, has_bias=False, activation_function="tanh", has_fixed_weights=False,
+                  convert_input=False, is_recurrent=False):
+        self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
+                                       is_recurrent=is_recurrent, activation_function=activation_function,
+                                       has_fixed_weights=has_fixed_weights))
         if name == "output":
             self.output_size = size
 
@@ -261,12 +262,12 @@ class SimpleRecurrentNetwork:
             self.current_layer.in_weights += self.current_layer.delta
             # momentum descent: model continues in same direction as previous weight change
             if self.current_layer.previous_delta.size > 1:
-                added_weight = self.current_layer.momentum * self.current_layer.previous_delta
+                added_weight = self.momentum * self.current_layer.previous_delta
                 self.current_layer.in_weights += added_weight
         elif self.current_layer.has_bias:  # layer HAS fixed weights but it also has bias. Update bias ONLY
             self.current_layer.in_weights[-1] += self.current_layer.delta[-1]
             if self.current_layer.previous_delta.size > 1:  # add momentum
-                added_weight = self.current_layer.momentum * self.current_layer.previous_delta[-1]
+                added_weight = self.momentum * self.current_layer.previous_delta[-1]
                 self.current_layer.in_weights[-1] += added_weight
         # Update previous delta. Deepcopying is important otherwise it keeps reference
         self.current_layer.previous_delta = deepcopy(self.current_layer.delta)
@@ -304,13 +305,12 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, momentum, activation_function, has_fixed_weights,
+    def __init__(self, name, size, has_bias, activation_function, has_fixed_weights,
                  convert_input, is_recurrent=False):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size
         :param has_bias: whether the layer has bias or not
-        :param momentum: amount of previous weight changes that are taken into account
         :param activation_function: activation function (tanh or softmax). default: tanh (sigmoid function)
         :param is_recurrent: Whether it is a recurrent layer (namely, the hidden layer)
         """
@@ -322,7 +322,6 @@ class NeuronLayer:
         self.activation = np.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
         self.error_out = []
         self.total_error = []
-        self.momentum = momentum
         self.activation_function = activation_function
         self.in_weights = []  # weights from incoming layers
         self.in_size = 0

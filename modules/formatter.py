@@ -2,6 +2,7 @@
 import re
 import os
 import itertools
+import pickle
 
 
 class InputFormatter:
@@ -39,6 +40,7 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+        self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
         # |----------PARAMS----------|
         self.period_idx = self.lexicon.index('.')
         self.to_preposition_idx = self.lexicon.index('to')
@@ -125,6 +127,10 @@ class InputFormatter:
         with open(os.path.join(self.input_dir, fname)) as f:
             lines = [line.rstrip('\n') for line in f]
         return lines
+
+    def _read_pickled_file(self, fname):
+        with open(os.path.join(self.input_dir, fname)) as f:
+            return pickle.load(f)
 
     def pos_lookup(self, word_idx):
         """

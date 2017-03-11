@@ -5,6 +5,7 @@ import os
 import codecs
 from datetime import datetime
 import sys
+import pickle
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
@@ -201,6 +202,8 @@ class SetsGenerator:
         self.target_lang = []
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
 
+        self.structures = []
+        self.num_structures = None
         if allow_free_structure_production:
             self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
                                   ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'),
@@ -347,67 +350,40 @@ class SetsGenerator:
                                   # 'PATIENT=;ACTION=;AGENT=;E=EL,SIMPLE,-1,AGT,PAT')
                                   ]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lex, percentage_pronoun, percentage_l2=50,
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_pronoun, percentage_l2=50,
                       print_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code, leave None for bilingual es-en
-        :param include_bilingual_lex: whether lexicon should be bilingual even if generated sentences are in L1
+        :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
         :param percentage_pronoun: percentage of pronouns vs Noun Phrases (NPs)
         :param percentage_l2: percentage of L2 (usually English) vs L1
         :param print_sets:
         :return:
         """
-        if lang.lower() == 'es':
-            structures = self.structures_es
-            self.lexicon = self.lexicon_es
-            self.target_lang = ['ES']
-        elif lang.lower() == 'en':
-            structures = self.structures_en
-            self.lexicon = self.lexicon_en
-            self.target_lang = ['EN']
-        elif lang == 'el':
-            structures = self.structures_el
-            self.lexicon = self.lexicon_el
-            self.target_lang = ['EL']
-        elif "el" in lang and "en" in lang:
-            structures = self.structures_en + self.structures_el
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_el)
-            self.target_lang.extend(['EL', 'EN'])
-        else:  # the default mode is the Bilingual English-Spanish model
-            structures = self.structures_en + self.structures_es
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_es)
-            self.target_lang.extend(['ES', 'EN'])
+        num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
+        self.get_structures_and_lexicon(lang)
 
-        # Use ALL concepts (there shouldn't be [m]any unique items)
-        self.concepts.update(self.concepts_es)
-        self.concepts.update(self.concepts_en)
-        self.concepts.update(self.concepts_el)
-
-        n = len(structures)
-        # First find how many of each structures we will have. Test = 20% of train set
-        num_test = int(0.20 * num_sentences)
-        num_train = num_sentences - num_test
-
-        # now generate sentence types for train set
-        sentence_structures_train = structures * (num_train / n)
-        for m in range(num_train % n):
-            sentence_structures_train.append(structures[random.randint(0, n - 1)])
-        random.shuffle(sentence_structures_train)
-
-        # same for test set (we want sets to be homogeneous when it comes to structures)
-        sentence_structures_test = structures * (num_test / n)
-        for m in range(num_test % n):
-            sentence_structures_test.append(structures[random.randint(0, n - 1)])
-        random.shuffle(sentence_structures_test)
+        sentence_structures_train = self.generate_sentence_structures(num_train)
+        sentence_structures_test = self.generate_sentence_structures(num_test)
 
         test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
                                            percentage_pronoun=percentage_pronoun, print_sets=print_sets,
                                            return_mess=True)
         self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
                                 percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
+
+        if include_bilingual_lexicon and "el" in lang:
+            self.lexicon = self.lexicon_en.copy()
+            self.lexicon.update(self.lexicon_el)
+            self.target_lang.extend(['EN', 'EL'])
+            self.concepts.update(self.concepts_en)
+        elif include_bilingual_lexicon and "es" in lang:  # print bilingual EN ES lexicon
+            self.lexicon = self.lexicon_en.copy()
+            self.lexicon.update(self.lexicon_es)
+            self.target_lang.extend(['EN', 'ES'])
+            self.concepts.update(self.concepts_en)
+        self.print_lexicon(self.lexicon)
 
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
             f.write("%s" % "\n".join(self.identifiability))
@@ -424,15 +400,50 @@ class SetsGenerator:
         with open('%s/roles.in' % self.results_dir, 'w') as f:
             f.write("%s" % "\n".join(self.roles))
 
-        if include_bilingual_lex and "el" in lang:
+        with codecs.open('%s/lexicon_to_concept.pickled' % self.results_dir, 'w', "utf-8") as pckl:
+            pickle.dump(self.concepts, pckl)
+
+    def get_structures_and_lexicon(self, lang):
+        lang = lang.lower()
+        if lang == 'es':
+            structures = self.structures_es
+            self.lexicon = self.lexicon_es
+            self.target_lang = ['ES']
+            self.concepts.update(self.concepts_es)
+        elif lang == 'en':
+            structures = self.structures_en
+            self.lexicon = self.lexicon_en
+            self.target_lang = ['EN']
+            self.concepts.update(self.concepts_en)
+        elif lang == 'el':
+            structures = self.structures_el
+            self.lexicon = self.lexicon_el
+            self.target_lang = ['EL']
+            self.concepts.update(self.concepts_el)
+        elif "el" in lang and "en" in lang:
+            structures = self.structures_en + self.structures_el
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_el)
-            self.target_lang.extend(['EN', 'EL'])
-        elif include_bilingual_lex and "es" in lang:  # print bilingual EN ES lexicon
+            self.target_lang.extend(['EL', 'EN'])
+            self.concepts.update(self.concepts_el)
+            self.concepts.update(self.concepts_en)
+        else:  # the default mode is the Bilingual English-Spanish model
+            structures = self.structures_en + self.structures_es
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_es)
-            self.target_lang.extend(['EN', 'ES'])
-        self.print_lexicon(self.lexicon)
+            self.target_lang.extend(['ES', 'EN'])
+            self.concepts.update(self.concepts_es)
+            self.concepts.update(self.concepts_en)
+        random.shuffle(structures)
+        self.structures = structures
+        self.num_structures = len(self.structures)
+
+    def generate_sentence_structures(self, num_sentences):
+        sentence_structures = self.structures * (num_sentences / self.num_structures)
+        for m in range(num_sentences % self.num_structures):
+            sentence_structures.append(self.structures[random.randint(0, self.num_structures - 1)])
+        random.shuffle(sentence_structures)
+        return sentence_structures
 
     def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
                            return_mess=False, print_sets=False, use_emphasis_concept=True):
@@ -613,7 +624,13 @@ class SetsGenerator:
                     with codecs.open('%s/lexicon.in' % self.results_dir, 'a',  "utf-8") as f:
                         f.write("{0}:\n{1}\n".format(key.upper(), v))
 
+
+def calculate_number_of_sentences_per_set(num_sentences):
+    num_test = int(0.20 * num_sentences)  # Test set = 20% of whole set, train 80%
+    num_train = num_sentences - num_test
+    return num_test, num_train
+
 if __name__ == "__main__":
     sets = SetsGenerator()
-    sets.generate_sets(num_sentences=200, lang='enel', include_bilingual_lex=True, percentage_pronoun=50,
+    sets.generate_sets(num_sentences=200, lang='enel', include_bilingual_lexicon=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)

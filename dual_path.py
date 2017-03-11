@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 import random
-import pickle
-from multiprocessing import Process, Manager
-from operator import add
 import shutil
 import collections
 import numpy as np
+from multiprocessing import Process, Manager
+from operator import add
 from datetime import datetime
 from modules.elman_network import SimpleRecurrentNetwork
 from modules.plotter import Plotter
-from modules.formatter import InputFormatter, os
+from modules.formatter import InputFormatter, os, pickle
 
 
 class DualPath:
-    def __init__(self, hidden_size, learn_rate, compress_size, set_weights_folder, role_copy,
-                 elman_debug_mess, test_every, epochs, set_weights_epoch, fixed_weight, input_format,
-                 simulation_num=None):
+    def __init__(self, hidden_size, learn_rate, compress_size, set_weights_folder, role_copy, elman_debug_mess,
+                 test_every, epochs, set_weights_epoch, fixed_weight, input_format, momentum, simulation_num=None):
         self.inputs = input_format
         if compress_size:
             self.compress_size = compress_size
@@ -29,7 +27,7 @@ class DualPath:
         # Learning rate starts at 0.2 and is reduced linearly until it reaches 0.05 at 1 epoch (2000 sentences),
         # where it is fixed for the rest of training. Values taken from Chang F., 2002
         self.learn_rate = learn_rate
-        self.momentum = 0.9  # accounts for amount of previous weight changes that are added
+        self.momentum = momentum  # accounts for amount of previous weight changes that are added
 
         # Epochs indicate the numbers of iteration of the train set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
@@ -40,8 +38,8 @@ class DualPath:
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
-        self.srn = SimpleRecurrentNetwork(learn_rate=self.learn_rate, dir=results_dir, debug_messages=elman_debug_mess,
-                                          include_role_copy=self.role_copy)
+        self.srn = SimpleRecurrentNetwork(learn_rate=self.learn_rate, momentum=self.momentum, dir=results_dir,
+                                          debug_messages=elman_debug_mess, include_role_copy=self.role_copy)
         self.initialize_network()
 
         self.compare_unordered = lambda x, y: collections.Counter(x) == collections.Counter(y)
@@ -58,7 +56,7 @@ class DualPath:
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identif", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, has_fixed_weights=True)  # has_bias=False, "softmax"
+        self.srn.add_layer("role", self.inputs.roles_size, has_fixed_weights=True)
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
@@ -104,8 +102,7 @@ class DualPath:
         """
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
-        increased_activation = 6
-        event_sem_activations = np.array([-1] * self.inputs.event_sem_size)  # or np.zeros(self.event_sem_size)
+        event_sem_activations = np.array([-1] * self.inputs.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.inputs.roles_size, self.inputs.identif_size + self.inputs.concept_size))
         target_lang_activations = np.zeros(len(self.inputs.languages))
@@ -117,11 +114,10 @@ class DualPath:
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
                         activation = reduced_activation
                         break
-                    if event in ['PRESENT', 'PAST']:
-                        activation = increased_activation
+                    # if event in ['PRESENT', 'PAST']: activation = increased_activation
                     if event in self.inputs.languages:
-                        if test_phase and self.inputs.exclude_lang:
-                            target_lang_activations = [0.5] * len(target_lang_activations)  # same activation for all
+                        if test_phase and self.inputs.exclude_lang:  # same activation for all languages
+                            target_lang_activations = [0.5] * len(target_lang_activations)
                         else:
                             target_lang_activations[self.inputs.languages.index(event)] = activation
                     else:  # activate
@@ -376,15 +372,16 @@ def take_average_of_valid_results(v_results):
                     results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
     return results
 
-def generate_title_from_file_extension(filename):
+
+def generate_title_from_file_extension(file_name):
     title = ''
-    if filename.endswith('.en'):
+    if file_name.endswith('.en'):
         title = 'English monolingual model'
-    elif filename.endswith('.es'):
+    elif file_name.endswith('.es'):
         title = 'Spanish monolingual model'
-    elif filename.endswith('.el'):
+    elif file_name.endswith('.el'):
         title = 'Greek monolingual model'
-    elif filename.endswith('.enes'):
+    elif file_name.endswith('.enes'):
         title = 'Bilingual EN-ES model'
     return title
 
@@ -400,6 +397,8 @@ if __name__ == "__main__":
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any other string for bilingual)', default='es')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
+    parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
+                        type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
@@ -469,7 +468,7 @@ if __name__ == "__main__":
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, allow_free_structure_production=args.free_pos)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
-                           include_bilingual_lex=True)
+                           include_bilingual_lexicon=True)
 
     if not args.trainset:
         args.trainset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
@@ -492,7 +491,7 @@ if __name__ == "__main__":
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
                          elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
-                         fixed_weight=args.fw, input_format=inputs)
+                         fixed_weight=args.fw, input_format=inputs, momentum=args.momentum)
         dualp.train_network(decrease_lrate=args.decrease_lrate)
     else:  # start batch training to take the average of results
         processes = []
@@ -502,7 +501,7 @@ if __name__ == "__main__":
             inputs.results_dir = rdir
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
                              elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
-                             set_weights_folder=args.set_weights, simulation_num=sim,
+                             set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, input_format=inputs)
             process = Process(target=dualp.train_network, args=(args.decrease_lrate,))
             process.start()
