@@ -8,20 +8,7 @@ import pickle
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, exclude_lang,
                  language, trainset, testset, semantic_gender, emphasis, prodrop, plot_title):
-        """ This class mostly contains helper functions that set the I/O for the model (SRN).
-        Dual Path has the following layers (plus hidden & context)
-        word, compress, concept & role, target language and event-semantics.
-
-        The event-semantics unit is the only unit that provides information
-        about the target sentence order
-        e.g. for the dative sentence "A man bakes a cake for the cafe" there are
-        3 event-sem units: CAUSE, CREATE, TRANSFER
-
-        role-concept and prev_role-prev_concept links are used to store the message
-
-        role, concept and prev_concept units are unbiased to make them more
-        input driven (all other units except concept have bias)
-        """
+        """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
         self.concepts = self._read_file_to_list(concept_fname)
@@ -44,7 +31,8 @@ class InputFormatter:
         # |----------PARAMS----------|
         self.period_idx = self.lexicon.index('.')
         self.to_preposition_idx = self.lexicon.index('to')
-        self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None # this verb suffix is the first entry in the ES lexicon
+        # the verb suffix -ó is the first entry in the ES lexicon
+        self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
         self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
         self.event_sem_size = len(self.event_semantics)
@@ -118,7 +106,10 @@ class InputFormatter:
         return pos, lexicon
 
     def _read_file_to_list(self, fname):
-        """ Simply reads a file into a list while stripping newlines """
+        """
+        :param fname: file name
+        :return: Simply reads a file into a list while stripping newlines
+        """
         if not os.path.isfile(os.path.join(self.input_dir, fname)):  # make sure the file exists
             import warnings
             warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.input_dir, fname))
@@ -145,6 +136,10 @@ class InputFormatter:
         sys.exit("No POS found for word %s (%s)" % (word_idx, self.lexicon[word_idx]))
 
     def sentence_from_indeces(self, sentence_idx):
+        """
+        :param sentence_idx: list with sentence indeces
+        :return: converts a list of idx into a sentence (string of words)
+        """
         return " ".join([self.lexicon[idx] for idx in sentence_idx])
 
     def sentence_indeces(self, sentence_lst):
@@ -154,7 +149,7 @@ class InputFormatter:
         """
         return [self.lexicon.index(w) for w in sentence_lst]
 
-    def sentence_indeces_pos(self, sentence_idx, remove_period=True, convert_to_idx=False):
+    def sentence_indeces_pos(self, sentence_idx, remove_period=False, convert_to_idx=False):
         """
         :param sentence_idx: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
@@ -165,6 +160,6 @@ class InputFormatter:
         """
         if convert_to_idx:
             sentence_idx = self.sentence_indeces(sentence_idx)
-        """if remove_period and sentence_idx[-1] == self.period_idx:
-            sentence_idx = sentence_idx[:-1]"""
+        if remove_period and sentence_idx[-1] == self.period_idx:
+            sentence_idx = sentence_idx[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx]

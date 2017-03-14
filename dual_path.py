@@ -12,8 +12,34 @@ from modules.formatter import InputFormatter, os, pickle
 
 
 class DualPath:
-    def __init__(self, hidden_size, learn_rate, compress_size, set_weights_folder, role_copy, elman_debug_mess,
-                 test_every, epochs, set_weights_epoch, fixed_weight, input_format, momentum, simulation_num=None):
+    """
+    Dual-path is based on the SRN architecture and has the following layers (plus hidden & context):
+    input, (predicted) compress, (predicted) concept & (predicted) role, target language, event-semantics and output.
+
+    The event-semantics unit is the only unit that provides information about the target sentence order.
+    E.g. for the dative sentence "A man bakes a cake for the cafe" there are 3 event-sem units: CAUSE, CREATE, TRANSFER
+
+    role-concept and pred_role-pred_concept links are used to store the message
+
+    role, concept and pred_concept units are unbiased to make them more input driven
+    """
+    def __init__(self, hidden_size, learn_rate, momentum, epochs, compress_size, role_copy, elman_debug_mess,
+                 test_every, set_weights_folder, set_weights_epoch, fixed_weight, input_format, simulation_num=None):
+        """
+        :param hidden_size: Size of the hidden layer
+        :param learn_rate: Learning rate
+        :param momentum:
+        :param epochs: Number of train set iterations during training
+        :param compress_size: Size of the compress layers
+        :param role_copy: Whether to keep a copy of the role layer activation
+        :param elman_debug_mess: Whether to print debug messages during training
+        :param test_every: Test network every x epochs
+        :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
+        :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
+        :param fixed_weight: Fixed weight value for concept-role connections
+        :param input_format: Instance of InputFormatter Class (contains all the input for the model)
+        :param simulation_num: Number of simulation (in case we run several simulations in parallel)
+        """
         self.inputs = input_format
         if compress_size:
             self.compress_size = compress_size
@@ -395,8 +421,8 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='es')
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # 0.2 or 0.15 or 0.1
+                                      'or any other string for bilingual)', default='enes')
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # or: 0.2, 0.15
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
                         type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
