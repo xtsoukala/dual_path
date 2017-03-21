@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-import random
 import shutil
 import collections
-import numpy as np
 from multiprocessing import Process, Manager
-from operator import add
 from datetime import datetime
-from modules.elman_network import SimpleRecurrentNetwork
+from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
-from modules.formatter import InputFormatter, os, pickle
+from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
 
 
 class DualPath:
@@ -24,31 +21,24 @@ class DualPath:
     role, concept and pred_concept units are unbiased to make them more input driven
     """
     def __init__(self, hidden_size, learn_rate, momentum, epochs, compress_size, role_copy, elman_debug_mess,
-                 test_every, set_weights_folder, set_weights_epoch, fixed_weight, input_format, simulation_num=None):
+                 test_every, set_weights_folder, set_weights_epoch, input_format, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Learning rate
         :param momentum:
         :param epochs: Number of train set iterations during training
-        :param compress_size: Size of the compress layers
+        :param compress_size: Size of the compress layers (approximatelly hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
         :param elman_debug_mess: Whether to print debug messages during training
         :param test_every: Test network every x epochs
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
-        :param fixed_weight: Fixed weight value for concept-role connections
         :param input_format: Instance of InputFormatter Class (contains all the input for the model)
         :param simulation_num: Number of simulation (in case we run several simulations in parallel)
         """
         self.inputs = input_format
-        if compress_size:
-            self.compress_size = compress_size
-        else:  # or hidden/3 ? hidden: 45+13 (lex+compress) 58 compress = args.hidden / 3
-            self.compress_size = len(self.inputs.compress_idx)
+        self.compress_size = compress_size
         self.hidden_size = hidden_size
-        # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
-        # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
-        self.fixed_weight = fixed_weight
 
         # Learning rate starts at 0.2 and is reduced linearly until it reaches 0.05 at 1 epoch (2000 sentences),
         # where it is fixed for the rest of training. Values taken from Chang F., 2002
@@ -80,25 +70,25 @@ class DualPath:
     def initialize_network(self):
         # The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
-        self.srn.add_layer("identif", self.inputs.identif_size, has_bias=False)
+        self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, has_fixed_weights=True)
+        self.srn.add_layer("role", self.inputs.roles_size)
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_fixed_weights=True, has_bias=False)
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_fixed_weights=True, has_bias=False)
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
         # Connect layers
-        self.srn.connect_layers("input", "identif")
+        self.srn.connect_layers("input", "identifiability")
         self.srn.connect_layers("input", "concept")
         self.srn.connect_layers("input", "compress")
-        self.srn.connect_layers("identif", "role")
+        self.srn.connect_layers("identifiability", "role")
         self.srn.connect_layers("concept", "role")
         # hidden layer
         if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
@@ -119,61 +109,18 @@ class DualPath:
         self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                simulation_num=self.simulation_num, results_dir=self.inputs.results_dir)
 
-    def get_message_info(self, message, test_phase=False):
-        """
-        :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-        E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
-        gives information about the event-semantics (E)
-        :param test_phase: Set to True during evaluation and False during training
-        """
-        norm_activation = 1  # 0.5 ? 1?
-        reduced_activation = 0  # 0.1-4
-        event_sem_activations = np.array([-1] * self.inputs.event_sem_size)
-        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.zeros((self.inputs.roles_size, self.inputs.identif_size + self.inputs.concept_size))
-        target_lang_activations = np.zeros(len(self.inputs.languages))
-        for info in message.split(';'):
-            role, what = info.split("=")
-            if role == "E":  # retrieve activations for the event-sem layer
-                activation = norm_activation
-                for event in what.split(","):
-                    if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
-                        activation = reduced_activation
-                        break
-                    # if event in ['PRESENT', 'PAST']: activation = increased_activation
-                    if event in self.inputs.languages:
-                        if test_phase and self.inputs.exclude_lang:  # same activation for all languages
-                            target_lang_activations = [0.5] * len(target_lang_activations)
-                        else:
-                            target_lang_activations[self.inputs.languages.index(event)] = activation
-                    else:  # activate
-                        event_sem_activations[self.inputs.event_semantics.index(event)] = activation
-                    activation = norm_activation  # reset activation levels to maximum
-            else:
-                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
-                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
-                for concept in what.split(","):
-                    if concept in self.inputs.identif:
-                        weights_role_concept[self.inputs.roles.index(role)][self.inputs.identif.index(concept)] = \
-                            self.fixed_weight
-                    else:
-                        idx_concept = self.inputs.identif_size + self.inputs.concepts.index(concept)
-                        weights_role_concept[self.inputs.roles.index(role)][idx_concept] = self.fixed_weight
-        return weights_role_concept, event_sem_activations, target_lang_activations, message
-
     def feed_line(self, line, epoch=None, backpropagate=False):
         produced_sent_ids = []
         sentence, message = line.split('## ')
         target_sentence_ids = self.inputs.sentence_indeces(sentence.split())
         weights_role_concept, evsem_act, target_lang_act, message = \
-            self.get_message_info(message, test_phase=(not backpropagate))
+            self.inputs.get_message_info(message, test_phase=(not backpropagate))
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, event_sem_activations=evsem_act,
                                            target_lang_act=target_lang_act)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
+        ids = deepcopy(target_sentence_ids)
         if not backpropagate:
-            ids = target_sentence_ids + [self.inputs.period_idx] * 2  # allow it to complete sentence.
-        else:
-            ids = target_sentence_ids
+            ids += [self.inputs.period_idx] * 2  # allow it to complete sentence.
 
         for trg_idx in ids:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
@@ -216,7 +163,7 @@ class DualPath:
                 self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
-                random.shuffle(self.inputs.trainlines)
+                np.random.shuffle(self.inputs.trainlines)
 
             if evaluate and epoch % self.test_every == 0:  # evaluate train AND testset
                 subprocesses = []
@@ -295,7 +242,6 @@ class DualPath:
         :param check_pron: Whether to evaluate pronoun production
         :return:
         """
-
         num_correct_meaning = 0
         num_correct_pos = 0
         num_pron_err = 0
@@ -307,6 +253,7 @@ class DualPath:
             produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
 
             has_correct_pos = False
+            has_wrong_det = False
             code_switched = self.is_code_switched(produced_sentence_idx)
             flexible_order = self.test_for_flexible_order(produced_sentence_idx, target_sentence_idx)
             if produced_sentence_idx == target_sentence_idx or flexible_order:
@@ -317,6 +264,11 @@ class DualPath:
                 has_correct_pos = True
                 if code_switched:  # only count grammatically correct sentences
                     num_code_switched += 1
+                if not (produced_sentence_idx == target_sentence_idx or flexible_order):
+                    has_wrong_det = self.test_for_wrong_determiner(produced_sentence_idx, target_sentence_idx)
+                    if has_wrong_det:
+                        num_correct_meaning += 1
+
                 if check_pron:  # only check the grammatical sentences
                     has_pronoun_error = self.has_pronoun_error(produced_sentence_idx, target_sentence_idx)
                     has_correct_meaning = self.test_rest_of_meaning(produced_sentence_idx, target_sentence_idx)
@@ -336,10 +288,11 @@ class DualPath:
             if epoch > 0:
                 suffix = "flex-" if flexible_order else "in" if produced_sentence_idx != target_sentence_idx else ""
                 with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nCS:%s POS:%s (%scorrect meaning)\n%s\n" %
+                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%scorrect"
+                            "Meaning:%scorrect\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
                              self.inputs.sentence_from_indeces(target_sentence_idx), code_switched, has_correct_pos,
-                             suffix, message))
+                             "in" if has_wrong_det else "", suffix, message))
 
         # on the set level
         with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
@@ -367,6 +320,11 @@ class DualPath:
             flexible_order = True
         return flexible_order
 
+    def test_for_wrong_determiner(self, out_sentence_idx, trg_sentence_idx):
+        out = [x for x in out_sentence_idx if x not in self.inputs.determiners]
+        trg = [x for x in trg_sentence_idx if x not in self.inputs.determiners]
+        return self.test_for_flexible_order(out, trg, allow_identical=True)
+
     def sentence_is_grammatical(self, sentence_idx):
         if self.inputs.sentence_indeces_pos(sentence_idx) in self.inputs.allowed_structures:
             return True
@@ -385,20 +343,6 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 
-def take_average_of_valid_results(v_results):
-    results = {}
-    for d in v_results:
-        for k, v in d.iteritems():
-            if k not in results:
-                results[k] = {}
-            for s, j in v.iteritems():
-                if s not in results[k]:
-                    results[k][s] = np.array(j)
-                else:
-                    results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
-    return results
-
-
 def generate_title_from_file_extension(file_name):
     title = ''
     if file_name.endswith('.en'):
@@ -415,7 +359,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=60)
     parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
@@ -429,9 +373,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=18,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=6,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-compress', help='Number of compress layer units', type=int)  # 15?
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
                                                                       '(if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
@@ -463,14 +407,15 @@ if __name__ == "__main__":
     parser.set_defaults(gender=True)
     parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
                                                                              'level 20%% of the time')
-    parser.add_argument('--allow_free_structure', '--af', dest='free_pos', action='store_true',
+    parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
     args = parser.parse_args()
     # create path to store results
-    results_dir = "simulations/%s%s_%s_h%s" % ((args.resdir if args.resdir else ""),
-                                               datetime.now().strftime("%Y-%m-%dt%H.%M.%S"), args.lang, args.hidden)
+    results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
+                                                   datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
+                                                   args.lang, args.hidden, args.compress)
     os.makedirs(results_dir)
 
     original_input_path = None  # keep track of the original input in case it was copied
@@ -504,11 +449,21 @@ if __name__ == "__main__":
     if not args.title:
         args.title = generate_title_from_file_extension(args.testset)
 
+    # Save the parameters of the simulation(s)
+    with open("%s/simulation.info" % results_dir, 'w') as f:
+        f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
+                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
+                 "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
+                 "lang during testing:%s\nAllow free structure production:%s\n") %
+                (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
+                 args.lrate, args.decrease_lrate, args.compress, args.rcopy, args.pron, args.prodrop, args.gender,
+                 args.emphasis, args.fw, args.set_weights, args.set_weights_epoch, args.nolang, args.free_pos))
+
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
                             emphasis=args.emphasis, prodrop=args.prodrop, trainset=args.trainset, testset=args.testset,
-                            plot_title=args.title)
+                            plot_title=args.title, fixed_weights=args.fw)
 
     num_valid_simulations = None
     simulations_with_pron_err = 0
@@ -517,7 +472,7 @@ if __name__ == "__main__":
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
                          elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
-                         fixed_weight=args.fw, input_format=inputs, momentum=args.momentum)
+                         input_format=inputs, momentum=args.momentum)
         dualp.train_network(decrease_lrate=args.decrease_lrate)
     else:  # start batch training to take the average of results
         processes = []
@@ -528,7 +483,7 @@ if __name__ == "__main__":
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
                              elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
-                             set_weights_epoch=args.set_weights_epoch, fixed_weight=args.fw, input_format=inputs)
+                             set_weights_epoch=args.set_weights_epoch, input_format=inputs)
             process = Process(target=dualp.train_network, args=(args.decrease_lrate,))
             process.start()
             processes.append(process)
@@ -545,9 +500,8 @@ if __name__ == "__main__":
 
         if all_results:
             valid_results = []
-            # a simulation is valid only if the performance on the POS of the test set was over 75%
             for i, simulation in enumerate(all_results):
-                if np.true_divide(simulation['correct_pos']['test'][-1] * 100, inputs.num_test) > 75:
+                if inputs.training_is_successful(simulation['correct_pos']['test']):
                     valid_results.append(simulation)
                 else:
                     failed_sim_id.append(str(i))  # keep track of simulations that failed
@@ -564,16 +518,7 @@ if __name__ == "__main__":
                                   summary_sim=num_valid_simulations,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
 
-    # Save the parameters of the simulation(s)
-    with open("%s/simulation.info" % results_dir, 'w') as f:  # Write simulation details to a file
-        f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
-                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
-                 "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
-                 "lang during testing:%s\nSimulations with pronoun errors:%s/%s\n%s\n%s") %
-                (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, args.decrease_lrate, dualp.compress_size,
-                 args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis,
-                 dualp.fixed_weight, args.set_weights, args.set_weights_epoch, args.nolang,
-                 simulations_with_pron_err, args.sim,
-                 "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
-                 "Indeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))
+    with open("%s/simulation.info" % results_dir, 'a') as f:  # Append information regarding the simulations' success
+        f.write("Simulations with pronoun errors:%s/%s\n%s\n%s" % (simulations_with_pron_err, args.sim,
+                "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
+                "Indeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))

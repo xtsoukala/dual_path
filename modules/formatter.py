@@ -3,11 +3,13 @@ import re
 import os
 import itertools
 import pickle
+from operator import add
+from elman_network import np
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, exclude_lang,
-                 language, trainset, testset, semantic_gender, emphasis, prodrop, plot_title):
+    def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
+                 exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop, plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
@@ -29,11 +31,16 @@ class InputFormatter:
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
         # |----------PARAMS----------|
+        # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
+        # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
+        self.fixed_weights = fixed_weights
         self.period_idx = self.lexicon.index('.')
         self.to_preposition_idx = self.lexicon.index('to')
         # the verb suffix -ó is the first entry in the ES lexicon
         self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
         self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
+        self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
+                            self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -49,7 +56,12 @@ class InputFormatter:
     def _number_of_test_pronouns(self):
         return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
 
-    def read_set(self, test=False, set_name=None):
+    def read_set(self, set_name=None, test=False):
+        """
+        :param set_name: file name (optional)
+        :param test: if file name is not provided, we need to specify whether it's the testset (test=True) or trainset
+        :return:
+        """
         if not set_name:
             if test:
                 set_name = self.testset
@@ -149,7 +161,7 @@ class InputFormatter:
         """
         return [self.lexicon.index(w) for w in sentence_lst]
 
-    def sentence_indeces_pos(self, sentence_idx, remove_period=False, convert_to_idx=False):
+    def sentence_indeces_pos(self, sentence_idx, remove_period=True, convert_to_idx=False):
         """
         :param sentence_idx: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
@@ -163,3 +175,61 @@ class InputFormatter:
         if remove_period and sentence_idx[-1] == self.period_idx:
             sentence_idx = sentence_idx[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
+    
+    def get_message_info(self, message, test_phase=False):
+        """
+        :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
+        E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+        gives information about the event-semantics (E)
+        :param test_phase: Set to True during evaluation and False during training
+        """
+        norm_activation = 1  # 0.5 ? 1?
+        reduced_activation = 0  # 0.1-4
+        event_sem_activations = np.array([-1] * self.event_sem_size)
+        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
+        weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
+        target_lang_activations = np.zeros(len(self.languages))
+        for info in message.split(';'):
+            role, what = info.split("=")
+            if role == "E":  # retrieve activations for the event-sem layer
+                activation = norm_activation
+                for event in what.split(","):
+                    if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
+                        activation = reduced_activation
+                        break
+                    # if event in ['PRESENT', 'PAST']: activation = increased_activation
+                    if event in self.languages:
+                        if test_phase and self.exclude_lang:  # same activation for all languages
+                            target_lang_activations = [0.5] * len(target_lang_activations)
+                        else:
+                            target_lang_activations[self.languages.index(event)] = activation
+                    else:  # activate
+                        event_sem_activations[self.event_semantics.index(event)] = activation
+                    activation = norm_activation  # reset activation levels to maximum
+            else:
+                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
+                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
+                for concept in what.split(","):
+                    if concept in self.identif:
+                        weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = 4 #5
+                    else:
+                        idx_concept = self.identif_size + self.concepts.index(concept)
+                        weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+        return weights_role_concept, event_sem_activations, target_lang_activations, message
+
+    def training_is_successful(self, x, threshold=75):
+        return np.true_divide(x[-1] * 100, self.num_test) > threshold
+
+
+def take_average_of_valid_results(v_results):
+    results = {}
+    for d in v_results:
+        for k, v in d.iteritems():
+            if k not in results:
+                results[k] = {}
+            for s, j in v.iteritems():
+                if s not in results[k]:
+                    results[k][s] = np.array(j)
+                else:
+                    results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
+    return results

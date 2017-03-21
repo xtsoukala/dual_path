@@ -47,7 +47,7 @@ class Plotter:
             plt.plot(epochs, [percentage(x, num_train) for x in results['code_switched']['train']], linestyle='--')
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
-            plt.ylim([0, 60])
+            plt.ylim([0, 80])
             if summary_sim:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
             else:

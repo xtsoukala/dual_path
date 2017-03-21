@@ -5,6 +5,8 @@ import numpy as np
 from copy import deepcopy
 from plotter import Plotter
 
+np.random.seed(18)
+
 
 class SimpleRecurrentNetwork:
     def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False):
@@ -31,11 +33,11 @@ class SimpleRecurrentNetwork:
                 self.initialization_completed = True
                 break
 
-    def add_layer(self, name, size, has_bias=False, activation_function="tanh", has_fixed_weights=False,
+    def add_layer(self, name, size, has_bias=False, activation_function="tanh",
                   convert_input=False, is_recurrent=False):
         self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
                                        is_recurrent=is_recurrent, activation_function=activation_function,
-                                       has_fixed_weights=has_fixed_weights))
+                                       context_init=self.context_init))
         if name == "output":
             self.output_size = size
 
@@ -56,15 +58,12 @@ class SimpleRecurrentNetwork:
             if not layer.in_size:
                 continue
 
-            if set_weights_folder:
-                if layer.has_fixed_weights:
-                    layer.in_weights = np.random.uniform(size=[layer.in_size + int(layer.has_bias), layer.size])
-                else:  # if set weights, previous simulation should have the same num (or more) of simulations
-                    w_dir = os.path.join(set_weights_folder, str(simulation_num) if simulation_num is not None else "",
-                                         "weights")
-                    weights_fname = "weights_%s%s.in" % (layer.name, "_%s" % set_weights_epoch if set_weights_epoch
-                                                                                                  is not None else "")
-                    layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
+            if set_weights_folder:  # weights folder should contain the same num of simulations (or more)
+                w_dir = os.path.join(set_weights_folder, str(simulation_num) if simulation_num is not None else "",
+                                     "weights")
+                weights_fname = "weights_%s%s.in" % (layer.name,
+                                                     "_%s" % set_weights_epoch if set_weights_epoch is not None else "")
+                layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
             else:
                 layer.sd = input_sd(layer.in_size)
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
@@ -90,9 +89,8 @@ class SimpleRecurrentNetwork:
             plt.plot_layer_stats(labels=labels, std=std, means=means)
 
     def save_weights(self, results_dir, epochs=0):
-        for layer in self.layers:
-            if not layer.has_fixed_weights and np.all(layer.in_weights):
-                np.savetxt("%s/weights/weights_%s_%s.in" % (results_dir, layer.name, epochs), layer.in_weights)
+        for layer in self.get_layers_for_backpropagation():
+            np.savetxt("%s/weights/weights_%s_%s.in" % (results_dir, layer.name, epochs), layer.in_weights)
 
     def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act=None, reset=True):
         weights_concept_role = updated_role_concept.T
@@ -100,7 +98,7 @@ class SimpleRecurrentNetwork:
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
             role_layer.in_weights[x] = weights_concept_role[x]
 
-        # pred_concept is split into pred_identifiability and pred_concept. The fixed weights are essentially the same
+        # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)
         pred_identif = self.get_layer("pred_identifiability")
         pred_concept = self.get_layer("pred_concept")
         for x in range(pred_concept.in_size):  # pred_identif.in_size == pred_concept.in_size
@@ -162,7 +160,7 @@ class SimpleRecurrentNetwork:
             for incoming_layer in layer.in_layers:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
                 layer.in_activation = np.concatenate((layer.in_activation, incoming_layer.activation), axis=0)
-            if layer.is_recurrent:  # hidden layer only (context activation)
+            if layer.is_recurrent:  # hidden layer only (include context activation)
                 layer.in_activation = np.concatenate((layer.in_activation, layer.context_activation), axis=0)
             if layer.has_bias:  # add bias
                 layer.in_activation = np.append(layer.in_activation, 1)
@@ -256,19 +254,16 @@ class SimpleRecurrentNetwork:
         self.current_layer.total_error = np.dot(self.current_layer.gradient, self.current_layer.in_weights.T)
 
     def _update_current_weights_and_previous_delta(self):
-        # Update weights, unless they are given (i.e. between role and concept).
-        if not self.current_layer.has_fixed_weights:
-            # Update weights (steepest descent) by adding deltas*learning rate to the previous weight
-            self.current_layer.in_weights += self.current_layer.delta
-            # momentum descent: model continues in same direction as previous weight change
-            if self.current_layer.previous_delta.size > 1:
-                added_weight = self.momentum * self.current_layer.previous_delta
-                self.current_layer.in_weights += added_weight
-        elif self.current_layer.has_bias:  # layer HAS fixed weights but it also has bias. Update bias ONLY
-            self.current_layer.in_weights[-1] += self.current_layer.delta[-1]
-            if self.current_layer.previous_delta.size > 1:  # add momentum
-                added_weight = self.momentum * self.current_layer.previous_delta[-1]
-                self.current_layer.in_weights[-1] += added_weight
+        """
+        Update weights (steepest descent), even if they are given (i.e. between role and concept), by adding
+        deltas*learning rate to the previous weight. Alternatively, we can check whether the layer has fixed weights
+        (if not self.current_layer.has_fixed_weights) and update only the bias (last layer unit)
+        """
+        self.current_layer.in_weights += self.current_layer.delta
+        # momentum descent: model continues in same direction as previous weight change
+        if self.current_layer.previous_delta.size > 1:
+            added_weight = self.momentum * self.current_layer.previous_delta
+            self.current_layer.in_weights += added_weight
         # Update previous delta. Deepcopying is important otherwise it keeps reference
         self.current_layer.previous_delta = deepcopy(self.current_layer.delta)
 
@@ -305,8 +300,7 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, activation_function, has_fixed_weights,
-                 convert_input, is_recurrent=False):
+    def __init__(self, name, size, has_bias, activation_function, convert_input, context_init, is_recurrent=False):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size
@@ -327,18 +321,18 @@ class NeuronLayer:
         self.in_size = 0
         self.in_layers = []
         self.in_activation = []
-        self.gradient = None
         self.previous_delta = np.empty([])
-        self.has_fixed_weights = has_fixed_weights
-        self.context_activation = np.zeros(size)
+        self.gradient = None
+        self.context_activation = None
         # the following two properties are only for the hidden (recurrent) layer
         self.is_recurrent = is_recurrent
         if is_recurrent:
-            self.make_recurrent()
+            self.make_recurrent(context_init)
 
-    def make_recurrent(self):
+    def make_recurrent(self, context_init):
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
+        self.context_activation = np.array([context_init] * self.size)
 
 
 def input_sd(number_of_inputs):
