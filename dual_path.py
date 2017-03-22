@@ -286,13 +286,14 @@ class DualPath:
                                      self.inputs.sentence_from_indeces(target_sentence_idx), message))
 
             if epoch > 0:
-                suffix = "flex-" if flexible_order else "in" if produced_sentence_idx != target_sentence_idx else ""
+                suffix = ("flex-" if flexible_order or has_wrong_det
+                          else "in" if produced_sentence_idx != target_sentence_idx else "")
                 with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%scorrect"
+                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%s "
                             "Meaning:%scorrect\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
                              self.inputs.sentence_from_indeces(target_sentence_idx), code_switched, has_correct_pos,
-                             "in" if has_wrong_det else "", suffix, message))
+                             not has_wrong_det, suffix, message))
 
         # on the set level
         with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
@@ -519,6 +520,6 @@ if __name__ == "__main__":
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
 
     with open("%s/simulation.info" % results_dir, 'a') as f:  # Append information regarding the simulations' success
-        f.write("Simulations with pronoun errors:%s/%s\n%s\n%s" % (simulations_with_pron_err, args.sim,
+        f.write("Simulations with pronoun errors:%s/%s\n%s%s" % (simulations_with_pron_err, args.sim,
                 "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
-                "Indeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))
+                "\nIndeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))
