@@ -122,18 +122,24 @@ class InputFormatter:
         :param fname: file name
         :return: Simply reads a file into a list while stripping newlines
         """
-        if not os.path.isfile(os.path.join(self.input_dir, fname)):  # make sure the file exists
-            import warnings
-            warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.input_dir, fname))
-            return []
-
-        with open(os.path.join(self.input_dir, fname)) as f:
-            lines = [line.rstrip('\n') for line in f]
-        return lines
+        if self.file_exists(fname):
+            with open(os.path.join(self.input_dir, fname)) as f:
+                lines = [line.rstrip('\n') for line in f]
+            return lines
 
     def _read_pickled_file(self, fname):
-        with open(os.path.join(self.input_dir, fname)) as f:
-            return pickle.load(f)
+        if self.file_exists(fname, warning=False):
+            with open(os.path.join(self.input_dir, fname)) as f:
+                return pickle.load(f)
+        return {}
+
+    def file_exists(self, fname, warning=True):
+        if not os.path.isfile(os.path.join(self.input_dir, fname)):  # make sure the file exists
+            if warning:
+                import warnings
+                warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.input_dir, fname))
+            return False
+        return True
 
     def pos_lookup(self, word_idx):
         """

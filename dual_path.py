@@ -20,8 +20,8 @@ class DualPath:
 
     role, concept and pred_concept units are unbiased to make them more input driven
     """
-    def __init__(self, hidden_size, learn_rate, momentum, epochs, compress_size, role_copy, elman_debug_mess,
-                 test_every, set_weights_folder, set_weights_epoch, input_format, simulation_num=None):
+    def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size, role_copy,
+                 srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Learning rate
@@ -29,7 +29,7 @@ class DualPath:
         :param epochs: Number of train set iterations during training
         :param compress_size: Size of the compress layers (approximatelly hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
-        :param elman_debug_mess: Whether to print debug messages during training
+        :param srn_debug_mess: Whether to print debug messages during training
         :param test_every: Test network every x epochs
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
@@ -40,9 +40,10 @@ class DualPath:
         self.compress_size = compress_size
         self.hidden_size = hidden_size
 
-        # Learning rate starts at 0.2 and is reduced linearly until it reaches 0.05 at 1 epoch (2000 sentences),
-        # where it is fixed for the rest of training. Values taken from Chang F., 2002
+        # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.learn_rate = learn_rate
+        self.final_lrate = final_learn_rate
+        self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
         self.momentum = momentum  # accounts for amount of previous weight changes that are added
 
         # Epochs indicate the numbers of iteration of the train set during training. 1000 sentences approximate
@@ -55,7 +56,7 @@ class DualPath:
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
         self.srn = SimpleRecurrentNetwork(learn_rate=self.learn_rate, momentum=self.momentum, dir=results_dir,
-                                          debug_messages=elman_debug_mess, include_role_copy=self.role_copy)
+                                          debug_messages=srn_debug_mess, include_role_copy=self.role_copy)
         self.initialize_network()
 
         self.compare_unordered = lambda x, y: collections.Counter(x) == collections.Counter(y)
@@ -135,9 +136,8 @@ class DualPath:
                     break
         return produced_sent_ids, target_sentence_ids, message
 
-    def train_network(self, decrease_lrate, shuffle_set=True, plot_results=True, evaluate=True):
+    def train_network(self, shuffle_set=True, plot_results=True, evaluate=True):
         """
-        decrease_lrate: whether to decrease the learning rate or not
         shuffle_set: Whether to shuffle the training set after each iteration
         plot_results: Whether to plot the performance
         evaluate: Whether to evaluate train and test sets every x epochs. The only reason NOT to evaluate is for speed,
@@ -182,9 +182,8 @@ class DualPath:
 
             for train_line in self.inputs.trainlines:  # start training
                 self.feed_line(train_line, epoch, backpropagate=True)
-                if epoch < 2 and decrease_lrate:
-                    self.learn_rate -= 0.000075  # decrease lrate linearly until it reaches 2k lines (1 epoch)
-
+                if self.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 1 epoch
+                    self.learn_rate -= self.lrate_decrease_step
             epoch += 1  # increase number of epochs, begin new iteration
 
         if evaluate:
@@ -368,6 +367,9 @@ if __name__ == "__main__":
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any other string for bilingual)', default='enes')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # or: 0.2, 0.15
+    parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
+                                                        "(2k sentences). If not set, rate doesn't decrease",
+                        type=float, default=0.05)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
                         type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
@@ -400,8 +402,6 @@ if __name__ == "__main__":
     parser.set_defaults(rcopy=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Stop automatic decrease of lrate')
-    parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
     parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
@@ -457,8 +457,9 @@ if __name__ == "__main__":
                  "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
                  "lang during testing:%s\nAllow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, args.decrease_lrate, args.compress, args.rcopy, args.pron, args.prodrop, args.gender,
-                 args.emphasis, args.fw, args.set_weights, args.set_weights_epoch, args.nolang, args.free_pos))
+                 args.lrate, (args.final_lrate is not None), args.compress, args.rcopy, args.pron, args.prodrop,
+                 args.gender, args.emphasis, args.fw, args.set_weights, args.set_weights_epoch, args.nolang,
+                 args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
@@ -466,26 +467,30 @@ if __name__ == "__main__":
                             emphasis=args.emphasis, prodrop=args.prodrop, trainset=args.trainset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw)
 
+    if not args.final_lrate:
+        args.final_lrate = args.lrate
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
-        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
-                         elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
+        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+                         epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
+                         test_every=args.test_every, compress_size=args.compress,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
                          input_format=inputs, momentum=args.momentum)
-        dualp.train_network(decrease_lrate=args.decrease_lrate)
+        dualp.train_network()
     else:  # start batch training to take the average of results
         processes = []
         for sim in range(args.sim):
             rdir = "%s/%s" % (results_dir, sim)
             os.makedirs(rdir)
             inputs.results_dir = rdir
-            dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, epochs=args.epochs, role_copy=args.rcopy,
-                             elman_debug_mess=args.debug, test_every=args.test_every, compress_size=args.compress,
+            dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+                             epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
+                             test_every=args.test_every, compress_size=args.compress,
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_format=inputs)
-            process = Process(target=dualp.train_network, args=(args.decrease_lrate,))
+            process = Process(target=dualp.train_network, args=())
             process.start()
             processes.append(process)
         for p in processes:
