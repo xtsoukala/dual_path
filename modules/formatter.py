@@ -9,7 +9,8 @@ from elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
-                 exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop, plot_title):
+                 fixed_weights_identif, exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop,
+                 plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
@@ -34,6 +35,7 @@ class InputFormatter:
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
         self.fixed_weights = fixed_weights
+        self.fixed_identif = fixed_weights_identif
         self.period_idx = self.lexicon.index('.')
         self.to_preposition_idx = self.lexicon.index('to')
         # the verb suffix -ó is the first entry in the ES lexicon
@@ -217,7 +219,7 @@ class InputFormatter:
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
                     if concept in self.identif:
-                        weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = 4 #5
+                        weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
                     else:
                         idx_concept = self.identif_size + self.concepts.index(concept)
                         weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights

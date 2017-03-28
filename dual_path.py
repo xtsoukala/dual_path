@@ -378,6 +378,8 @@ if __name__ == "__main__":
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=int, default=6,
                         help='Fixed weight value for concept-role connections')
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=6,
+                        help='Fixed weight value for identif-role connections')
     parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
                                                                       '(if no input was set)')
@@ -452,20 +454,20 @@ if __name__ == "__main__":
 
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
-        f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s\nCompress: %s\n"
+        f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
                  "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
-                 "\nFixed weights (concept-role): %s\nSet weights folder: %s\nSet weights epoch: %s\nExclude target "
-                 "lang during testing:%s\nAllow free structure production:%s\n") %
+                 "\nFixed weights (concept-role): %s\nFixed weights (identif-role): %s\nSet weights folder: %s\n"
+                 "Set weights epoch: %s\nExclude target lang during testing:%s\nAllow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, (args.final_lrate is not None), args.compress, args.rcopy, args.pron, args.prodrop,
-                 args.gender, args.emphasis, args.fw, args.set_weights, args.set_weights_epoch, args.nolang,
-                 args.free_pos))
+                 args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
+                 args.compress, args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
+                 args.set_weights, args.set_weights_epoch, args.nolang, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
                             emphasis=args.emphasis, prodrop=args.prodrop, trainset=args.trainset, testset=args.testset,
-                            plot_title=args.title, fixed_weights=args.fw)
+                            plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
 
     if not args.final_lrate:
         args.final_lrate = args.lrate
