@@ -41,7 +41,6 @@ class DualPath:
         self.hidden_size = hidden_size
 
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
-        self.learn_rate = learn_rate
         self.final_lrate = final_learn_rate
         self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
         self.momentum = momentum  # accounts for amount of previous weight changes that are added
@@ -55,7 +54,7 @@ class DualPath:
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
-        self.srn = SimpleRecurrentNetwork(learn_rate=self.learn_rate, momentum=self.momentum, dir=results_dir,
+        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=self.momentum, dir=results_dir,
                                           debug_messages=srn_debug_mess, include_role_copy=self.role_copy)
         self.initialize_network()
 
@@ -182,8 +181,8 @@ class DualPath:
 
             for train_line in self.inputs.trainlines:  # start training
                 self.feed_line(train_line, epoch, backpropagate=True)
-                if self.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 1 epoch
-                    self.learn_rate -= self.lrate_decrease_step
+                if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 1 epoch
+                    self.srn.learn_rate -= self.lrate_decrease_step
             epoch += 1  # increase number of epochs, begin new iteration
 
         if evaluate:
