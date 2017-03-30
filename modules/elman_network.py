@@ -18,7 +18,7 @@ class SimpleRecurrentNetwork:
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
-        self.initially_deactive_layers = ['compress', 'concept', 'identif', 'role']
+        self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
         self.dir = dir
         self.output_size = 0

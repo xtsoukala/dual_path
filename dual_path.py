@@ -25,7 +25,7 @@ class DualPath:
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Learning rate
-        :param momentum:
+        :param momentum: accounts for amount of previous weight changes that are added
         :param epochs: Number of train set iterations during training
         :param compress_size: Size of the compress layers (approximatelly hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
@@ -43,7 +43,6 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
-        self.momentum = momentum  # accounts for amount of previous weight changes that are added
 
         # Epochs indicate the numbers of iteration of the train set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
@@ -54,7 +53,7 @@ class DualPath:
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
-        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=self.momentum, dir=results_dir,
+        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, dir=results_dir,
                                           debug_messages=srn_debug_mess, include_role_copy=self.role_copy)
         self.initialize_network()
 
@@ -120,7 +119,7 @@ class DualPath:
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         ids = deepcopy(target_sentence_ids)
         if not backpropagate:
-            ids += [self.inputs.period_idx] * 2  # allow it to complete sentence.
+            ids += [self.inputs.period_idx] * 2  # allow it to complete sentence in test phase.
 
         for trg_idx in ids:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
@@ -135,7 +134,7 @@ class DualPath:
                     break
         return produced_sent_ids, target_sentence_ids, message
 
-    def train_network(self, shuffle_set=True, plot_results=True, evaluate=True):
+    def train_network(self, shuffle_set, plot_results=True, evaluate=True):
         """
         shuffle_set: Whether to shuffle the training set after each iteration
         plot_results: Whether to plot the performance
@@ -358,7 +357,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=60)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=15)
     parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
@@ -379,12 +379,11 @@ if __name__ == "__main__":
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=6,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
                                                                       '(if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=2, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=1, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
@@ -409,6 +408,10 @@ if __name__ == "__main__":
     parser.set_defaults(gender=True)
     parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
                                                                              'level 20%% of the time')
+    parser.set_defaults(emphasis=False)
+    parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
+                        help='Do not shuffle training set after every epoch')
+    parser.set_defaults(shuffle=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
@@ -454,13 +457,13 @@ if __name__ == "__main__":
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
         f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
-                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis concept:%s"
-                 "\nFixed weights (concept-role): %s\nFixed weights (identif-role): %s\nSet weights folder: %s\n"
-                 "Set weights epoch: %s\nExclude target lang during testing:%s\nAllow free structure production:%s\n") %
+                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis:%s"
+                 "\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude "
+                 "lang during testing:%s\nShuffle set after each epoch: %s\nAllow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
                  args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
                  args.compress, args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
-                 args.set_weights, args.set_weights_epoch, args.nolang, args.free_pos))
+                 args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
@@ -479,7 +482,7 @@ if __name__ == "__main__":
                          test_every=args.test_every, compress_size=args.compress,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
                          input_format=inputs, momentum=args.momentum)
-        dualp.train_network()
+        dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
         processes = []
         for sim in range(args.sim):
@@ -491,7 +494,7 @@ if __name__ == "__main__":
                              test_every=args.test_every, compress_size=args.compress,
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_format=inputs)
-            process = Process(target=dualp.train_network, args=())
+            process = Process(target=dualp.train_network, args=(args.shuffle, ))
             process.start()
             processes.append(process)
         for p in processes:
