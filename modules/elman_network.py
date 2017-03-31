@@ -81,12 +81,12 @@ class SimpleRecurrentNetwork:
                     f.write("name, max, min, mean, std\n"
                             "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
                                                   layer.in_weights.mean(), layer.in_weights.std()))
+                if plot_stats:
+                    plt = Plotter(results_dir=results_dir)
+                    plt.plot_layer_stats(labels=labels, std=std, means=means)
+
         self.reset_context_delta_and_crole()
         self._complete_initialization()
-
-        if plot_stats:
-            plt = Plotter(results_dir=results_dir)
-            plt.plot_layer_stats(labels=labels, std=std, means=means)
 
     def save_weights(self, results_dir, epochs=0):
         for layer in self.get_layers_for_backpropagation():
@@ -372,14 +372,9 @@ def tanh_derivative(x, input_activation=False):
         return 1.0 - x ** 2
 
 
-def softmax(x, average=False):
-    """Compute softmax values for each sets of scores in x."""
-    if average:
-        # averaging using max seems to work better than the usual softmax
-        xt = np.exp(x - x.max())
-        return np.true_divide(xt, np.sum(xt, axis=0))
-    # but this is the default. It sometimes gives "RuntimeWarning: invalid value encountered in divide" and returns nan
-    return np.true_divide(np.exp(x), np.sum(np.exp(x), axis=0))
+def softmax(x):
+    """ Compute softmax values for each sets of scores in x. Following Chang's advice, normalize by rounding to 4 """
+    return np.round(np.true_divide(np.exp(x), np.sum(np.exp(x), axis=0)), 4)
 
 
 def softmax_derivative(x):
