@@ -47,7 +47,7 @@ class SimpleRecurrentNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=False,
+    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=True,
                       simulation_num=None):
         if not os.path.isdir('%s/weights' % results_dir):
             os.mkdir('%s/weights' % results_dir)
@@ -69,8 +69,8 @@ class SimpleRecurrentNetwork:
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
+                # layer.in_weights = np.random.uniform(low=-layer.sd, high=layer.sd, size=[])
                 mean = 0
-                # layer.in_weights = 2*np.random.random((layer.in_size + int(layer.has_bias), layer.size)) - 1
                 layer.in_weights = np.random.normal(mean, layer.sd,
                                                     size=[layer.in_size + int(layer.has_bias), layer.size])
                 means.append(layer.in_weights.mean())
@@ -137,7 +137,6 @@ class SimpleRecurrentNetwork:
             input_layer.activation[input_idx] = 1
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
             input_layer.activation = convert_range(input_layer.activation)
-
         if target_idx:  # no need to set target when testing
             self.target_activation = np.zeros(self.output_size)
             self.target_activation[target_idx] = 1
@@ -147,15 +146,16 @@ class SimpleRecurrentNetwork:
         input_layer.activation = inputs
         self.target_activation = targets
 
-    def feed_forward(self, start_of_sentence=False):
+    def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
             sys.exit('The network was not been initialized correctly. Make sure you have added layers (add_layer), '
                      'connected them (connect_layers) and reset the weights (reset_weights)')
 
         for layer in self.layers:
             if not layer.in_layers:
+                if self.debug_messages: print ('skip layer:' + layer.name)
                 continue  # skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
-
+            if self.debug_messages: print 'wokring on layer:' + layer.name
             layer.in_activation = []
             for incoming_layer in layer.in_layers:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
@@ -167,6 +167,7 @@ class SimpleRecurrentNetwork:
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = np.zeros(layer.size)  # set role_copy to zero
+                if self.debug_messages: print "iniitally deactive layer: %s, activation: %s" % (layer.name, layer.activation)
                 continue
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
@@ -198,7 +199,6 @@ class SimpleRecurrentNetwork:
     def _compute_output_error(self, epoch):
         # Calculate error[Eo](target - output)
         output_layer = self.get_layer("output")
-
         self._calculate_mean_square_and_divergence_error(epoch, output_layer.activation)
 
         if output_layer.activation_function == "softmax":
@@ -225,10 +225,15 @@ class SimpleRecurrentNetwork:
                                                                                                output_activation)))"""
 
     def _compute_current_layer_gradient(self):
+        if self.debug_messages: print self.current_layer.name, self.current_layer.error_out
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
+            if len(self.current_layer.error_out) > 1 and self.debug_messages:
+                print self.current_layer.error_out
             error_out = sum(self.current_layer.error_out)
+            if self.debug_messages: print error_out
             self.current_layer.error_out = []  # initialize for following gradient computation
+            if self.debug_messages: print self.current_layer.error_out
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
                 self.current_layer.gradient = error_out * softmax_derivative(self.current_layer.activation)
@@ -236,6 +241,7 @@ class SimpleRecurrentNetwork:
                 self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "sigmoid":
                 self.current_layer.gradient = error_out * sigmoid_derivative(self.current_layer.activation)
+                if self.debug_messages: print self.current_layer.gradient, '\n----'
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
@@ -252,6 +258,7 @@ class SimpleRecurrentNetwork:
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
         self.current_layer.total_error = np.dot(self.current_layer.gradient, self.current_layer.in_weights.T)
+        if self.debug_messages: print "total_error_for_backpropagation:", self.current_layer.total_error
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -365,7 +372,7 @@ def tanh_derivative(x, input_activation=False):
         return 1.0 - x ** 2
 
 
-def softmax(x, average=True):
+def softmax(x, average=False):
     """Compute softmax values for each sets of scores in x."""
     if average:
         # averaging using max seems to work better than the usual softmax

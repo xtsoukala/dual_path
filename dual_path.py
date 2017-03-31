@@ -43,7 +43,6 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
-
         # Epochs indicate the numbers of iteration of the train set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -123,7 +122,7 @@ class DualPath:
 
         for trg_idx in ids:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
-            self.srn.feed_forward(start_of_sentence=(prod_idx is None))
+            self.srn.feedforward(start_of_sentence=(prod_idx is None))
             if backpropagate:
                 prod_idx = trg_idx  # Train with target word, NOT produced one
                 self.srn.backpropagate(epoch)
@@ -360,12 +359,13 @@ if __name__ == "__main__":
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
     parser.add_argument('-compress', help='Number of compress layer units', type=int, default=15)
     parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
-    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)',
+                        )#default='gender_error_experiment/input/L1_ES')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='enes')
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.1)  # or: 0.2, 0.15
+                                      'or any other string for bilingual)', default='es')
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.15)  # or: 0.2, 0.15
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.05)
