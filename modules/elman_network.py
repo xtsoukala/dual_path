@@ -153,9 +153,7 @@ class SimpleRecurrentNetwork:
 
         for layer in self.layers:
             if not layer.in_layers:
-                if self.debug_messages: print ('skip layer:' + layer.name)
                 continue  # skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
-            if self.debug_messages: print 'wokring on layer:' + layer.name
             layer.in_activation = []
             for incoming_layer in layer.in_layers:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
@@ -167,7 +165,6 @@ class SimpleRecurrentNetwork:
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = np.zeros(layer.size)  # set role_copy to zero
-                if self.debug_messages: print "iniitally deactive layer: %s, activation: %s" % (layer.name, layer.activation)
                 continue
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
@@ -225,15 +222,10 @@ class SimpleRecurrentNetwork:
                                                                                                output_activation)))"""
 
     def _compute_current_layer_gradient(self):
-        if self.debug_messages: print self.current_layer.name, self.current_layer.error_out
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
-            if len(self.current_layer.error_out) > 1 and self.debug_messages:
-                print self.current_layer.error_out
-            error_out = sum(self.current_layer.error_out)
-            if self.debug_messages: print error_out
+            error_out = np.sum(self.current_layer.error_out, axis=0)
             self.current_layer.error_out = []  # initialize for following gradient computation
-            if self.debug_messages: print self.current_layer.error_out
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
                 self.current_layer.gradient = error_out * softmax_derivative(self.current_layer.activation)
@@ -241,7 +233,6 @@ class SimpleRecurrentNetwork:
                 self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "sigmoid":
                 self.current_layer.gradient = error_out * sigmoid_derivative(self.current_layer.activation)
-                if self.debug_messages: print self.current_layer.gradient, '\n----'
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
@@ -258,7 +249,6 @@ class SimpleRecurrentNetwork:
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
         self.current_layer.total_error = np.dot(self.current_layer.gradient, self.current_layer.in_weights.T)
-        if self.debug_messages: print "total_error_for_backpropagation:", self.current_layer.total_error
 
     def _update_current_weights_and_previous_delta(self):
         """

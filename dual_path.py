@@ -359,8 +359,7 @@ if __name__ == "__main__":
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
     parser.add_argument('-compress', help='Number of compress layer units', type=int, default=15)
     parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
-    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)',
-                        )#default='gender_error_experiment/input/L1_ES')
+    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -375,9 +374,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=6,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=12,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=6,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=12,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
                                                                       '(if no input was set)')
