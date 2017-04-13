@@ -205,148 +205,147 @@ class SetsGenerator:
         self.structures = []
         self.num_structures = None
         if allow_free_structure_production:
-            self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'),
-                                  ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'),
-                                  ('det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG'),
-                                  ('det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'),
-                                  ('det noun::animate aux::singular verb::double ing '
+            self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
+                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
+                                  ['det noun::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'),
-                                  ('det noun::animate aux::singular verb::double ing det noun::animate '
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                  ['det noun::animate aux::singular verb::double ing det noun::animate '
                                    'det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'),
-                                  ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'),
-                                  ('det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'),
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
-            self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,PROG'),
-                                  ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,SIMPLE'),
-                                  ('det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG'),
-                                  ('det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'),
-                                  ('det noun::animate aux::singular verb::double ing '
+            self.structures_es = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,PROG'],
+                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'),
-                                  ('det noun::animate aux::singular verb::double ing '
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
+                                  ['det noun::animate aux::singular verb::double ing '
                                    'to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'),
-                                  ('det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'),
-                                  ('det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE')
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         else:
             self.event_sem.extend(['AGT', 'PAT', 'REC'])
-            self.structures_en = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'),
+            self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'),
+                                  # 'AGENT=;ACTION=;E=EN,PROG'],
                                   # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'),
-                                  ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE,AGT'),
+                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
+                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE,AGT'],
 
-                                  ('det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG,AGT,PAT'),
+                                  ['det noun::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG,AGT,PAT'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  ('det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,AGT,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  ['det noun::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,AGT,PAT'],
 
-                                  ('det noun::animate aux::singular verb::double ing '
+                                  ['det noun::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,-1,REC'),
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,REC'),
-                                  (
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,-1,REC'],
+                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,REC'],
+                                  [
                                   'det noun::animate aux::singular verb::double ing det noun::animate '
                                   'det noun::inanimate',
-                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,AGT,PAT,REC'),
+                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,AGT,PAT,REC'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  (
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  [
                                   'det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,-1,REC'),
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,REC'),
-                                  ('det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,AGT,PAT,REC'),
+                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,-1,REC'],
+                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,REC'],
+                                  ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,AGT,PAT,REC'],
 
-                                  # !('det noun aux::singular verb::trans par by det noun::animate',
+                                  # !['det noun aux::singular verb::trans par by det noun::animate',
                                   # !'PATIENT=;ACTION=;AGENT=;E=EN,SIMPLE,-1,AGT,PAT')
                                   ]
 
-            self.structures_es = [('det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'),
+            self.structures_es = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'),
+                                  # 'AGENT=;ACTION=;E=EN,PROG'],
                                   # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'),
-                                  ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,AGT,SIMPLE'),
+                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
+                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,AGT,SIMPLE'],
 
-                                  ('det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG,AGT,PAT'),
+                                  ['det noun::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG,AGT,PAT'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  ('det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE,AGT,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  ['det noun::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE,AGT,PAT'],
 
-                                  (
-                                      'det noun::animate aux::singular verb::double ing '
-                                      'det noun::inanimate to det noun::animate',
-                                      'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,-1,REC'),
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,REC'),
-                                  ('det noun::animate aux::singular verb::double ing '
+                                  ['det noun::animate aux::singular verb::double ing det noun::inanimate '
+                                   'to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,-1,REC'],
+                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,REC'],
+                                  ['det noun::animate aux::singular verb::double ing '
                                    'to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG,AGT,PAT,REC'),
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG,AGT,PAT,REC'],
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  (
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  [
                                   'det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,-1,REC'),
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'),
-                                  (
+                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,-1,REC'],
+                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
+                                  [
                                   'det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE,AGT,PAT,REC'),
+                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
 
-                                  # !('det noun aux::singular verb::trans par by det noun::animate',
+                                  # !['det noun aux::singular verb::trans par by det noun::animate',
                                   # ! 'PATIENT=;ACTION=;AGENT=;E=ES,SIMPLE,-1,AGT,PAT')
                                   ]
 
             self.structures_el = [# ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'),
+                                  # 'AGENT=;ACTION=;E=EN,PROG'],
                                   # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'),
-                                  ('det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EL,AGT,SIMPLE'),
+                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
+                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EL,AGT,SIMPLE'],
 
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  ('det noun::animate verb::trans verb_suffix det-acc noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EL,SIMPLE,AGT,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  ['det noun::animate verb::trans verb_suffix det-acc noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EL,SIMPLE,AGT,PAT'],
 
                                   # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'),
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
                                   # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'),
-                                  ('det noun::animate verb::double verb_suffix det-acc noun::inanimate '
+                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
+                                  ['det noun::animate verb::double verb_suffix det-acc noun::inanimate '
                                    'to det-acc noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EL,SIMPLE,AGT,PAT,-1,REC'),
-                                  #'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'),
-                                  ('det noun::animate verb::double verb_suffix to det-acc noun::animate '
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EL,SIMPLE,AGT,PAT,-1,REC'],
+                                  #'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
+                                  ['det noun::animate verb::double verb_suffix to det-acc noun::animate '
                                    'det-acc noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EL,SIMPLE,AGT,PAT,REC'),
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EL,SIMPLE,AGT,PAT,REC'],
 
-                                  #('det noun verb::trans par by det-acc noun::animate',
+                                  #['det noun verb::trans par by det-acc noun::animate',
                                   # 'PATIENT=;ACTION=;AGENT=;E=EL,SIMPLE,-1,AGT,PAT')
                                   ]
 
@@ -440,13 +439,13 @@ class SetsGenerator:
 
     def generate_sentence_structures(self, num_sentences):
         sentence_structures = self.structures * (num_sentences / self.num_structures)
-        for m in range(num_sentences % self.num_structures):
+        for m in range(num_sentences % self.num_structures):  # runs if sentence_structures < num_sentences
             sentence_structures.append(self.structures[random.randint(0, self.num_structures - 1)])
         random.shuffle(sentence_structures)
         return sentence_structures
 
     def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
-                           return_mess=False, print_sets=False, use_emphasis_concept=True):
+                           return_mess=False, print_sets=False):
         """
         :param sentence_structures: list of allowed structures for sentences
         :param lexicon: dict that contains words with syntactic labeling
@@ -455,8 +454,7 @@ class SetsGenerator:
         :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
         :param return_mess: 
         :param print_sets: 
-        :param use_emphasis_concept: 
-        :return: 
+        :return:
         """
         # determine how often we will use NPs vs determiners
         num_sentences = len(sentence_structures)
@@ -467,10 +465,6 @@ class SetsGenerator:
             number_determiners = num_sentences * percentage_pronoun / 100
             np = number_determiners * [0] + (num_sentences - number_determiners) * [1]
             random.shuffle(np)
-        use_emphasis_concept = use_emphasis_concept
-        # emphasize subject 30% of the times
-        emphasis = [0] * num_sentences
-        emphasis[::4] = [1] * len(emphasis[::4])  # every fourth subject is emphasized, whether it's NP or pronoun
 
         # we can keep track of train sentences (messages) that are identical to test ones and exclude them
         full_mess = []
@@ -496,7 +490,7 @@ class SetsGenerator:
                     if not level and 'animate' in random_key:  # this also includes INanimate
                         level = random_key
                     if pos == 'det':
-                        message[msg_idx] += random_key + ","   # def/indef info
+                        message[msg_idx] += "," + random_key   # def/indef info
                         determiners = syn[random_key]
                     elif random_key in ['past', 'present']:
                         message[-1] += "," + random_key
@@ -519,10 +513,9 @@ class SetsGenerator:
                         if type(w[random_key]) is list:
                             wd = random.choice(w[gender])
                             if level == 'animate':  # include semantic gender, we can decide later whether to use it
-                                message[msg_idx] += gender.upper() + ","
+                                message[msg_idx] += "," + gender.upper()
                             if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
-                                message[0] = re.sub(r"def|indef", "", message[0]) + "PRON,"  # remove def/indef info
-                                message[0] = re.sub("=,", '=', message[0])
+                                message[0] = re.sub(r"def|indef", "", message[0]) + "PRON"  # remove def/indef info
                                 # add pronoun
                                 sentence.append(lexicon[lang]['pron'][gender])
                             elif add_det or np[sen_idx] or msg_idx > 0:
@@ -530,18 +523,18 @@ class SetsGenerator:
                                     sentence.append(determiners[gender])
                                 add_det = False  # reset
                                 sentence.append(wd)
-                            message[msg_idx] += self.get_concept(wd)
+                            message[msg_idx] += "," + self.get_concept(wd)
                             msg_idx += 1
                         else:
                             add_det = True
                     elif type(w) is list:
                         random_word = random.choice(w)
-                        message[msg_idx] += self.get_concept(random_word)  # nouns
+                        message[msg_idx] += "," + self.get_concept(random_word)  # nouns
                         if level == 'animate':  # include semantic gender, we can decide later whether to use it
                             message[msg_idx] += "," + gender.upper()
                         if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
-                            message[0] = re.sub("=,", '=', message[0])
+                            #message[0] = re.sub("=,", '=', message[0])
                             add_det = False
                             # add pronoun
                             sentence.append(lexicon[lang]['pron'][gender])
@@ -552,9 +545,6 @@ class SetsGenerator:
                             sentence.append(random_word)
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
-
-                        if use_emphasis_concept and emphasis[sen_idx] and msg_idx == 0:  # use it even for NPs?
-                                message[0] += ",EMPH"
                         msg_idx += 1
                     else:  # elif type == str
                         if not np[sen_idx] and w == determiners and msg_idx < 1:
@@ -574,6 +564,8 @@ class SetsGenerator:
 
             sentence = u"%s ." % " ".join(sentence)
             message = ";".join(message).upper()
+            message = re.sub(r",,", ",", message)
+            message = re.sub(r"=,", "=", message)
 
             if message in exclude_test_sentences:
                 sentence_structures.append((pos_full, mes))  # find unique sentence, don't add it to the train set
@@ -626,11 +618,11 @@ class SetsGenerator:
 
 
 def calculate_number_of_sentences_per_set(num_sentences):
-    num_test = int(0.20 * num_sentences)  # Test set = 20% of whole set, train 80%
+    num_test = int(20 * num_sentences / 100)  # Test set = 20% of whole set, train 80%
     num_train = num_sentences - num_test
     return num_test, num_train
 
 if __name__ == "__main__":
     sets = SetsGenerator()
-    sets.generate_sets(num_sentences=200, lang='enel', include_bilingual_lexicon=True, percentage_pronoun=50,
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)

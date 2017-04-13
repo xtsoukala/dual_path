@@ -47,7 +47,7 @@ class DualPath:
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
         # |----------!PARAMS----------|
-        self.test_every = test_every  # test every x epochs (default: 2000)
+        self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
@@ -385,6 +385,7 @@ if __name__ == "__main__":
     parser.add_argument('-sim', type=int, default=1, help='Train several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
+    parser.add_argument('-emph', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
@@ -405,9 +406,6 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
-    parser.add_argument('--emph', dest='emphasis', action='store_true', help='Include emphasis concept on subject '
-                                                                             'level 20%% of the time')
-    parser.set_defaults(emphasis=False)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
@@ -456,9 +454,10 @@ if __name__ == "__main__":
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
         f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
-                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis:%s"
-                 "\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude "
-                 "lang during testing:%s\nShuffle set after each epoch: %s\nAllow free structure production:%s\n") %
+                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis (overt ES "
+                 "pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s (epoch: %s)"
+                 "\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
+                 "Allow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
                  args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
                  args.compress, args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,

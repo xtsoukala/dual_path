@@ -159,34 +159,20 @@ class SetsGenerator:
         for noun in 'παιχνίδι κλειδί'.split():
             self.lexica.add_word(word=noun, pos="NOUN", syntactic_gender="N", lang=lang)
 
-        for intransitive_verb in 'nad salt camin corr dorm'.split():
+        for intransitive_verb in 'κολυμπά πηδά περπατά τρέχ'.split():
             self.lexica.add_word(word=intransitive_verb, pos="VERB", maximum_verb_objects=0, lang=lang)
-        for transitive_verb in 'empuj golpe pate llev'.split():
+        for transitive_verb in 'σπρώχν χτυπά κλωτσά κουβαλά'.split():
             self.lexica.add_word(word=transitive_verb, pos="VERB", maximum_verb_objects=1, lang=lang)
-        for double_verb in 'd tir mostr present_'.split():
+        for double_verb in 'δίν πετά δείχν παρουσιάζ'.split():
             self.lexica.add_word(word=double_verb, pos="VERB", maximum_verb_objects=2, lang=lang)
 
-        self.lexica.add_word(word="está", pos="AUX", tense="PRESENT", lang=lang)
-        self.lexica.add_word(word="estaba", pos="AUX", tense="PAST", lang=lang)
+        self.lexica.add_word(word="είναι", pos="AUX", tense="PRESENT", lang=lang)
+        self.lexica.add_word(word="ήταν", pos="AUX", tense="PAST", lang=lang)
 
-        self.lexica.add_word(word="-ando", pos="ING", lang=lang)
-        self.lexica.add_word(word="-a", pos="VERB_SUFFIX", tense="PRESENT", lang=lang)
-        self.lexica.add_word(word="-ó", pos="VERB_SUFFIX", tense="PAST", lang=lang)
-        self.lexica.add_word(word="por", pos="BY", lang=lang)
-        self.lexica.add_word(word="a_", pos="TO", lang=lang)
-
-        self.lexicon_el = {'el': {
-                                  'verb': {'intrans': 'κολυμπά πηδά περπατά τρέχ'.split(),
-                                           'trans': 'σπρώχν χτυπά κλωτσά κουβαλά'.split(),
-                                           'double': 'δίν πετά δείχν παρουσιάζ'.split()},
-                                  'aux': {'singular': {'present': 'είναι', 'past': 'ήταν'},
-                                          'plural': {'present': 'είναι-', 'past': 'ήταν-'}},
-                                  'verb_suffix': {'present': '-ει', 'past': '-γε'},
-                                  'by': 'από',
-                                  'to': 'σ-',
-                                  'per': '.',
-                                  'par': '-ται'}  # , 'noun_plural': '-ss'}
-                           }
+        self.lexica.add_word(word="-ει", pos="VERB_SUFFIX", tense="PRESENT", lang=lang)
+        self.lexica.add_word(word="-γε", pos="VERB_SUFFIX", tense="PAST", lang=lang)
+        self.lexica.add_word(word="από", pos="BY", lang=lang)
+        self.lexica.add_word(word="σ-", pos="TO", lang=lang)
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
         # semantic gender, which is a non language-specific concept.

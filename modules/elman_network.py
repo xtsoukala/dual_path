@@ -47,7 +47,7 @@ class SimpleRecurrentNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=True,
+    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=False,
                       simulation_num=None):
         if not os.path.isdir('%s/weights' % results_dir):
             os.mkdir('%s/weights' % results_dir)

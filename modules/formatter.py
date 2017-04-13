@@ -3,6 +3,7 @@ import re
 import os
 import itertools
 import pickle
+import random
 from operator import add
 from elman_network import np
 
@@ -21,7 +22,7 @@ class InputFormatter:
         self.event_semantics = self._read_file_to_list(evsem_fname)
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
-        self.emphasis = emphasis
+        self.emphasis_percentage = emphasis
         self.semantic_gender = semantic_gender
         self.testset = testset
         self.trainset = trainset  # names of train and test set file names
@@ -71,12 +72,19 @@ class InputFormatter:
         lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make pro-drop
-            if self.emphasis:  # keep pronoun if emphasized
-                lines = [re.sub(r'^(él|ella) ', '', line) if ',EMPH' not in line else line for line in lines]
+            if self.emphasis_percentage > 0:  # keep pronoun if emphasized
+                es_lines = [x for x in lines if 'ES,' in x]
+                other_lines = [x for x in lines if 'ES,' not in x]
+                num_emphasized = len(es_lines) * self.emphasis_percentage / 100
+                for idx in random.sample(range(len(es_lines)), num_emphasized):
+                    es_lines[idx] = es_lines[idx].replace('AGENT=', 'AGENT=EMPH,')
+                lines = es_lines + other_lines
+                random.shuffle(lines)
+                lines = [re.sub(r'^(él|ella) ', '', line) if 'EMPH,' not in line else line for line in lines]
             else:
                 lines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in lines]
-        elif not self.emphasis:
-            lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
+        #elif not self.emphasis:
+        #    lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:
             lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)
