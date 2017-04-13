@@ -56,8 +56,8 @@ class Plotter:
             plt.close()
 
         if sum(results['pronoun_errors_flex']['test']) > 0:  # only plot if there's something to be plotted!
-            plt.plot(epochs, results['pronoun_errors']['test'], label='Subject pronoun errors')
-            plt.plot(epochs, results['pronoun_errors_flex']['test'], linestyle='--')
+            plt.plot(epochs[1:], results['pronoun_errors']['test'][1:], label='Subject pronoun errors')
+            plt.plot(epochs[1:], results['pronoun_errors_flex']['test'][1:], linestyle='--')
             plt.xlabel('Epochs')
             plt.ylabel('Sum of subject pronoun errors')
             if summary_sim:
@@ -76,10 +76,11 @@ class Plotter:
             else:
                 percentage_pronoun_errors = results['pronoun_errors']['test']
                 percentage_pronoun_errors_flex = results['pronoun_errors_flex']['test']
-            plt.plot(epochs, percentage_pronoun_errors)
-            plt.plot(epochs, percentage_pronoun_errors_flex, linestyle='--')
+            plt.plot(epochs[1:], percentage_pronoun_errors[1:])
+            plt.plot(epochs[1:], percentage_pronoun_errors_flex[1:], linestyle='--')
             plt.xlabel('Epochs')
             plt.ylabel('Percentage (%) of subject pronoun errors in test set')
+            plt.ylim([0, 10])
             if summary_sim:
                 fname = '%s/summary_%s_pronoun_errors_percentage.pdf' % (self.results_dir, summary_sim)
             else:
