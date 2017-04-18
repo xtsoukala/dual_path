@@ -73,18 +73,14 @@ class InputFormatter:
 
         if self.prodrop:  # make pro-drop
             if self.emphasis_percentage > 0:  # keep pronoun if emphasized
-                es_lines = [x for x in lines if 'ES,' in x]
-                other_lines = [x for x in lines if 'ES,' not in x]
-                num_emphasized = len(es_lines) * self.emphasis_percentage / 100
-                for idx in random.sample(range(len(es_lines)), num_emphasized):
-                    es_lines[idx] = es_lines[idx].replace('AGENT=', 'AGENT=EMPH,')
-                lines = es_lines + other_lines
-                random.shuffle(lines)
+                es_line_idx = [idx for idx, x in enumerate(lines) if 'ES,' in x]
+                num_emphasized = len(es_line_idx) * self.emphasis_percentage / 100
+                for es_idx in np.random.choice(es_line_idx, num_emphasized, replace=False):
+                    lines[es_idx] = lines[es_idx].replace('AGENT=', 'AGENT=EMPH,')
                 lines = [re.sub(r'^(él|ella) ', '', line) if 'EMPH,' not in line else line for line in lines]
             else:
-                lines = [re.sub(r'(él|ella|,EMPH) ', '', line) for line in lines]
-        #elif not self.emphasis:
-        #    lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
+                lines = [re.sub(r'(él|ella) ', '', line) for line in lines]
+        # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:
             lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)

@@ -13,8 +13,7 @@ sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters thro
 
 class SetsGenerator:
     """
-    Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model.
-    Read at own risk :P (To be refactored)
+    Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
     def __init__(self, results_dir=None, allow_free_structure_production=False):
         if results_dir:
@@ -34,11 +33,13 @@ class SetsGenerator:
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
                                       'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
-                                                       'host nephew policeman son uncle waiter bull'.split(),
+                                                       'host nephew policeman son uncle waiter chairman headmaster'
+                                                       ' bull'.split(),
                                                   'f': 'woman girl mother sister cat nurse actress grandmother wife '
-                                                       'hostess niece policewoman daughter aunt waitress cow'.split(),
+                                                       'hostess niece policewoman daughter aunt waitress chairwoman'
+                                                       ' headmistress cow'.split(),
                                                   },
-                                      'inanimate': {'n': 'ball stick toy kite key bag balloon'.split()}
+                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen'.split()}
                                       },
                                   'verb': {'intrans': 'swim jump walk run arrive lie sneeze sit die eat'.split(),
                                            'trans': 'push hit kick carry'.split(),
@@ -117,6 +118,12 @@ class SetsGenerator:
                             'grandmother': 'GRANDPARENT', 'grandfather': 'GRANDPARENT',
                             'waitress': 'WAITER', 'waiter': 'WAITER', 'aunt': 'UNCLES', 'uncle': 'UNCLES',
                             'nephew': 'NIBLING', 'niece': 'NIBLING', 'woman': 'HUMAN', 'man': 'HUMAN',
+                            'chairwoman': 'CHAIRMAN',
+                            'chair': 'CHAIR',
+                            'headmistress': 'HEADMASTER',
+                            'pen': 'PEN',
+                            'headmaster': 'HEADMASTER',
+                            'chairman': 'CHAIRMAN',
                             'nurse': 'NURSE',
                             'cat': 'CAT',
                             'dog': 'DOG',
@@ -157,9 +164,15 @@ class SetsGenerator:
                             'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT',
                             'camarera': 'WAITER', 'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES',
                             'sobrino': 'NIBLING', 'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN',
+                            'presidenta': 'CHAIRMAN',
+                            'headmistress': 'HEADMASTER',
+                            'pen': 'PEN',
+                            'headmaster': 'HEADMASTER',
+                            'presidente': 'CHAIRMAN',
                             'vaca': 'COW', 'toro': 'COW',
                             'gata': 'CAT',
                             'enfermera': 'NURSE', 'd': 'GIVE',
+                            'silla': 'CHAIR',
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
                             'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
                             'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
