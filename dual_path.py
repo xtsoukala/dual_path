@@ -356,8 +356,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=30)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=15)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=40)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
     parser.add_argument('-epochs', help='Number of train set iterations during training.', type=int, default=20)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'

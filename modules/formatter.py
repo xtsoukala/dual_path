@@ -100,10 +100,10 @@ class InputFormatter:
                  (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
         """
         pos = dict()
-        lexicon = ['']  # position 0 is almost never predicted! Check why
-        pos['NULL'] = [0]  # made-up POS for position 0 (empty string)
+        lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
+        pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
         prev_pos = ''
-        pos_start = pos_end = 1
+        pos_start = pos_end = 2
         for line in self._read_file_to_list(fname):
             if line.endswith(":"):  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
                 if prev_pos:

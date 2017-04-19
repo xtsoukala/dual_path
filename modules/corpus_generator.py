@@ -15,7 +15,7 @@ class SetsGenerator:
     """
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
-    def __init__(self, results_dir=None, allow_free_structure_production=False):
+    def __init__(self, results_dir=None, allow_free_structure_production=False, use_full_verb_form=False):
         if results_dir:
             self.results_dir = results_dir
         else:  # store under "generated/" if folder was not specified
@@ -27,7 +27,6 @@ class SetsGenerator:
         else:  # create if it doesn't exist
             os.makedirs(self.results_dir)
 
-        self.lexicon = {}
         # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point.
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
@@ -39,7 +38,7 @@ class SetsGenerator:
                                                        'hostess niece policewoman daughter aunt waitress chairwoman'
                                                        ' headmistress cow'.split(),
                                                   },
-                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen'.split()}
+                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
                                       },
                                   'verb': {'intrans': 'swim jump walk run arrive lie sneeze sit die eat'.split(),
                                            'trans': 'push hit kick carry'.split(),
@@ -47,13 +46,11 @@ class SetsGenerator:
                                   'aux': {'singular': {'present': 'is', 'past': 'was'},
                                           'plural': {'present': 'are', 'past': 'were'},
                                           },
-                                  'being': 'being',
                                   'ing': '-ing',
                                   'verb_suffix': {'present': '-s', 'past': '-ed'},
                                   'by': 'by',
                                   'to': 'to',
-                                  'per': '.',
-                                  'par': '-par'}  # , 'noun_plural': '-ss'}
+                                  }  # , 'noun_plural': '-ss'}
                            }
 
         self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'},
@@ -61,11 +58,13 @@ class SetsGenerator:
                                          },
                                   'pron': {'m': 'él', 'f': 'ella'},
                                   'noun': {'animate': {'m': 'niño padre hermano perro maestro act0r abuelo esposo '
-                                                            'sobrino policía hijo tío camarero toro'.split(),
+                                                            'sobrino policía hijo tío camarero toro director '
+                                                            'presidente'.split(),
                                                        'f': 'mujer niña madre hermana gata enfermera actríz abuela '
-                                                            'esposa sobrina policía hija tía camarera vaca'.split()},
-                                           'inanimate': {'m': 'palo juguete bolso'.split(),
-                                                         'f': 'pelota llave cometa'.split()}
+                                                            'esposa sobrina policía hija tía camarera vaca directora '
+                                                            'presidenta'.split()},
+                                           'inanimate': {'m': 'palo juguete bolso bolígrafo globo'.split(),
+                                                         'f': 'pelota llave cometa silla cartera'.split()}
                                            },
                                   'verb': {'intrans': 'nad salt camin corr dorm'.split(),
                                            'trans': 'empuj golpe pate llev'.split(),
@@ -76,9 +75,7 @@ class SetsGenerator:
                                   'ing': '-ando',
                                   'verb_suffix': {'present': '-a', 'past': '-ó'},
                                   'by': 'por',
-                                  'to': 'a_',
-                                  'per': '.',
-                                  'par': '_par'}  # ,'noun_plural': '-ss'}
+                                  'to': 'a_'}  # ,'noun_plural': '-ss'}
                            }
 
         self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
@@ -102,7 +99,6 @@ class SetsGenerator:
                                   'verb_suffix': {'present': '-ει', 'past': '-γε'},
                                   'by': 'από',
                                   'to': 'σ-',
-                                  'per': '.',
                                   'par': '-ται'}  # , 'noun_plural': '-ss'}
                            }
 
@@ -128,6 +124,7 @@ class SetsGenerator:
                             'cat': 'CAT',
                             'dog': 'DOG',
                             'teacher': 'TEACHER',
+                            'wallet': 'WALLET',
                              'give': 'GIVE',
                              'carry': 'CARRY',
                              'kick': 'KICK',
@@ -164,15 +161,13 @@ class SetsGenerator:
                             'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT',
                             'camarera': 'WAITER', 'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES',
                             'sobrino': 'NIBLING', 'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN',
-                            'presidenta': 'CHAIRMAN',
-                            'headmistress': 'HEADMASTER',
-                            'pen': 'PEN',
-                            'headmaster': 'HEADMASTER',
-                            'presidente': 'CHAIRMAN',
+                            'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN',
+                            'directora': 'HEADMASTER', 'director': 'HEADMASTER',
+                            'bolígrafo': 'PEN', 'silla': 'CHAIR',
+                            'cartera': 'WALLET',
                             'vaca': 'COW', 'toro': 'COW',
                             'gata': 'CAT',
                             'enfermera': 'NURSE', 'd': 'GIVE',
-                            'silla': 'CHAIR',
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
                             'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
                             'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
@@ -636,6 +631,6 @@ def calculate_number_of_sentences_per_set(num_sentences):
     return num_test, num_train
 
 if __name__ == "__main__":
-    sets = SetsGenerator()
+    sets = SetsGenerator(use_full_verb_form=True)
     sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)
