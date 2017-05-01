@@ -155,8 +155,8 @@ class DualPath:
             test_results = manager.dict()
 
         epoch = 0
-        while epoch <= self.epochs:  # start training for x epochs
-            if epoch % 10 == 0:  # check whether to save weights or not (only every 10 epochs)
+        while epoch < self.epochs:  # start training for x epochs
+            if epoch % 5 == 0:  # check whether to save weights or not (only every 5 epochs)
                 self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
@@ -182,6 +182,8 @@ class DualPath:
                 if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 1 epoch
                     self.srn.learn_rate -= self.lrate_decrease_step
             epoch += 1  # increase number of epochs, begin new iteration
+
+        self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
 
         if evaluate:
             for sim in test_results.values():
@@ -286,7 +288,7 @@ class DualPath:
                           else "in" if produced_sentence_idx != target_sentence_idx else "")
                 with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%s "
-                            "Meaning:%scorrect\n%s\n" %
+                            "Semantics:%scorrect\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
                              self.inputs.sentence_from_indeces(target_sentence_idx), code_switched, has_correct_pos,
                              not has_wrong_det, suffix, message))
@@ -406,9 +408,18 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
+    parser.add_argument('--simple-sem', dest='gendered_semantics', action='store_false',
+                        help='Produce simple concepts instead of combined ones (e.g., FATHER instead of PARENT+M)')
+    parser.set_defaults(gendered_semantics=True)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
+    parser.add_argument('--past', dest='ignore_past', action='store_false',
+                        help='Include past tense')
+    parser.set_defaults(ignore_past=True)
+    parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
+                        help='Use full lexeme for verbs instead of splitting into lemma/suffix')
+    parser.set_defaults(full_verb=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
@@ -422,7 +433,7 @@ if __name__ == "__main__":
 
     original_input_path = None  # keep track of the original input in case it was copied
     if args.input:  # generate a new set (unless "input" was also set)
-        if 'input' not in args.input:
+        if not os.path.exists(args.input) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
@@ -439,7 +450,9 @@ if __name__ == "__main__":
         from modules.corpus_generator import SetsGenerator
 
         args.input = "%s/input/" % results_dir
-        sets = SetsGenerator(results_dir=args.input, allow_free_structure_production=args.free_pos)
+        sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
+                             use_gendered_semantics=args.gendered_semantics,
+                             allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
                            include_bilingual_lexicon=True)
 
@@ -518,7 +531,8 @@ if __name__ == "__main__":
 
             if num_valid_simulations:  # take the average of results and plot
                 simulations_with_pron_err = len([simulation for simulation in valid_results
-                                                 if sum(simulation['pronoun_errors']['test']) > 0])
+                                                 if sum(simulation['pronoun_errors']['test']) > 0 or
+                                                 sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 plot = Plotter(results_dir=results_dir)
                 plot.plot_results(take_average_of_valid_results(valid_results), title=inputs.plot_title,

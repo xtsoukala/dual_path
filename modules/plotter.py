@@ -33,7 +33,7 @@ class Plotter:
         plt.savefig(fname)
         plt.close()
 
-        if results['mse']:
+        if not summary_sim and results['mse']:  # no need to plot an average of all the simulations
             mse_list = [np.mean(results['mse'][epoch], axis=0) for epoch in epochs]
             plt.plot(epochs, mse_list, color='darkslateblue', label='MSE')
             plt.xlabel('Epochs')
@@ -55,9 +55,11 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
-        if sum(results['pronoun_errors_flex']['test']) > 0:  # only plot if there's something to be plotted!
+        # only plot if there's something to be plotted!
+        if sum(results['pronoun_errors_flex']['test']) > 0 or sum(results['pronoun_errors']['test']) > 0:
             plt.plot(epochs[1:], results['pronoun_errors']['test'][1:], label='Subject pronoun errors')
             plt.plot(epochs[1:], results['pronoun_errors_flex']['test'][1:], linestyle='--')
+            plt.xlim(min(epochs[1:]), max(epochs))
             plt.xlabel('Epochs')
             plt.ylabel('Sum of subject pronoun errors')
             if summary_sim:
@@ -78,9 +80,10 @@ class Plotter:
                 percentage_pronoun_errors_flex = results['pronoun_errors_flex']['test']
             plt.plot(epochs[1:], percentage_pronoun_errors[1:])
             plt.plot(epochs[1:], percentage_pronoun_errors_flex[1:], linestyle='--')
+            plt.xlim(min(epochs[1:]), max(epochs))
             plt.xlabel('Epochs')
             plt.ylabel('Percentage (%) of subject pronoun errors in test set')
-            plt.ylim([0, 10])
+            plt.ylim([0, 15])
             if summary_sim:
                 fname = '%s/summary_%s_pronoun_errors_percentage.pdf' % (self.results_dir, summary_sim)
             else:

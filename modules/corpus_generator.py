@@ -15,19 +15,14 @@ class SetsGenerator:
     """
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
-    def __init__(self, results_dir=None, allow_free_structure_production=False, use_full_verb_form=False):
-        if results_dir:
-            self.results_dir = results_dir
-        else:  # store under "generated/" if folder was not specified
-            self.results_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-
+    def __init__(self, results_dir, use_gendered_semantics=True, allow_free_structure_production=False,
+                 use_full_verb_form=False, ignore_past=False):
+        self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
-            os.makedirs(self.results_dir)
-        else:  # create if it doesn't exist
-            os.makedirs(self.results_dir)
-
-        # Write the lexicon in a dict. Alternatively, we can load files but splitting is more efficient at this point.
+        os.makedirs(self.results_dir)
+        self.ignore_past_tense = ignore_past
+        self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
@@ -39,23 +34,18 @@ class SetsGenerator:
                                                        ' headmistress cow'.split(),
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
-                                      },
-                                  'verb': {'intrans': 'swim jump walk run arrive lie sneeze sit die eat'.split(),
-                                           'trans': 'push hit kick carry'.split(),
-                                           'double': 'give throw show present'.split()},
+                                  },
                                   'aux': {'singular': {'present': 'is', 'past': 'was'},
                                           'plural': {'present': 'are', 'past': 'were'},
                                           },
-                                  'ing': '-ing',
-                                  'verb_suffix': {'present': '-s', 'past': '-ed'},
                                   'by': 'by',
                                   'to': 'to',
-                                  }  # , 'noun_plural': '-ss'}
+                                  }
                            }
 
         self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'},
                                           'indef': {'m': 'un', 'f': 'una'},
-                                         },
+                                          },
                                   'pron': {'m': 'él', 'f': 'ella'},
                                   'noun': {'animate': {'m': 'niño padre hermano perro maestro act0r abuelo esposo '
                                                             'sobrino policía hijo tío camarero toro director '
@@ -66,145 +56,144 @@ class SetsGenerator:
                                            'inanimate': {'m': 'palo juguete bolso bolígrafo globo'.split(),
                                                          'f': 'pelota llave cometa silla cartera'.split()}
                                            },
-                                  'verb': {'intrans': 'nad salt camin corr dorm'.split(),
-                                           'trans': 'empuj golpe pate llev'.split(),
-                                           'double': 'd tir mostr present_'.split()},
                                   'aux': {'singular': {'present': 'está', 'past': 'estaba'},
                                           'plural': {'present': 'están', 'past': 'estaban'},
                                           },
-                                  'ing': '-ando',
-                                  'verb_suffix': {'present': '-a', 'past': '-ó'},
                                   'by': 'por',
-                                  'to': 'a_'}  # ,'noun_plural': '-ss'}
+                                  'to': 'a_'}
                            }
 
-        self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
-                                          'indef': {'m': 'ένας', 'f': 'μία', 'n': 'ένα'}},
-                                  'det-acc': {'m': 'τον', 'f': 'την', 'n': 'το'},
-                                  'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
-                                  'noun': {
-                                      'animate': {'m': 'άντρας πατέρας αδερφός σκύλος'.split(),
-                                                  'f': 'γυναίκα  μητέρα αδερφή γάτα'.split(),
-                                                  'n': 'αγόρι κορίτσι'.split()
-                                                  },
-                                      'inanimate': {'f': 'μπάλα τσάντα'.split(),
-                                                    'n': 'παιχνίδι κλειδί'.split(),
-                                                    'm': 'χαρταετός λοστός'.split()}
-                                  },
-                                  'verb': {'intrans': 'κολυμπά πηδά περπατά τρέχ'.split(),
-                                           'trans': 'σπρώχν χτυπά κλωτσά κουβαλά'.split(),
-                                           'double': 'δίν πετά δείχν παρουσιάζ'.split()},
-                                  'aux': {'singular': {'present': 'είναι', 'past': 'ήταν'},
-                                          'plural': {'present': 'είναι-', 'past': 'ήταν-'}},
-                                  'verb_suffix': {'present': '-ει', 'past': '-γε'},
-                                  'by': 'από',
-                                  'to': 'σ-',
-                                  'par': '-ται'}  # , 'noun_plural': '-ss'}
-                           }
+        if use_full_verb_form:
+            self.lexicon_en['en']['verb'] = {'intrans': {'simple': {'present': 'swims jumps walks runs arrives '
+                                                                               'sneezes dies eats'.split(),
+                                                                    'past': 'swam jumped walked ran arrived '
+                                                                            'sneezed died ate'.split()},
+                                                         'participle': 'swimming jumping walking running arriving '
+                                                                       'sneezing dying eating'.split()},
+                                             'trans': {'simple': {'present': 'pushes hits kicks carries'.split(),
+                                                                  'past': 'pushed hit kicked carried'.split()},
+                                                       'participle': 'pushing hitting kicking carrying'.split()},
+                                             'double': {'simple': {'present': 'gives throws shows presents'.split(),
+                                                                   'past': 'gave threw showed presented'.split()},
+                                                        'participle': 'giving throwing showing presenting'.split()}
+                                             }
+            self.lexicon_es['es']['verb'] = {'intrans': {'simple': {'present': 'nada salta camina corre llega '
+                                                                               'estornuda muere come'.split(),
+                                                                    'past': 'nadó saltó caminó corrió llegó '
+                                                                            'estornudó moría comía'.split()},
+                                                         'participle': 'nadando saltando camindando corriendo llegando '
+                                                                       'estornudando muriendo comiendo'.split()},
+                                             'trans': {'simple': {'present': 'empuja golpea patea lleva'.split(),
+                                                                  'past': 'empujó golpeó pateó llevó'.split()},
+                                                       'participle': 'empujando golpeando pateando llevando'.split()},
+                                             'double': {'simple': {'present': 'da tira muestra presenta'.split(),
+                                                                   'past': 'dio tiró mostró presentó'.split()},
+                                                        'participle': 'dando tirando mostrando presentando'.split()}
+                                             }
+        else:
+            self.lexicon_en['en']['verb'] = {'intrans': 'swim jump walk run arrive sneeze die eat'.split(),
+                                             'trans': 'push hit kick carry'.split(),
+                                             'double': 'give throw show present'.split()}
+            self.lexicon_en['en']['ing'] = '-ing'
+            self.lexicon_en['en']['verb_suffix'] = {'present': '-s', 'past': '-ed'}
+            # ES
+            self.lexicon_es['es']['verb'] = {'intrans': 'estornud nad salt camin corr dorm'.split(),
+                                             'trans': 'empuj golpe pate llev'.split(),
+                                             'double': 'd tir mostr present_'.split()}
+            self.lexicon_es['es']['ing'] = '-ando'
+            self.lexicon_es['es']['verb_suffix'] = {'present': '-a', 'past': '-ó'}
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
-        # semantic gender, which is a non language-specific concept.
-        # The syntactic genders "C(ommon)" is not included
-        self.concepts = {'M': 'M', 'F': 'F', 'N': 'N'}
-        # note that sister = SIBLING + F, brother = SIBLING + M, etc
-        self.concepts_en = {'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
-                            'mother': 'PARENT', 'father': 'PARENT',  'daughter': 'OFFSPRING', 'son': 'OFFSPRING',
-                            'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN', 'actress': 'ACTOR', 'actor': 'ACTOR',
-                            'wife': 'PARTNER', 'husband': 'PARTNER', 'hostess': 'HOST', 'host': 'HOST',
-                            'grandmother': 'GRANDPARENT', 'grandfather': 'GRANDPARENT',
-                            'waitress': 'WAITER', 'waiter': 'WAITER', 'aunt': 'UNCLES', 'uncle': 'UNCLES',
-                            'nephew': 'NIBLING', 'niece': 'NIBLING', 'woman': 'HUMAN', 'man': 'HUMAN',
-                            'chairwoman': 'CHAIRMAN',
-                            'chair': 'CHAIR',
-                            'headmistress': 'HEADMASTER',
-                            'pen': 'PEN',
-                            'headmaster': 'HEADMASTER',
-                            'chairman': 'CHAIRMAN',
-                            'nurse': 'NURSE',
-                            'cat': 'CAT',
-                            'dog': 'DOG',
-                            'teacher': 'TEACHER',
-                            'wallet': 'WALLET',
-                             'give': 'GIVE',
-                             'carry': 'CARRY',
-                             'kick': 'KICK',
-                             'run': 'RUN',
-                             'throw': 'THROW',
-                             'swim': 'SWIM',
-                             'walk': 'WALK',
-                             'jump': 'JUMP',
-                             'show': 'SHOW',
-                             'present': 'PRESENT',
-                             'hit': 'HIT',
-                             'push': 'PUSH',
-                             'bag': 'BAG',
-                             'ball': 'BALL',
-                             'kite': 'KITE',
-                             'toy': 'TOY',
-                             'stick': 'STICK',
-                             'key': 'KEY',
-                             'balloon': 'BALLOON',
-                            'sit': 'SIT',
-                            'sneeze': 'SNEEZE',
-                            'lie': 'LIE',
-                            'cow': 'COW',
-                            'eat': 'EAT',
-                            'arrive': 'ARRIVE',
-                            'bull': 'BULL',
-                            'die': 'DIE'
-                            }
+        # semantic gender, which is a non language-specific concept
+        self.concepts = {}
+        self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
+                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON'}
+        self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
+                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
+                            'pelota': 'BALL'}
+        if use_gendered_semantics:
+            self.concepts.update({'M': 'M', 'F': 'F', 'N': 'N'})
+            # note that sister = SIBLING + F, brother = SIBLING + M, etc
+            self.concepts_en.update({'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
+                                     'mother': 'PARENT', 'father': 'PARENT',  'daughter': 'OFFSPRING',
+                                     'son': 'OFFSPRING', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN',
+                                     'actress': 'ACTOR', 'actor': 'ACTOR', 'wife': 'PARTNER', 'husband': 'PARTNER',
+                                     'hostess': 'HOST', 'host': 'HOST', 'grandmother': 'GRANDPARENT',
+                                     'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
+                                     'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
+                                     'woman': 'HUMAN', 'man': 'HUMAN', 'chairwoman': 'CHAIRMAN', 'bull': 'BULL',
+                                     'headmistress': 'HEADMASTER', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
 
-        self.concepts_es = {'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD', 'ni\xc3\xb1a': 'CHILD',
-                            'madre': 'PARENT', 'padre': 'PARENT',  'hija': 'OFFSPRING', 'hijo': 'OFFSPRING',
-                            'policía': 'POLICEMAN', 'actriz': 'ACTOR', 'act0r': 'ACTOR',
-                            'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
-                            'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT',
-                            'camarera': 'WAITER', 'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES',
-                            'sobrino': 'NIBLING', 'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN',
-                            'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN',
-                            'directora': 'HEADMASTER', 'director': 'HEADMASTER',
-                            'bolígrafo': 'PEN', 'silla': 'CHAIR',
-                            'cartera': 'WALLET',
-                            'vaca': 'COW', 'toro': 'COW',
-                            'gata': 'CAT',
-                            'enfermera': 'NURSE', 'd': 'GIVE',
-                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'gato': 'CAT',
-                            'perro': 'DOG', 'palo': 'STICK', 'llave': 'KEY', 'maestro': 'TEACHER',
-                            'pelota': 'BALL', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'pate': 'KICK',
-                            'dorm': 'SLEEP', 'empuj': 'PUSH', 'tir': 'THROW', 'corr': 'RUN',
-                            'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'nad': 'SWIM', 'globo': 'BALLOON'}
+            self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
+                                     'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
+                                     'hijo': 'OFFSPRING', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
+                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
+                                     'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
+                                     'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
+                                     'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
+                                     'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMASTER',
+                                     'director': 'HEADMASTER', 'vaca': 'COW', 'toro': 'COW', 'gata': 'CAT',
+                                     'enfermera': 'NURSE', 'perro': 'DOG'})
+        else:
+            self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
+                                     'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
+                                     'son': 'SON', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEWOMAN',
+                                     'actress': 'ACTRESS', 'actor': 'ACTOR', 'wife': 'WIFE', 'husband': 'HUSBAND',
+                                     'hostess': 'HOSTESS', 'host': 'HOST', 'grandmother': 'GRANDMOTHER',
+                                     'grandfather': 'GRANDFATHER', 'waitress': 'WAITRESS', 'waiter': 'WAITER',
+                                     'aunt': 'AUNT', 'uncle': 'UNCLE', 'nephew': 'NEPHEW', 'niece': 'NIECE',
+                                     'woman': 'WOMAN', 'man': 'MAN', 'chairwoman': 'CHAIRWOMAN', 'bull': 'BULL',
+                                     'headmistress': 'HEADMISTRESS', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
 
-        self.concepts_el = {'σκυλί': 'DOG',
-                            'κουβαλά': 'CARRY',
-                            'άντρας': 'MAN',
-                            'γατί': 'CAT',
-                            'πετά': 'THROW',
-                            'μητέρα': 'MOTHER',
-                            'τσάντα': 'BAG',
-                            'κορίτσι': 'GIRL',
-                            'αδερφός': 'BROTHER',
-                            'πατέρας': 'FATHER',
-                            'παρουσιάζ': 'PRESENT',
-                            'κλειδί': 'KEY',
-                            'δείχν': 'SHOW',
-                            'αδερφή': 'SISTER',
-                            'αγόρι': 'BOY',
-                            'τρέχ': 'RUN',
-                            'δίν': 'GIVE',
-                            'χτυπά': 'HIT',
-                            'πηδά': 'JUMP',
-                            'μπάλα': 'BALL',
-                            'περπατά': 'WALK',
-                            'σπρώχν': 'PUSH',
-                            'γάτα': 'CAT',
-                            'παιχνίδι': 'TOY',
-                            'γυναίκα': 'WOMAN',
-                            'σκύλος': 'DOG',
-                            'κλωτσά': 'KICK',
-                            'κοιμάμαι': 'SLEEP',
-                            'λοστός': 'STICK',
-                            'χαρταετός': 'KITE',
-                            'κολυμπά': 'SWIM'}
+            self.concepts_es.update({'hermana': 'SISTER', 'hermano': 'BROTHER', 'ni\xc3\xb1o': 'BOY',
+                                     'ni\xc3\xb1a': 'GIRL', 'madre': 'MOTHER', 'padre': 'FATHER', 'hija': 'DAUGHTER',
+                                     'hijo': 'SON', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
+                                     'esposa': 'WIFE', 'esposo': 'HUSBAND', 'actríz': 'ACTRESS',
+                                     'abuela': 'GRANDMOTHER', 'abuelo': 'GRANDFATHER', 'camarera': 'WAITRESS',
+                                     'camarero': 'WAITER', 'tía': 'AUNT', 'tío': 'UNCLE', 'sobrino': 'NEPHEW',
+                                     'sobrina': 'NIECE', 'mujer': 'WOMAN', 'hombre': 'MAN', 'maestro': 'TEACHER',
+                                     'presidenta': 'CHAIRWOMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMISTRESS',
+                                     'director': 'HEADMASTER', 'vaca': 'COW', 'toro': 'BULL', 'gata': 'CAT',
+                                     'enfermera': 'NURSE', 'perro': 'DOG'})
+
+        if use_full_verb_form:
+            self.concepts_en.update({'eating': 'EAT', 'throwing': 'THROW', 'arrived': 'ARRIVE', 'kicked': 'KICK',
+                                     'giving': 'GIVE', 'running': 'RUN', 'pushing': 'PUSH', 'arrives': 'ARRIVE',
+                                     'arriving': 'ARRIVE', 'died': 'DIE', 'hits': 'HIT', 'gave': 'GIVE',
+                                     'kicks': 'KICK', 'dying': 'DIE', 'presented': 'PRESENT', 'hitting': 'HIT',
+                                     'showing': 'SHOW', 'threw': 'THROW', 'carried': 'CARRY', 'sneezing': 'SNEEZE',
+                                     'dies': 'DIE', 'kicking': 'KICK', 'swimming': 'SWIM', 'walking': 'WALK',
+                                     'ate': 'EAT', 'carrying': 'CARRY', 'jumping': 'JUMP', 'presents': 'PRESENT',
+                                     'presenting': 'PRESENT', 'showed': 'SHOW', 'pushes': 'PUSH', 'walked': 'WALK',
+                                     'throws': 'THROW', 'ran': 'RUN', 'shows': 'SHOW', 'gives': 'GIVE',
+                                     'pushed': 'PUSH', 'eats': 'EAT', 'hit': 'HIT', 'sneezes': 'SNEEZE',
+                                     'swims': 'SWIM', 'jumps': 'JUMP', 'jumped': 'JUMP', 'runs': 'RUN',
+                                     'walks': 'WALK', 'carries': 'CARRY', 'sneezed': 'SNEEZE', 'swam': 'SWIM'})
+
+            self.concepts_es.update({'llegando': 'ARRIVE', 'mostrando': 'SHOW', 'golpea': 'HIT',
+                                     'golpeando': 'HIT', 'camina': 'WALK', 'empujando': 'PUSH',
+                                     'mostró': 'SHOW', 'empujó': 'PUSH', 'muere': 'DIE', 'presenta': 'PRESENT',
+                                     'presentando': 'PRESENT', 'estornudó': 'SNEEZE', 'tirando': 'THROW',
+                                     'llevó': 'CARRY', 'patea': 'KICK', 'pateando': 'KICK',
+                                     'corriendo': 'RUN', 'camindando': 'WALK', 'golpeó': 'HIT',
+                                     'lleva': 'CARRY', 'tiró': 'THROW', 'dando': 'GIVE', 'empuja': 'PUSH',
+                                     'llevando': 'CARRY', 'muestra': 'SHOW', 'estornudando': 'SNEEZE',
+                                     'nadando': 'SWIM', 'come': 'EAT', 'dio': 'GIVE', 'llegó': 'ARRIVE',
+                                     'presentó': 'PRESENT', 'saltando': 'JUMP', 'llega': 'ARRIVE', 'pateó': 'KICK',
+                                     'nada': 'SWIM', 'da': 'GIVE', 'tira': 'THROW', 'comiendo': 'EAT',
+                                     'comía': 'EAT', 'moría': 'DIE', 'salta': 'JUMP', 'nadó': 'SWIM',
+                                     'estornuda': 'SNEEZE', 'corrió': 'RUN', 'muriendo': 'DIE',
+                                     'corre': 'RUN', 'saltó': 'JUMP', 'caminó': 'WALK'})
+        else:
+            self.concepts_en.update({'give': 'GIVE', 'carry': 'CARRY', 'kick': 'KICK', 'run': 'RUN', 'throw': 'THROW',
+                                     'swim': 'SWIM', 'walk': 'WALK', 'jump': 'JUMP', 'show': 'SHOW',
+                                     'present': 'PRESENT', 'hit': 'HIT', 'push': 'PUSH', 'sneeze': 'SNEEZE',
+                                     'die': 'DIE', 'eat': 'EAT', 'arrive': 'ARRIVE'})
+            self.concepts_es.update({'d': 'GIVE', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'nad': 'SWIM',
+                                     'pate': 'KICK', 'dorm': 'SLEEP', 'empuj': 'PUSH', 'tir': 'THROW', 'corr': 'RUN',
+                                     'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'estornud': 'SNEEZE'})
 
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
         self.target_lang = []
@@ -212,7 +201,43 @@ class SetsGenerator:
 
         self.structures = []
         self.num_structures = None
-        if allow_free_structure_production:
+        if use_full_verb_form:
+            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=EN,PROG'],
+                                  ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=EN,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::trans::participle det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
+                                  ['det noun::animate verb::trans::simple det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::double::participle '
+                                   'det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                  ['det noun::animate aux::singular verb::double::participle det noun::animate '
+                                   'det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                  ['det noun::animate verb::double::simple det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate verb::double::simple det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
+                                  ]
+
+            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=ES,PROG'],
+                                  ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::trans::participle det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate verb::trans::simple det noun',
+                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate aux::singular verb::double::participle '
+                                   'det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
+                                  ['det noun::animate aux::singular verb::double::participle '
+                                   'to det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate verb::double::simple det noun::inanimate to det noun::animate',
+                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate verb::double::simple to det noun::animate det noun::inanimate',
+                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
+                                  ]
+        else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans ing det noun',
@@ -248,114 +273,13 @@ class SetsGenerator:
                                   ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
-        else:
+        if not allow_free_structure_production:
             self.event_sem.extend(['AGT', 'PAT', 'REC'])
-            self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG,AGT'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'],
-                                  # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
-                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE,AGT'],
-
-                                  ['det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG,AGT,PAT'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  ['det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,AGT,PAT'],
-
-                                  ['det noun::animate aux::singular verb::double ing '
-                                   'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,-1,REC'],
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,PAT,REC'],
-                                  [
-                                  'det noun::animate aux::singular verb::double ing det noun::animate '
-                                  'det noun::inanimate',
-                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,AGT,PAT,REC'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  [
-                                  'det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,-1,REC'],
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,PAT,REC'],
-                                  ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,AGT,PAT,REC'],
-
-                                  # !['det noun aux::singular verb::trans par by det noun::animate',
-                                  # !'PATIENT=;ACTION=;AGENT=;E=EN,SIMPLE,-1,AGT,PAT')
-                                  ]
-
-            self.structures_es = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,AGT,PROG'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'],
-                                  # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
-                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,AGT,SIMPLE'],
-
-                                  ['det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG,AGT,PAT'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  ['det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE,AGT,PAT'],
-
-                                  ['det noun::animate aux::singular verb::double ing det noun::inanimate '
-                                   'to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,-1,REC'],
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG,AGT,PAT,REC'],
-                                  ['det noun::animate aux::singular verb::double ing '
-                                   'to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG,AGT,PAT,REC'],
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  [
-                                  'det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                  'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,-1,REC'],
-                                  # 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
-                                  [
-                                  'det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                                  'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
-
-                                  # !['det noun aux::singular verb::trans par by det noun::animate',
-                                  # ! 'PATIENT=;ACTION=;AGENT=;E=ES,SIMPLE,-1,AGT,PAT')
-                                  ]
-
-            self.structures_el = [# ('det::def noun::animate noun_plural aux::plural verb::intrans ing',
-                                  # 'AGENT=;ACTION=;E=EN,PROG'],
-                                  # ('det::def noun::animate noun_plural verb::intrans',
-                                  # 'AGENT=;ACTION=;E=EN,SIMPLE,PRESENT'],
-                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EL,AGT,SIMPLE'],
-
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  ['det noun::animate verb::trans verb_suffix det-acc noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EL,SIMPLE,AGT,PAT'],
-
-                                  # ('det::def noun::animate noun_plural aux::plural verb::trans ing det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,PROG,PAT'],
-                                  # ('det::def noun::animate noun_plural verb::trans det noun',
-                                  # 'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE,PRESENT,PAT'],
-                                  ['det noun::animate verb::double verb_suffix det-acc noun::inanimate '
-                                   'to det-acc noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EL,SIMPLE,AGT,PAT,-1,REC'],
-                                  #'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE,AGT,PAT,REC'],
-                                  ['det noun::animate verb::double verb_suffix to det-acc noun::animate '
-                                   'det-acc noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EL,SIMPLE,AGT,PAT,REC'],
-
-                                  #['det noun verb::trans par by det-acc noun::animate',
-                                  # 'PATIENT=;ACTION=;AGENT=;E=EL,SIMPLE,-1,AGT,PAT')
-                                  ]
+            additions = [',AGT', ',AGT', ',AGT,PAT', ',AGT,PAT', ',AGT,PAT,REC', ',AGT,-1,PAT,REC',
+                         ',AGT,PAT,REC', ',AGT,-1,PAT,REC']
+            for i in range(len(additions)):
+                self.structures_en[i][1] += additions[i]
+                self.structures_es[i][1] += additions[i]
 
     def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_pronoun, percentage_l2=50,
                       print_sets=False):
@@ -380,16 +304,12 @@ class SetsGenerator:
         self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
                                 percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
 
-        if include_bilingual_lexicon and "el" in lang:
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_el)
-            self.target_lang.extend(['EN', 'EL'])
-            self.concepts.update(self.concepts_en)
-        elif include_bilingual_lexicon and "es" in lang:  # print bilingual EN ES lexicon
+        if include_bilingual_lexicon:
             self.lexicon = self.lexicon_en.copy()
             self.lexicon.update(self.lexicon_es)
             self.target_lang.extend(['EN', 'ES'])
             self.concepts.update(self.concepts_en)
+            self.concepts.update(self.concepts_es)
         self.print_lexicon(self.lexicon)
 
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
@@ -421,18 +341,6 @@ class SetsGenerator:
             structures = self.structures_en
             self.lexicon = self.lexicon_en
             self.target_lang = ['EN']
-            self.concepts.update(self.concepts_en)
-        elif lang == 'el':
-            structures = self.structures_el
-            self.lexicon = self.lexicon_el
-            self.target_lang = ['EL']
-            self.concepts.update(self.concepts_el)
-        elif "el" in lang and "en" in lang:
-            structures = self.structures_en + self.structures_el
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_el)
-            self.target_lang.extend(['EL', 'EN'])
-            self.concepts.update(self.concepts_el)
             self.concepts.update(self.concepts_en)
         else:  # the default mode is the Bilingual English-Spanish model
             structures = self.structures_en + self.structures_es
@@ -486,9 +394,13 @@ class SetsGenerator:
             add_det = False
             gender = None
             for pos in pos_full.split():
-                if '::' in pos:  # 2 levels
-                    part, level = pos.split("::")
-                    syn = lexicon[lang][part][level]
+                if '::' in pos:
+                    if len(pos.split('::')) == 2:
+                        part, level = pos.split("::")
+                        syn = lexicon[lang][part][level]
+                    else:
+                        part, level, sublevel = pos.split("::")
+                        syn = lexicon[lang][part][level][sublevel]
                 else:
                     level = ''
                     syn = lexicon[lang][pos]
@@ -501,6 +413,8 @@ class SetsGenerator:
                         message[msg_idx] += "," + random_key   # def/indef info
                         determiners = syn[random_key]
                     elif random_key in ['past', 'present']:
+                        if self.ignore_past_tense:
+                            random_key = 'present'
                         message[-1] += "," + random_key
                     elif random_key in ['m', 'f', 'n', 'c']:
                         random_key = gender  # gender = random_key
@@ -542,14 +456,17 @@ class SetsGenerator:
                             message[msg_idx] += "," + gender.upper()
                         if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
-                            #message[0] = re.sub("=,", '=', message[0])
                             add_det = False
                             # add pronoun
                             sentence.append(lexicon[lang]['pron'][gender])
-                        elif add_det or np[sen_idx]:
-                            if type(determiners) is dict:
-                                sentence.append(determiners[gender])
+                        elif add_det:
+                            sentence.append(determiners[gender])
                             add_det = False  # reset
+                            sentence.append(random_word)
+                        elif np[sen_idx]:
+                            if add_det:
+                                sentence.append(determiners[gender])
+                                add_det = False  # reset
                             sentence.append(random_word)
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
@@ -631,6 +548,8 @@ def calculate_number_of_sentences_per_set(num_sentences):
     return num_test, num_train
 
 if __name__ == "__main__":
-    sets = SetsGenerator(use_full_verb_form=True)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_pronoun=50,
+    # store under "generated/" if folder was not specified
+    res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True)
+    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_pronoun=50,
                        percentage_l2=50, print_sets=True)

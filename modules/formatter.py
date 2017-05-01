@@ -233,15 +233,18 @@ class InputFormatter:
         return np.true_divide(x[-1] * 100, self.num_test) > threshold
 
 
-def take_average_of_valid_results(v_results):
-    results = {}
-    for d in v_results:
-        for k, v in d.iteritems():
-            if k not in results:
-                results[k] = {}
-            for s, j in v.iteritems():
-                if s not in results[k]:
-                    results[k][s] = np.array(j)
-                else:
-                    results[k][s] = np.true_divide(map(add, results[k][s], j), 2)
-    return results
+def take_average_of_valid_results(valid_results):
+    results_average = {}
+    for key in valid_results[0].keys():
+        results_average[key] = {'train': [], 'test': []}
+        for simulation in valid_results:
+            for t in ['train', 'test']:
+                if results_average[key][t] != []:
+                    results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
+                elif t in simulation[key]:
+                    results_average[key][t] = simulation[key][t]
+    # now average over all simulations
+    for key, v in results_average.items():
+        for t in ['train', 'test']:
+            results_average[key][t] = np.true_divide(v[t], len(valid_results))
+    return results_average
