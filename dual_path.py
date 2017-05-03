@@ -29,7 +29,7 @@ class DualPath:
         :param epochs: Number of train set iterations during training
         :param compress_size: Size of the compress layers (approximatelly hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
-        :param srn_debug_mess: Whether to print debug messages during training
+        :param srn_debug_mess: Whether to show debug messages during training
         :param test_every: Test network every x epochs
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)

@@ -166,6 +166,9 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = np.zeros(layer.size)  # set role_copy to zero
                 continue
+            """print layer.name
+            print "In activation:", layer.in_activation
+            print "In weights:", layer.in_weights, '\n====\n'"""
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
                 layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
@@ -363,8 +366,10 @@ def tanh_derivative(x, input_activation=False):
 
 
 def softmax(x):
-    """ Compute softmax values for each sets of scores in x. Following Chang's advice, normalize by rounding to 4 """
-    return np.round(np.true_divide(np.exp(x), np.sum(np.exp(x), axis=0)), 4)
+    """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
+    will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
+    normalized_x = x - x.min()
+    return np.round(np.true_divide(np.exp(normalized_x), np.sum(np.exp(normalized_x), axis=0)), 4)
 
 
 def softmax_derivative(x):
