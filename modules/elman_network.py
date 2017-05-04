@@ -166,9 +166,6 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = np.zeros(layer.size)  # set role_copy to zero
                 continue
-            """print layer.name
-            print "In activation:", layer.in_activation
-            print "In weights:", layer.in_weights, '\n====\n'"""
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
                 layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
