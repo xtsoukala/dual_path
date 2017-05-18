@@ -363,18 +363,19 @@ class SetsGenerator:
     def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
                            return_mess=False, print_sets=False):
         """
-        :param sentence_structures: list of allowed structures for sentences
-        :param lexicon: dict that contains words with syntactic labeling
-        :param fname: filename with results
+        :param sentence_structures: list of allowed structures for the generated sentences
+        :param lexicon: dict that contains words (with syntactic labeling)
+        :param fname: filename where results will be stored
         :param percentage_pronoun: percentage of pronouns vs NPs in subject position
         :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
-        :param return_mess: 
-        :param print_sets: 
+        :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
+        :param print_sets: whether to print results on screen apart from just saving them
         :return:
         """
-        # determine how often we will use NPs vs determiners
+        generated_sentences = []  # keep track of generated sentences
         num_sentences = len(sentence_structures)
 
+        # determine how often we will use NPs vs determiners
         if not percentage_pronoun:  # full NPs
             np = [1] * num_sentences
         else:  # any other percentage
@@ -492,9 +493,10 @@ class SetsGenerator:
             message = re.sub(r",,", ",", message)
             message = re.sub(r"=,", "=", message)
 
-            if message in exclude_test_sentences:
+            if message in (exclude_test_sentences or generated_sentences):
                 sentence_structures.append((pos_full, mes))  # find unique sentence, don't add it to the train set
             else:
+                generated_sentences.append(message)
                 sen_idx += 1
                 if print_sets:
                     print u"%s## %s" % (sentence, message)
@@ -551,5 +553,5 @@ if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True)
-    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_pronoun=50,
+    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_pronoun=0,
                        percentage_l2=50, print_sets=True)
