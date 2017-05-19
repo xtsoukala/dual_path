@@ -21,6 +21,7 @@ class Plotter:
         plt.plot(epochs, [percentage(x, num_test) for x in results['correct_pos']['test']],
                  color='deepskyblue', label='test POS')
         plt.ylim([0, 100])
+        plt.xlim(min(epochs), max(epochs))
         plt.xlabel('Epochs')
         plt.ylabel('Percentage correct (%)')
         if title:
@@ -48,6 +49,7 @@ class Plotter:
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
             plt.ylim([0, 80])
+            plt.xlim(min(epochs), max(epochs))
             if summary_sim:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
             else:
