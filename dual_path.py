@@ -479,7 +479,7 @@ if __name__ == "__main__":
                  args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
-                            concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
+                            role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
                             emphasis=args.emphasis, prodrop=args.prodrop, trainset=args.trainset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)

@@ -336,7 +336,9 @@ def input_sd(number_of_inputs):
     """
     As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
     """
-    return np.true_divide(1.0, number_of_inputs)
+    #return np.true_divide(1.0, number_of_inputs)
+    # or: https://stats.stackexchange.com/questions/47590/what-are-good-initial-weights-in-a-neural-network
+    return np.true_divide(1.0, np.sqrt(number_of_inputs))
 
 
 def convert_range(matrix, min_val=-0.9, max_val=0.9):

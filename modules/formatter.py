@@ -3,20 +3,19 @@ import re
 import os
 import itertools
 import pickle
-import random
-from operator import add
 from elman_network import np
+import word2vec
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
+    def __init__(self, results_dir, input_dir, lex_fname, role_fname, evsem_fname, fixed_weights,
                  fixed_weights_identif, exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop,
                  plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
-        self.concepts = self._read_file_to_list(concept_fname)
-        self.identif = self._read_file_to_list('identifiability.in')
+        self.concepts = word2vec.load('word2vec/text8.bin')
+        self.identif = []
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
         self.event_semantics = self._read_file_to_list(evsem_fname)
