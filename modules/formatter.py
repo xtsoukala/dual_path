@@ -81,7 +81,7 @@ class InputFormatter:
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:
-            lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)
+            lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]
 
         return lines
 

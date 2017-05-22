@@ -410,9 +410,9 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
-    parser.add_argument('--simple-sem', dest='gendered_semantics', action='store_false',
+    parser.add_argument('--simple-sem', dest='simple_semantics', action='store_true',
                         help='Produce simple concepts instead of combined ones (e.g., FATHER instead of PARENT+M)')
-    parser.set_defaults(gendered_semantics=True)
+    parser.set_defaults(simple_semantics=False)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
@@ -453,7 +453,7 @@ if __name__ == "__main__":
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_gendered_semantics=args.gendered_semantics,
+                             use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
                            include_bilingual_lexicon=True)
