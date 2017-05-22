@@ -3,8 +3,6 @@ import re
 import os
 import itertools
 import pickle
-import random
-from operator import add
 from elman_network import np
 
 
@@ -196,7 +194,6 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
-        # increased_activaton = 2
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
@@ -209,7 +206,6 @@ class InputFormatter:
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
                         activation = reduced_activation
                         break
-                    # if event in ['PRESENT', 'PAST']: activation = increased_activaton
                     if event in self.languages:
                         if test_phase and self.exclude_lang:  # same activation for all languages
                             target_lang_activations = [0.5] * len(target_lang_activations)
@@ -239,7 +235,7 @@ def take_average_of_valid_results(valid_results):
         results_average[key] = {'train': [], 'test': []}
         for simulation in valid_results:
             for t in ['train', 'test']:
-                if results_average[key][t] != []:
+                if results_average[key][t] != []:  # do not simplify ( != [] )
                     results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
