@@ -280,7 +280,7 @@ class SetsGenerator:
                 self.structures_en[i][1] += additions[i]
                 self.structures_es[i][1] += additions[i]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_pronoun, percentage_l2=50,
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, percentage_l2=50,
                       print_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
@@ -298,10 +298,10 @@ class SetsGenerator:
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
         test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
-                                           percentage_pronoun=percentage_pronoun, print_sets=print_sets,
+                                           percentage_noun_phrase=percentage_noun_phrase, print_sets=print_sets,
                                            return_mess=True)
         self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
-                                percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
+                                percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set)
 
         if include_bilingual_lexicon:
             self.lexicon = self.lexicon_en.copy()
@@ -359,13 +359,13 @@ class SetsGenerator:
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
+    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_noun_phrase, exclude_test_sentences=[],
                            return_mess=False, print_sets=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param lexicon: dict that contains words (with syntactic labeling)
         :param fname: filename where results will be stored
-        :param percentage_pronoun: percentage of pronouns vs NPs in subject position
+        :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
         :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
         :param print_sets: whether to print results on screen apart from just saving them
@@ -375,11 +375,11 @@ class SetsGenerator:
         num_sentences = len(sentence_structures)
 
         # determine how often we will use NPs vs determiners
-        if not percentage_pronoun:  # full NPs
-            np = [1] * num_sentences
+        if not percentage_noun_phrase:  # use pronouns only
+            np = [0] * num_sentences
         else:  # any other percentage
-            number_determiners = num_sentences * percentage_pronoun / 100
-            np = number_determiners * [0] + (num_sentences - number_determiners) * [1]
+            number_np = num_sentences * percentage_noun_phrase / 100
+            np = number_np * [1] + (num_sentences - number_np) * [0]
             random.shuffle(np)
 
         # we can keep track of train sentences (messages) that are identical to test ones and exclude them
@@ -552,5 +552,5 @@ if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True)
-    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_pronoun=0,
+    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_noun_phrase=0,
                        percentage_l2=50, print_sets=True)
