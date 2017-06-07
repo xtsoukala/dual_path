@@ -8,8 +8,8 @@ from elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
-                 fixed_weights_identif, exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop,
-                 plot_title):
+                 fixed_weights_identif, exclude_lang, language, trainingset, testset, semantic_gender, emphasis, 
+                 prodrop, plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
@@ -23,7 +23,7 @@ class InputFormatter:
         self.emphasis_percentage = emphasis
         self.semantic_gender = semantic_gender
         self.testset = testset
-        self.trainset = trainset  # names of train and test set file names
+        self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
         self.num_train = len(self.trainlines)
         self.testlines = self.read_set(test=True)
@@ -42,7 +42,7 @@ class InputFormatter:
         self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
         self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
                             self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
-        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
+        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
         self.concept_size = len(self.concepts)
@@ -59,14 +59,14 @@ class InputFormatter:
     def read_set(self, set_name=None, test=False):
         """
         :param set_name: file name (optional)
-        :param test: if file name is not provided, we need to specify whether it's the testset (test=True) or trainset
+        :param test: if file name is not provided, we need to specify whether it's the testset (test=True) or trainingset
         :return:
         """
         if not set_name:
             if test:
                 set_name = self.testset
             else:
-                set_name = self.trainset
+                set_name = self.trainingset
         lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make pro-drop
@@ -232,15 +232,15 @@ class InputFormatter:
 def take_average_of_valid_results(valid_results):
     results_average = {}
     for key in valid_results[0].keys():
-        results_average[key] = {'train': [], 'test': []}
+        results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
-            for t in ['train', 'test']:
-                if results_average[key][t] != []:  # do not simplify ( != [] )
+            for t in ['training', 'test']:
+                if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
                     results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
     # now average over all simulations
     for key, v in results_average.items():
-        for t in ['train', 'test']:
+        for t in ['training', 'test']:
             results_average[key][t] = np.true_divide(v[t], len(valid_results))
     return results_average
