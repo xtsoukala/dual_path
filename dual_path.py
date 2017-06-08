@@ -22,7 +22,8 @@ class DualPath:
     role, concept and pred_concept units are unbiased to make them more input driven
     """
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size, role_copy,
-                 srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format, simulation_num=None):
+                 exclude_lang, srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format,
+                 simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -49,6 +50,7 @@ class DualPath:
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
         # |----------!PARAMS----------|
+        self.exclude_lang = exclude_lang
         self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
         self.set_weights_folder = set_weights_folder
@@ -113,8 +115,7 @@ class DualPath:
         produced_sent_ids = []
         sentence, message = line.split('## ')
         target_sentence_ids = self.inputs.sentence_indeces(sentence.split())
-        weights_role_concept, evsem_act, target_lang_act, message = \
-            self.inputs.get_message_info(message, test_phase=(not backpropagate))
+        weights_role_concept, evsem_act, target_lang_act, message = self.inputs.get_message_info(message)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, event_sem_activations=evsem_act,
                                            target_lang_act=target_lang_act)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
@@ -129,6 +130,9 @@ class DualPath:
                 prod_idx = trg_idx  # training with target word, NOT produced one
                 self.srn.backpropagate(epoch)
             else:  # no "target" word in this case. Also, return the produced sentence
+                # but first, reset the target language for the rest of the sentence
+                if self.exclude_lang and prod_idx is None:
+                    self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
@@ -484,10 +488,9 @@ if __name__ == "__main__":
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
-                            language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
-                            emphasis=args.emphasis, prodrop=args.prodrop, trainingset=args.trainingset,
-                            testset=args.testset, plot_title=args.title, fixed_weights=args.fw,
-                            fixed_weights_identif=args.fwi)
+                            language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
+                            prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
+                            plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
 
     if not args.final_lrate:
         args.final_lrate = args.lrate
@@ -497,7 +500,7 @@ if __name__ == "__main__":
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
-                         test_every=args.test_every, compress_size=args.compress,
+                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
                          input_format=inputs, momentum=args.momentum)
         dualp.train_network(shuffle_set=args.shuffle)
@@ -509,7 +512,7 @@ if __name__ == "__main__":
             inputs.results_dir = rdir
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
-                             test_every=args.test_every, compress_size=args.compress,
+                             test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_format=inputs)
             process = Process(target=dualp.train_network, args=(args.shuffle, ))

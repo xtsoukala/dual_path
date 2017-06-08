@@ -8,7 +8,7 @@ from elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
-                 fixed_weights_identif, exclude_lang, language, trainingset, testset, semantic_gender, emphasis, 
+                 fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis,
                  prodrop, plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
@@ -39,7 +39,7 @@ class InputFormatter:
         self.to_preposition_idx = self.lexicon.index('to')
         # the verb suffix -ó is the first entry in the ES lexicon
         self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
-        self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
+        self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]
         self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
                             self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
@@ -51,7 +51,6 @@ class InputFormatter:
 
         self.plot_title = plot_title
         self.lang = language
-        self.exclude_lang = exclude_lang
 
     def _number_of_test_pronouns(self):
         return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
@@ -185,12 +184,10 @@ class InputFormatter:
             sentence_idx = sentence_idx[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
     
-    def get_message_info(self, message, test_phase=False):
-        """
-        :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-        E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
-        gives information about the event-semantics (E)
-        :param test_phase: Set to True during evaluation and False during training
+    def get_message_info(self, message):
+        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
+                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+                            gives information about the event-semantics (E)
         """
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
@@ -207,10 +204,7 @@ class InputFormatter:
                         activation = reduced_activation
                         break
                     if event in self.languages:
-                        if test_phase and self.exclude_lang:  # same activation for all languages
-                            target_lang_activations = [0.5] * len(target_lang_activations)
-                        else:
-                            target_lang_activations[self.languages.index(event)] = activation
+                        target_lang_activations[self.languages.index(event)] = activation
                     else:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
