@@ -443,7 +443,7 @@ if __name__ == "__main__":
 
     original_input_path = None  # keep track of the original input in case it was copied
     if args.input:  # generate a new set (unless "input" was also set)
-        if not os.path.exists(args.input) and 'input' not in args.input:
+        if not os.path.isfile(os.path.join(args.input, "test.%s" % args.lang)) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir

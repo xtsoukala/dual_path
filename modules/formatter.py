@@ -58,7 +58,7 @@ class InputFormatter:
     def read_set(self, set_name=None, test=False):
         """
         :param set_name: file name (optional)
-        :param test: if file name is not provided, we need to specify whether it's the testset (test=True) or trainingset
+        :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
         :return:
         """
         if not set_name:

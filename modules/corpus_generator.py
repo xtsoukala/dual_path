@@ -201,7 +201,8 @@ class SetsGenerator:
         self.structures = []
         self.num_structures = None
         if use_full_verb_form:
-            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=EN,PROG'],
+            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle',
+                                   'AGENT=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
@@ -219,7 +220,8 @@ class SetsGenerator:
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
-            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=ES,PROG'],
+            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle',
+                                   'AGENT=;ACTION=;E=ES,PROG'],
                                   ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
@@ -249,8 +251,8 @@ class SetsGenerator:
                                   ['det noun::animate aux::singular verb::double ing det noun::animate '
                                    'det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
                                   ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
@@ -267,10 +269,10 @@ class SetsGenerator:
                                   ['det noun::animate aux::singular verb::double ing '
                                    'to det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate'
+                                      , 'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         if not allow_free_structure_production:
             self.event_sem.extend(['AGT', 'PAT', 'REC'])
@@ -284,12 +286,11 @@ class SetsGenerator:
                       print_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
-        :param lang: language code, leave None for bilingual es-en
+        :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
-        :param percentage_pronoun: percentage of pronouns vs Noun Phrases (NPs)
-        :param percentage_l2: percentage of L2 (usually English) vs L1
-        :param print_sets:
-        :return:
+        :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns
+        :param percentage_l2: percentage of L2 (e.g., English) vs L1
+        :param print_sets: whether to print results on screen or just save in file
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
         self.get_structures_and_lexicon(lang)
@@ -366,7 +367,7 @@ class SetsGenerator:
         :param lexicon: dict that contains words (with syntactic labeling)
         :param fname: filename where results will be stored
         :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
-        :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
+        :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
         :param print_sets: whether to print results on screen apart from just saving them
         :return:
@@ -551,6 +552,6 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True)
-    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_noun_phrase=0,
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True)
+    sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, percentage_noun_phrase=10,
                        percentage_l2=50, print_sets=True)
