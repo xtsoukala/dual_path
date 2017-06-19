@@ -16,8 +16,8 @@ class SetsGenerator:
     """
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
-    def __init__(self, results_dir, use_simple_semantics=False, allow_free_structure_production=False,
-                 use_full_verb_form=False, ignore_past=False):
+    def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
+                 ignore_past):
         self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
@@ -563,6 +563,7 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True)
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
+                         allow_free_structure_production=False, ignore_past=True)
     sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, percentage_noun_phrase=10,
                        percentage_l2=50, add_filler=True, print_sets=True)
