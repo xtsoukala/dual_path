@@ -6,6 +6,7 @@ import codecs
 from datetime import datetime
 import sys
 import pickle
+from copy import deepcopy
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
@@ -40,6 +41,7 @@ class SetsGenerator:
                                           },
                                   'by': 'by',
                                   'to': 'to',
+                                  'filler': 'actually'
                                   }
                            }
 
@@ -60,7 +62,8 @@ class SetsGenerator:
                                           'plural': {'present': 'están', 'past': 'estaban'},
                                           },
                                   'by': 'por',
-                                  'to': 'a_'}
+                                  'to': 'a_',
+                                  'filler': 'pues'}
                            }
 
         if use_full_verb_form:
@@ -282,14 +285,15 @@ class SetsGenerator:
                 self.structures_en[i][1] += additions[i]
                 self.structures_es[i][1] += additions[i]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, percentage_l2=50,
-                      print_sets=False):
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, add_filler,
+                      percentage_l2=50, print_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
         :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns
         :param percentage_l2: percentage of L2 (e.g., English) vs L1
+        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
         :param print_sets: whether to print results on screen or just save in file
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
@@ -300,9 +304,10 @@ class SetsGenerator:
 
         test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
                                            percentage_noun_phrase=percentage_noun_phrase, print_sets=print_sets,
-                                           return_mess=True)
+                                           return_mess=True, add_filler=add_filler)
         self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
-                                percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set)
+                                percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set,
+                                add_filler=add_filler)
 
         if include_bilingual_lexicon:
             self.lexicon = self.lexicon_en.copy()
@@ -354,20 +359,23 @@ class SetsGenerator:
         self.num_structures = len(self.structures)
 
     def generate_sentence_structures(self, num_sentences):
-        sentence_structures = self.structures * (num_sentences / self.num_structures)
+        sentence_structures = []
+        for i in range(num_sentences / self.num_structures):
+            sentence_structures += deepcopy(self.structures)
         for m in range(num_sentences % self.num_structures):  # runs if sentence_structures < num_sentences
-            sentence_structures.append(self.structures[random.randint(0, self.num_structures - 1)])
+            sentence_structures.append(deepcopy(self.structures[random.randint(0, self.num_structures - 1)]))
         random.shuffle(sentence_structures)
         return sentence_structures
 
     def generate_sentences(self, sentence_structures, lexicon, fname, percentage_noun_phrase, exclude_test_sentences=[],
-                           return_mess=False, print_sets=False):
+                           add_filler=True, return_mess=False, print_sets=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param lexicon: dict that contains words (with syntactic labeling)
         :param fname: filename where results will be stored
         :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
         :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
+        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
         :param print_sets: whether to print results on screen apart from just saving them
         :return:
@@ -383,6 +391,9 @@ class SetsGenerator:
             np = number_np * [1] + (num_sentences - number_np) * [0]
             random.shuffle(np)
 
+        if add_filler:
+            for s in range(num_sentences):
+                sentence_structures[s][0] = "filler %s" % sentence_structures[s][0]
         # we can keep track of train sentences (messages) that are identical to test ones and exclude them
         full_mess = []
         # now select words according to structure
@@ -554,4 +565,4 @@ if __name__ == "__main__":
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True)
     sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, percentage_noun_phrase=10,
-                       percentage_l2=50, print_sets=True)
+                       percentage_l2=50, add_filler=True, print_sets=True)

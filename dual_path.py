@@ -418,9 +418,9 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
-    parser.add_argument('--simple-sem', dest='simple_semantics', action='store_true',
-                        help='Produce simple concepts instead of combined ones (e.g., FATHER instead of PARENT+M)')
-    parser.set_defaults(simple_semantics=False)
+    parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
+                        help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
+    parser.set_defaults(simple_semantics=True)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
@@ -434,6 +434,9 @@ if __name__ == "__main__":
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
+    parser.add_argument('--filler', dest='filler', action='store_true',
+                        help='Add filler word ("actually", "pues") at the beginning of the sentence')
+    parser.set_defaults(filler=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -464,7 +467,7 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_noun_phrase=args.np,
-                           include_bilingual_lexicon=True)
+                           add_filler=args.filler, include_bilingual_lexicon=True)
 
     if not args.trainingset:
         args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
