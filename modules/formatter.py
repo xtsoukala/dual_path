@@ -53,7 +53,8 @@ class InputFormatter:
         self.lang = language
 
     def _number_of_test_pronouns(self):
-        return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
+        regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
+        return len([line for line in self.testlines if regexp.search(line)])
 
     def read_set(self, set_name=None, test=False):
         """
@@ -61,6 +62,7 @@ class InputFormatter:
         :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
         :return:
         """
+
         if not set_name:
             if test:
                 set_name = self.testset
@@ -74,9 +76,9 @@ class InputFormatter:
                 num_emphasized = len(es_line_idx) * self.emphasis_percentage / 100
                 for es_idx in np.random.choice(es_line_idx, num_emphasized, replace=False):
                     lines[es_idx] = lines[es_idx].replace('AGENT=', 'AGENT=EMPH,')
-                lines = [re.sub(r'^(él|ella) ', '', line) if 'EMPH,' not in line else line for line in lines]
+                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) if 'EMPH,' not in line else line for line in lines]
             else:
-                lines = [re.sub(r'(él|ella) ', '', line) for line in lines]
+                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) for line in lines]
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:

@@ -275,9 +275,8 @@ class DualPath:
                         num_correct_meaning += 1
 
                 if check_pron:  # only check the grammatical sentences
-                    has_pronoun_error = self.has_pronoun_error(produced_sentence_idx, target_sentence_idx)
                     has_correct_meaning = self.test_rest_of_meaning(produced_sentence_idx, target_sentence_idx)
-                    if has_pronoun_error:
+                    if self.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
                         if has_correct_meaning:
                             num_pron_err += 1
                         else:
