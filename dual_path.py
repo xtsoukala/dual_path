@@ -174,12 +174,14 @@ class DualPath:
                 subprocesses = []
                 # test set
                 subprocess = Process(target=self.evaluate_network, args=(test_results, epoch, self.inputs.testlines,
-                                                                         self.inputs.num_test, self.check_pronouns))
+                                                                         self.inputs.num_test,
+                                                                         self.check_pronouns if epoch > 0 else False))
                 subprocess.start()
                 subprocesses.append(subprocess)
                 # training set
                 subprocess = Process(target=self.evaluate_network, args=(train_results, epoch, self.inputs.trainlines,
-                                                                         self.inputs.num_train, self.check_pronouns,
+                                                                         self.inputs.num_train,
+                                                                         self.check_pronouns if epoch > 0 else False,
                                                                          False))
                 subprocess.start()
                 subprocesses.append(subprocess)
