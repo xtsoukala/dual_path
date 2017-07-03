@@ -66,6 +66,30 @@ class SetsGenerator:
                                   'filler': 'pues'}
                            }
 
+        self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
+                                          'indef': {'m': 'ένας', 'f': 'μία', 'n': 'ένα'},
+                                          },
+                                  'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
+                                  'noun': {'animate': {'m': 'αγόρι πατέρας αδερφός σκύλος δάσκαλος ηθοποιός παππούς '
+                                                            'άντρας ανηψιός αστυνομικός γιός θείος σερβιτόρος διεθυντής'
+                                                            'πρόεδρος '
+                                                            'ταύρος'.split(),
+                                                       'f': 'γυναίκα κορίτσι μητέρα αδερφή νοσοκόμα ηηθοποιός γιαγιά '
+                                                            'σύζυγος ανηψιά αστυνομικίνα κόρη θεία σερβιτόρα '
+                                                            'διευθύντρια ηπρόεδρος'
+                                                            'γάτα αγελάδα'.split()},
+                                           'inanimate': {'n': 'ραβδί παιχνίδι στυλό μπαλόνι κλειδί πορτοφόλι'.split(),
+                                                         'f': 'τσάντα μπάλα καρέκλα'.split(),
+                                                         'm': 'χαρταετός'}
+                                           },
+                                  'aux': {'singular': {'present': 'είναι', 'past': 'ήταν'},
+                                          'plural': {'present': 'είναι', 'past': 'ήταν'},
+                                          },
+                                  'by': 'από',
+                                  'to': 'στ',
+                                  'filler': 'επομένως'}
+                           }
+
         if use_full_verb_form:
             self.lexicon_en['en']['verb'] = {'intrans': {'simple': {'present': 'swims jumps walks runs arrives '
                                                                                'sneezes dies eats'.split(),
@@ -105,6 +129,11 @@ class SetsGenerator:
                                              'double': 'd tir mostr present_'.split()}
             self.lexicon_es['es']['ing'] = '-ando'
             self.lexicon_es['es']['verb_suffix'] = {'present': '-a', 'past': '-ó'}
+            # EL
+            self.lexicon_en['el']['verb'] = {'intrans': 'κολυμπά πηδά παρπατά τρέχ φτάν πεθαίν τρώ'.split(),
+                                             'trans': 'σπρώσχν χτυπά γλωτσά κουβαλά'.split(),
+                                             'double': 'δίν ρίχν δείχν παρουσιάζ'.split()}
+            self.lexicon_en['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
         # semantic gender, which is a non language-specific concept
