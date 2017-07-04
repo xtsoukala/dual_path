@@ -15,7 +15,7 @@ class InputFormatter:
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
         self.concepts = word2vec.load('word2vec/text8.bin')
-        self.identif = []
+        self.identif = ['PRON', 'DEF', 'INDEF']
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
         self.event_semantics = self._read_file_to_list(evsem_fname)
@@ -41,12 +41,11 @@ class InputFormatter:
         # the verb suffix -ó is the first entry in the ES lexicon
         self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
         self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
-        self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
-                            self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
+        self.determiners = [self.lexicon.index('a'), self.lexicon.index('the')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
-        self.concept_size = len(self.concepts)
+        self.concept_size = self.concepts['dog'].size  # concepts.__sizeof__()
         self.identif_size = len(self.identif)
         self.roles_size = len(self.roles)
 
@@ -82,7 +81,7 @@ class InputFormatter:
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:
-            lines = re.sub(',(M|F)(,|;|$)', r'\2', lines)
+            lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]  # re.sub(',(M|F)(,|;|$)', r'\2', lines)
 
         return lines
 
@@ -98,7 +97,6 @@ class InputFormatter:
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
                  (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
         """
-        pos = dict()
         lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
         pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
         prev_pos = ''
@@ -218,14 +216,19 @@ class InputFormatter:
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
             else:
-                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
-                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
+                #  the weight activations between the role and the concepts are the activation values of that certain
+                #  concept. E.g. if the role is DOG, and the 1st node of 'dog' is 0.08 then the connection will be 0.08
                 for concept in what.split(","):
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
                     else:
-                        idx_concept = self.identif_size + self.concepts.index(concept)
-                        weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                        lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
+                        try:
+                            activation_vector = self.concepts[lex]
+                        except:
+                            activation_vector = self.concepts['unknown']
+                        for i, w2v_activation in enumerate(activation_vector):
+                            weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
         return weights_role_concept, event_sem_activations, target_lang_activations, message
 
     def training_is_successful(self, x, threshold=75):
