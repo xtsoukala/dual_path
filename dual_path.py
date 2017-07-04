@@ -11,7 +11,8 @@ from modules.formatter import InputFormatter, take_average_of_valid_results, os,
 class DualPath:
     """
     Dual-path is based on the SRN architecture and has the following layers (plus hidden & context):
-    input, (predicted) compress, (predicted) concept & (predicted) role, target language, event-semantics and output.
+    input, (predicted) compress, (predicted) concept, (predicted) identifiability & (predicted) role,
+    target language, event-semantics and output.
 
     The event-semantics unit is the only unit that provides information about the target sentence order.
     E.g. for the dative sentence "A man bakes a cake for the cafe" there are 3 event-sem units: CAUSE, CREATE, TRANSFER
@@ -21,14 +22,15 @@ class DualPath:
     role, concept and pred_concept units are unbiased to make them more input driven
     """
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size, role_copy,
-                 srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format, identifiability,
-                 simulation_num=None):
+                 exclude_lang, srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format,
+                 identifiability, check_pronouns, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
-        :param learn_rate: Learning rate
+        :param learn_rate: Initial learning rate
+        :param final_learn_rate: (Reduced) learning rate after the 1st epoch
         :param momentum: accounts for amount of previous weight changes that are added
-        :param epochs: Number of train set iterations during training
-        :param compress_size: Size of the compress layers (approximatelly hidden/3)
+        :param epochs: Number of training set iterations during training
+        :param compress_size: Size of the compress layers (approximately hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
         :param srn_debug_mess: Whether to show debug messages during training
         :param test_every: Test network every x epochs
@@ -36,6 +38,7 @@ class DualPath:
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
         :param input_format: Instance of InputFormatter Class (contains all the input for the model)
         :param identifiability: whether to use an identifiability layer
+        :param check_pronouns: Whether we want to evaluate pronoun production
         :param simulation_num: Number of simulation (in case we run several simulations in parallel)
         """
         self.inputs = input_format
@@ -45,11 +48,13 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
-        # Epochs indicate the numbers of iteration of the train set during training. 1000 sentences approximate
+        # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
         # |----------!PARAMS----------|
         self.identifiability = identifiability
+        self.exclude_lang = exclude_lang
+        self.check_pronouns = check_pronouns
         self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
         self.set_weights_folder = set_weights_folder
@@ -59,13 +64,13 @@ class DualPath:
                                           debug_messages=srn_debug_mess, include_role_copy=self.role_copy)
         self.initialize_network()
 
-        self.compare_unordered = lambda x, y: collections.Counter(x) == collections.Counter(y)
+        self.same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
         # dict to save results
-        self.results = {'correct_sentences': {'test': [], 'train': []},
-                        'correct_pos': {'test': [], 'train': []},
-                        'pronoun_errors_flex': {'test': [], 'train': []},
-                        'pronoun_errors': {'test': [], 'train': []},
-                        'code_switched': {'test': [], 'train': []},
+        self.results = {'correct_sentences': {'test': [], 'training': []},
+                        'correct_pos': {'test': [], 'training': []},
+                        'pronoun_errors_flex': {'test': [], 'training': []},
+                        'pronoun_errors': {'test': [], 'training': []},
+                        'code_switched': {'test': [], 'training': []},
                         'mse': {}}
 
     def initialize_network(self):
@@ -120,8 +125,7 @@ class DualPath:
         produced_sent_ids = []
         sentence, message = line.split('## ')
         target_sentence_ids = self.inputs.sentence_indeces(sentence.split())
-        weights_role_concept, evsem_act, target_lang_act, message = \
-            self.inputs.get_message_info(message, test_phase=(not backpropagate))
+        weights_role_concept, evsem_act, target_lang_act, message = self.inputs.get_message_info(message)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, event_sem_activations=evsem_act,
                                            target_lang_act=target_lang_act)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
@@ -133,9 +137,12 @@ class DualPath:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=(prod_idx is None))
             if backpropagate:
-                prod_idx = trg_idx  # Train with target word, NOT produced one
+                prod_idx = trg_idx  # training with target word, NOT produced one
                 self.srn.backpropagate(epoch)
             else:  # no "target" word in this case. Also, return the produced sentence
+                # but first, reset the target language for the rest of the sentence
+                if self.exclude_lang and prod_idx is None:
+                    self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
@@ -144,18 +151,18 @@ class DualPath:
 
     def train_network(self, shuffle_set, plot_results=True, evaluate=True):
         """
-        shuffle_set: Whether to shuffle the training set after each iteration
-        plot_results: Whether to plot the performance
-        evaluate: Whether to evaluate train and test sets every x epochs. The only reason NOT to evaluate is for speed,
-                  if we want to train network and save weights
+        :param shuffle_set: Whether to shuffle the training set after each iteration
+        :param plot_results: Whether to plot the performance
+        :param evaluate: Whether to evaluate training and test sets every x epochs. The only reason NOT to evaluate
+                         is for speed, if we want to training network and save weights
 
         Training: for each word of input sentence:
             - compute predicted response
             - determine error, (back)propagate and update weights
             - copy hidden units to context
 
-        In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its trainset and was
-        tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
+        In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
+        was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
         if evaluate:
@@ -171,16 +178,19 @@ class DualPath:
             if shuffle_set:
                 np.random.shuffle(self.inputs.trainlines)
 
-            if evaluate and epoch % self.test_every == 0:  # evaluate train AND testset
+            if evaluate and epoch % self.test_every == 0:  # evaluate training AND testset
                 subprocesses = []
                 # test set
-                subprocess = Process(target=self.evaluate_network, args=(test_results, epoch,
-                                                                         self.inputs.testlines, self.inputs.num_test))
+                subprocess = Process(target=self.evaluate_network, args=(test_results, epoch, self.inputs.testlines,
+                                                                         self.inputs.num_test,
+                                                                         self.check_pronouns if epoch > 0 else False))
                 subprocess.start()
                 subprocesses.append(subprocess)
-                # train set
+                # training set
                 subprocess = Process(target=self.evaluate_network, args=(train_results, epoch, self.inputs.trainlines,
-                                                                         self.inputs.num_train, False))
+                                                                         self.inputs.num_train,
+                                                                         self.check_pronouns if epoch > 0 else False,
+                                                                         False))
                 subprocess.start()
                 subprocesses.append(subprocess)
                 for sp in subprocesses:
@@ -205,11 +215,11 @@ class DualPath:
 
             for sim in train_results.values():
                 s, p, pr, pr_pos, c = sim
-                self.results['correct_sentences']['train'].append(s)
-                self.results['correct_pos']['train'].append(p)
-                self.results['pronoun_errors']['train'].append(pr)
-                self.results['pronoun_errors_flex']['train'].append(pr_pos)
-                self.results['code_switched']['train'].append(c)
+                self.results['correct_sentences']['training'].append(s)
+                self.results['correct_pos']['training'].append(p)
+                self.results['pronoun_errors']['training'].append(pr)
+                self.results['pronoun_errors_flex']['training'].append(pr_pos)
+                self.results['code_switched']['training'].append(c)
 
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:  # write results to a (pickled) file
                 pickle.dump(self.results, pckl)
@@ -230,24 +240,26 @@ class DualPath:
             return True
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
-        if (out_sentence_idx[0] != trg_sentence_idx[0] and out_sentence_idx[0] in self.inputs.idx_en_pronoun and
-                trg_sentence_idx[0] in self.inputs.idx_en_pronoun):
+        out_pronouns = [idx for idx in out_sentence_idx if idx in self.inputs.idx_en_pronoun]
+        trg_pronouns = [idx for idx in trg_sentence_idx if idx in self.inputs.idx_en_pronoun]
+        if out_pronouns != trg_pronouns:
             return True
         return False
 
-    def test_rest_of_meaning(self, out_sentence_idx, trg_sentence_idx):
-        # remove the subject pronoun (the first idx produced) and check the rest of the sentence
-        return self.test_for_flexible_order(out_sentence_idx[1:], trg_sentence_idx[1:], allow_identical=True)
+    def test_meaning_without_pronouns(self, out_sentence_idx, trg_sentence_idx):
+        # remove subject pronouns and check the rest of the sentence
+        out = [idx for idx in out_sentence_idx if idx not in self.inputs.idx_en_pronoun]
+        trg = [idx for idx in trg_sentence_idx if idx not in self.inputs.idx_en_pronoun]
+        return self.test_for_flexible_order(out, trg, allow_identical=True)
 
-    def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, is_test_set=True, check_pron=True):
+    def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, check_pron, is_test_set=True):
         """
         :param results_dict: Dictionary that contains evaluation results for all epochs
         :param epoch: Number of epoch
         :param set_lines: the set lines (message+sentence) that are used for the evaluation
         :param num_sentences: the size of set_lines
-        :param is_test_set: Whether it is a test set (otherwise a train set is used)
         :param check_pron: Whether to evaluate pronoun production
-        :return:
+        :param is_test_set: Whether it is a test set (otherwise a training set is used)
         """
         num_correct_meaning = 0
         num_correct_pos = 0
@@ -256,6 +268,8 @@ class DualPath:
         num_pron_err_flex = 0
         num_code_switched = 0
 
+        file_suffix = "test" if is_test_set else "train"
+
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
 
@@ -263,7 +277,8 @@ class DualPath:
             has_wrong_det = False
             code_switched = self.is_code_switched(produced_sentence_idx)
             flexible_order = self.test_for_flexible_order(produced_sentence_idx, target_sentence_idx)
-            if produced_sentence_idx == target_sentence_idx or flexible_order:
+            has_correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx, flexible_order)
+            if has_correct_meaning:
                 num_correct_meaning += 1
 
             if self.sentence_is_grammatical(produced_sentence_idx):
@@ -271,31 +286,31 @@ class DualPath:
                 has_correct_pos = True
                 if code_switched:  # only count grammatically correct sentences
                     num_code_switched += 1
-                if not (produced_sentence_idx == target_sentence_idx or flexible_order):
+                if not has_correct_meaning:
                     has_wrong_det = self.test_for_wrong_determiner(produced_sentence_idx, target_sentence_idx)
                     if has_wrong_det:
                         num_correct_meaning += 1
 
                 if check_pron:  # only check the grammatical sentences
-                    has_pronoun_error = self.has_pronoun_error(produced_sentence_idx, target_sentence_idx)
-                    has_correct_meaning = self.test_rest_of_meaning(produced_sentence_idx, target_sentence_idx)
-                    if has_pronoun_error:
-                        if has_correct_meaning:
+                    correctedness_status = ""
+                    if self.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
+                        if self.test_meaning_without_pronouns(produced_sentence_idx, target_sentence_idx):
                             num_pron_err += 1
                         else:
+                            correctedness_status = "(POS only)"
                             num_pron_err_flex += 1
 
-                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
+                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_suffix),
                                   'a') as f:
                             f.write("--------%s--------%s\nOUT:%s\nTRG:%s\n%s\n" %
-                                    (epoch, "(POS only)" if not has_correct_meaning else "",
+                                    (epoch, correctedness_status,
                                      self.inputs.sentence_from_indeces(produced_sentence_idx),
                                      self.inputs.sentence_from_indeces(target_sentence_idx), message))
 
             if epoch > 0:
                 suffix = ("flex-" if flexible_order or has_wrong_det
                           else "in" if produced_sentence_idx != target_sentence_idx else "")
-                with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
+                with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%s "
                             "Semantics:%scorrect\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
@@ -303,11 +318,16 @@ class DualPath:
                              not has_wrong_det, suffix, message))
 
         # on the set level
-        with open("%s/%s.eval" % (self.inputs.results_dir, "test" if is_test_set else "train"), 'a') as f:
+        with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
         results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex, num_code_switched)
+
+    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx, flexible_order):
+        if out_sentence_idx == trg_sentence_idx or flexible_order:
+            return True
+        return False
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False):
         """
@@ -321,10 +341,10 @@ class DualPath:
         if out_sentence_idx == trg_sentence_idx and not allow_identical:  # only check non identical sentences
             return False
         flexible_order = False
-        if self.compare_unordered([x for x in out_sentence_idx if x != self.inputs.to_preposition_idx],
+        if self.same_unordered_lists([x for x in out_sentence_idx if x != self.inputs.to_preposition_idx],
                                   [x for x in trg_sentence_idx if x != self.inputs.to_preposition_idx]):
             flexible_order = True
-        elif remove_last_word and self.compare_unordered(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
+        elif remove_last_word and self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
             flexible_order = True
         return flexible_order
 
@@ -359,7 +379,7 @@ def generate_title_from_file_extension(file_name):
         title = 'Spanish monolingual model'
     elif file_name.endswith('.el'):
         title = 'Greek monolingual model'
-    elif file_name.endswith('.enes'):
+    elif file_name.endswith('.enes') or file_name.endswith('.esen'):
         title = 'Bilingual EN-ES model'
     return title
 
@@ -369,7 +389,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=40)
     parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
-    parser.add_argument('-epochs', '-total_epochs', help='Number of train set iterations during (total) training.',
+    parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
@@ -391,21 +411,22 @@ if __name__ == "__main__":
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=12,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/train sentences to be generated '
-                                                                      '(if no input was set)')
+    parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
+                                                                      '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=1, help='Train several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
-    parser.add_argument('-pron', help='Defines percentage of pronouns (vs NPs) on subject level', type=int, default=100)
-    parser.add_argument('-emph', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
+    parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
+                        type=int, default=0)
+    parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
     parser.add_argument('-role', help='File name that contains the roles', default='roles.in')
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
-    parser.add_argument('-trainset', '-train', help='File name that contains the message-sentence pair for training. '
-                                                    'If left empty, the train*.* file under -input will be used.')
+    parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
+                                                          'training. If empty, the train.* file under -input is used.')
     parser.add_argument('-testset', '-test', help='Test set file name')
     # boolean arguments
     parser.add_argument('--noidentif', dest='identif', action='store_false', help='Use an identifiability layer')
@@ -419,11 +440,11 @@ if __name__ == "__main__":
     parser.set_defaults(debug=False)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
     parser.set_defaults(nolang=False)
-    parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
+    parser.add_argument('--gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
     parser.set_defaults(gender=False)
-    parser.add_argument('--simple-sem', dest='gendered_semantics', action='store_false',
-                        help='Produce simple concepts instead of combined ones (e.g., FATHER instead of PARENT+M)')
-    parser.set_defaults(gendered_semantics=False)
+    parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
+                        help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
+    parser.set_defaults(simple_semantics=True)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
@@ -437,6 +458,12 @@ if __name__ == "__main__":
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
+    parser.add_argument('--no_pronoun_eval', dest='check_pronouns', action='store_false',
+                        help='Do not evaluate pronoun production')
+    parser.set_defaults(check_pronouns=True)
+    parser.add_argument('--filler', dest='filler', action='store_true',
+                        help='Add filler word ("actually", "pues") at the beginning of the sentence')
+    parser.set_defaults(filler=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -446,7 +473,7 @@ if __name__ == "__main__":
 
     original_input_path = None  # keep track of the original input in case it was copied
     if args.input:  # generate a new set (unless "input" was also set)
-        if not os.path.exists(args.input) and 'input' not in args.input:
+        if not os.path.isfile(os.path.join(args.input, "test.%s" % args.lang)) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
@@ -464,13 +491,13 @@ if __name__ == "__main__":
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_gendered_semantics=args.gendered_semantics,
+                             use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
-        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_pronoun=args.pron,
-                           include_bilingual_lexicon=False)
+        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_noun_phrase=args.np,
+                           add_filler=args.filler, include_bilingual_lexicon=True)
 
-    if not args.trainset:
-        args.trainset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
+    if not args.trainingset:
+        args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
     if not args.testset:
         args.testset = [filename for filename in os.listdir(args.input) if filename.startswith("test")][0]
 
@@ -480,19 +507,19 @@ if __name__ == "__main__":
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
         f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
-                 "Copy role: %s\nPercentage pronouns:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis (overt ES "
+                 "Copy role: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis (overt ES "
                  "pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s (epoch: %s)"
                  "\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
                  "Allow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
                  args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
-                 args.compress, args.rcopy, args.pron, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
+                 args.compress, args.rcopy, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
                  args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             role_fname=args.role, evsem_fname=args.eventsem,
-                            language=args.lang, exclude_lang=args.nolang, semantic_gender=args.gender,
-                            emphasis=args.emphasis, prodrop=args.prodrop, trainset=args.trainset, testset=args.testset,
+                            language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
+                            prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
 
     if not args.final_lrate:
@@ -502,10 +529,11 @@ if __name__ == "__main__":
     failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                         epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
-                         test_every=args.test_every, compress_size=args.compress,
-                         set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
-                         input_format=inputs, momentum=args.momentum, identifiability=args.identif)
+                         momentum=args.momentum, epochs=args.epochs, compress_size=args.compress,
+                         role_copy=args.rcopy, exclude_lang=args.nolang, srn_debug_mess=args.debug,
+                         test_every=args.test_every, set_weights_folder=args.set_weights,
+                         set_weights_epoch=args.set_weights_epoch, input_format=inputs, identifiability=args.identif,
+                         check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
         processes = []
@@ -514,10 +542,11 @@ if __name__ == "__main__":
             os.makedirs(rdir)
             inputs.results_dir = rdir
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                             epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
-                             test_every=args.test_every, compress_size=args.compress, identifiability=args.identif,
-                             set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
-                             set_weights_epoch=args.set_weights_epoch, input_format=inputs)
+                             momentum=args.momentum, epochs=args.epochs, compress_size=args.compress,
+                             role_copy=args.rcopy, exclude_lang=args.nolang, srn_debug_mess=args.debug,
+                             test_every=args.test_every, set_weights_folder=args.set_weights,
+                             set_weights_epoch=args.set_weights_epoch, input_format=inputs,
+                             identifiability=args.identif, check_pronouns=args.check_pronouns, simulation_num=sim)
             process = Process(target=dualp.train_network, args=(args.shuffle, ))
             process.start()
             processes.append(process)

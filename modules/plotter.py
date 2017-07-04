@@ -10,11 +10,11 @@ class Plotter:
         self.results_dir = results_dir
 
     def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, summary_sim=None):
-        epochs = range(len(results['correct_sentences']['train']))
-        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_sentences']['train']], linestyle='--',
-                 color='olivedrab', label='train')
-        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_pos']['train']], linestyle='--',
-                 color='yellowgreen', label='train POS')
+        epochs = range(len(results['correct_sentences']['training']))
+        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_sentences']['training']], linestyle='--',
+                 color='olivedrab', label='training')
+        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_pos']['training']], linestyle='--',
+                 color='yellowgreen', label='training POS')
         # now add test sentences
         plt.plot(epochs, [percentage(x, num_test) for x in results['correct_sentences']['test']],
                  color='darkslateblue', label='test')
@@ -45,7 +45,7 @@ class Plotter:
 
         if sum(results['code_switched']['test']) > 0:
             plt.plot(epochs, [percentage(x, num_test) for x in results['code_switched']['test']])
-            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switched']['train']], linestyle='--')
+            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switched']['training']], linestyle='--')
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
             plt.ylim([0, 80])

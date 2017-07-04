@@ -92,7 +92,7 @@ class SimpleRecurrentNetwork:
         for layer in self.get_layers_for_backpropagation():
             np.savetxt("%s/weights/weights_%s_%s.in" % (results_dir, layer.name, epochs), layer.in_weights)
 
-    def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act=None, reset=True):
+    def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act, reset=True):
         weights_concept_role = updated_role_concept.T
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
@@ -113,12 +113,17 @@ class SimpleRecurrentNetwork:
         else:
             event_sem.activation = event_sem_activations
 
-        if target_lang_act is not None:
-            target_lang = self.get_layer("target_lang")
-            target_lang.activation = target_lang_act
+        self.reset_target_lang(target_lang_act)
 
         if reset:
             self.reset_context_delta_and_crole()
+
+    def reset_target_lang(self, target_lang_act=None):
+        target_lang = self.get_layer("target_lang")
+        if target_lang_act is not None:
+            target_lang.activation = target_lang_act
+        else:
+            target_lang.activation = [0.5] * target_lang.size
 
     def reset_context_delta_and_crole(self):
         recurrent_layer = self.get_layer("hidden")

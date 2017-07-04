@@ -6,6 +6,7 @@ import codecs
 from datetime import datetime
 import sys
 import pickle
+from copy import deepcopy
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
@@ -15,8 +16,8 @@ class SetsGenerator:
     """
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
-    def __init__(self, results_dir, use_gendered_semantics=True, allow_free_structure_production=False,
-                 use_full_verb_form=False, ignore_past=False):
+    def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
+                 ignore_past):
         self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
@@ -40,6 +41,7 @@ class SetsGenerator:
                                           },
                                   'by': 'by',
                                   'to': 'to',
+                                  'filler': 'actually'
                                   }
                            }
 
@@ -60,7 +62,32 @@ class SetsGenerator:
                                           'plural': {'present': 'están', 'past': 'estaban'},
                                           },
                                   'by': 'por',
-                                  'to': 'a_'}
+                                  'to': 'a_',
+                                  'filler': 'pues'}
+                           }
+
+        self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
+                                          'indef': {'m': 'ένας', 'f': 'μία', 'n': 'ένα'},
+                                          },
+                                  'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
+                                  'noun': {'animate': {'m': 'αγόρι πατέρας αδερφός σκύλος δάσκαλος ηθοποιός παππούς '
+                                                            'άντρας ανηψιός αστυνομικός γιός θείος σερβιτόρος διεθυντής'
+                                                            'πρόεδρος '
+                                                            'ταύρος'.split(),
+                                                       'f': 'γυναίκα κορίτσι μητέρα αδερφή νοσοκόμα ηηθοποιός γιαγιά '
+                                                            'σύζυγος ανηψιά αστυνομικίνα κόρη θεία σερβιτόρα '
+                                                            'διευθύντρια ηπρόεδρος'
+                                                            'γάτα αγελάδα'.split()},
+                                           'inanimate': {'n': 'ραβδί παιχνίδι στυλό μπαλόνι κλειδί πορτοφόλι'.split(),
+                                                         'f': 'τσάντα μπάλα καρέκλα'.split(),
+                                                         'm': 'χαρταετός'}
+                                           },
+                                  'aux': {'singular': {'present': 'είναι', 'past': 'ήταν'},
+                                          'plural': {'present': 'είναι', 'past': 'ήταν'},
+                                          },
+                                  'by': 'από',
+                                  'to': 'στ',
+                                  'filler': 'επομένως'}
                            }
 
         if use_full_verb_form:
@@ -102,40 +129,21 @@ class SetsGenerator:
                                              'double': 'd tir mostr present_'.split()}
             self.lexicon_es['es']['ing'] = '-ando'
             self.lexicon_es['es']['verb_suffix'] = {'present': '-a', 'past': '-ó'}
+            # EL
+            self.lexicon_el['el']['verb'] = {'intrans': 'κολυμπά πηδά παρπατά τρέχ φτάν πεθαίν τρώ'.split(),
+                                             'trans': 'σπρώσχν χτυπά γλωτσά κουβαλά'.split(),
+                                             'double': 'δίν ρίχν δείχν παρουσιάζ'.split()}
+            self.lexicon_el['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
         # semantic gender, which is a non language-specific concept
-        self.concepts = {}
+        self.concepts = {'M': 'M', 'F': 'F', 'N': 'N'}
         self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
                             'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON'}
         self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
                             'pelota': 'BALL'}
-        if use_gendered_semantics:
-            self.concepts.update({'M': 'M', 'F': 'F', 'N': 'N'})
-            # note that sister = SIBLING + F, brother = SIBLING + M, etc
-            self.concepts_en.update({'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
-                                     'mother': 'PARENT', 'father': 'PARENT',  'daughter': 'OFFSPRING',
-                                     'son': 'OFFSPRING', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN',
-                                     'actress': 'ACTOR', 'actor': 'ACTOR', 'wife': 'PARTNER', 'husband': 'PARTNER',
-                                     'hostess': 'HOST', 'host': 'HOST', 'grandmother': 'GRANDPARENT',
-                                     'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
-                                     'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
-                                     'woman': 'HUMAN', 'man': 'HUMAN', 'chairwoman': 'CHAIRMAN', 'bull': 'BULL',
-                                     'headmistress': 'HEADMASTER', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
-                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
-
-            self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
-                                     'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
-                                     'hijo': 'OFFSPRING', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
-                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
-                                     'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
-                                     'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
-                                     'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
-                                     'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMASTER',
-                                     'director': 'HEADMASTER', 'vaca': 'COW', 'toro': 'COW', 'gata': 'CAT',
-                                     'enfermera': 'NURSE', 'perro': 'DOG'})
-        else:
+        if use_simple_semantics:
             self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
                                      'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
                                      'son': 'SON', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEWOMAN',
@@ -156,6 +164,29 @@ class SetsGenerator:
                                      'sobrina': 'NIECE', 'mujer': 'WOMAN', 'hombre': 'MAN', 'maestro': 'TEACHER',
                                      'presidenta': 'CHAIRWOMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMISTRESS',
                                      'director': 'HEADMASTER', 'vaca': 'COW', 'toro': 'BULL', 'gata': 'CAT',
+                                     'enfermera': 'NURSE', 'perro': 'DOG'})
+        else:
+            # note that sister = SIBLING + F, brother = SIBLING + M, etc
+            self.concepts_en.update({'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
+                                     'mother': 'PARENT', 'father': 'PARENT', 'daughter': 'OFFSPRING',
+                                     'son': 'OFFSPRING', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN',
+                                     'actress': 'ACTOR', 'actor': 'ACTOR', 'wife': 'PARTNER', 'husband': 'PARTNER',
+                                     'hostess': 'HOST', 'host': 'HOST', 'grandmother': 'GRANDPARENT',
+                                     'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
+                                     'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
+                                     'woman': 'HUMAN', 'man': 'HUMAN', 'chairwoman': 'CHAIRMAN', 'bull': 'BULL',
+                                     'headmistress': 'HEADMASTER', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
+
+            self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
+                                     'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
+                                     'hijo': 'OFFSPRING', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
+                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
+                                     'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
+                                     'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
+                                     'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
+                                     'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMASTER',
+                                     'director': 'HEADMASTER', 'vaca': 'COW', 'toro': 'COW', 'gata': 'CAT',
                                      'enfermera': 'NURSE', 'perro': 'DOG'})
 
         if use_full_verb_form:
@@ -202,7 +233,8 @@ class SetsGenerator:
         self.structures = []
         self.num_structures = None
         if use_full_verb_form:
-            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=EN,PROG'],
+            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle',
+                                   'AGENT=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
@@ -220,7 +252,8 @@ class SetsGenerator:
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
-            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle', 'AGENT=;ACTION=;E=ES,PROG'],
+            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle',
+                                   'AGENT=;ACTION=;E=ES,PROG'],
                                   ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
@@ -250,8 +283,8 @@ class SetsGenerator:
                                   ['det noun::animate aux::singular verb::double ing det noun::animate '
                                    'det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
                                   ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
@@ -268,10 +301,10 @@ class SetsGenerator:
                                   ['det noun::animate aux::singular verb::double ing '
                                    'to det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
+                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate'
+                                      , 'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         if not allow_free_structure_production:
             self.event_sem.extend(['AGT', 'PAT', 'REC'])
@@ -281,16 +314,16 @@ class SetsGenerator:
                 self.structures_en[i][1] += additions[i]
                 self.structures_es[i][1] += additions[i]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_pronoun, percentage_l2=50,
-                      print_sets=False):
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, add_filler,
+                      percentage_l2=50, print_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
-        :param lang: language code, leave None for bilingual es-en
+        :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
-        :param percentage_pronoun: percentage of pronouns vs Noun Phrases (NPs)
-        :param percentage_l2: percentage of L2 (usually English) vs L1
-        :param print_sets:
-        :return:
+        :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns
+        :param percentage_l2: percentage of L2 (e.g., English) vs L1
+        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
+        :param print_sets: whether to print results on screen or just save in file
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
         self.get_structures_and_lexicon(lang)
@@ -299,10 +332,11 @@ class SetsGenerator:
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
         test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
-                                           percentage_pronoun=percentage_pronoun, print_sets=print_sets,
-                                           return_mess=True)
+                                           percentage_noun_phrase=percentage_noun_phrase, print_sets=print_sets,
+                                           return_mess=True, add_filler=add_filler)
         self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
-                                percentage_pronoun=percentage_pronoun, exclude_test_sentences=test_set)
+                                percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set,
+                                add_filler=add_filler)
 
         if include_bilingual_lexicon:
             self.lexicon = self.lexicon_en.copy()
@@ -354,20 +388,23 @@ class SetsGenerator:
         self.num_structures = len(self.structures)
 
     def generate_sentence_structures(self, num_sentences):
-        sentence_structures = self.structures * (num_sentences / self.num_structures)
+        sentence_structures = []
+        for i in range(num_sentences / self.num_structures):
+            sentence_structures += deepcopy(self.structures)
         for m in range(num_sentences % self.num_structures):  # runs if sentence_structures < num_sentences
-            sentence_structures.append(self.structures[random.randint(0, self.num_structures - 1)])
+            sentence_structures.append(deepcopy(self.structures[random.randint(0, self.num_structures - 1)]))
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_pronoun, exclude_test_sentences=[],
-                           return_mess=False, print_sets=False):
+    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_noun_phrase, exclude_test_sentences=[],
+                           add_filler=True, return_mess=False, print_sets=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param lexicon: dict that contains words (with syntactic labeling)
         :param fname: filename where results will be stored
-        :param percentage_pronoun: percentage of pronouns vs NPs in subject position
-        :param exclude_test_sentences: list of sentences to exlcude (test set needs to contain novel messages only)
+        :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
+        :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
+        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
         :param print_sets: whether to print results on screen apart from just saving them
         :return:
@@ -376,13 +413,16 @@ class SetsGenerator:
         num_sentences = len(sentence_structures)
 
         # determine how often we will use NPs vs determiners
-        if not percentage_pronoun:  # full NPs
-            np = [1] * num_sentences
+        if not percentage_noun_phrase:  # use pronouns only
+            np = [0] * num_sentences
         else:  # any other percentage
-            number_determiners = num_sentences * percentage_pronoun / 100
-            np = number_determiners * [0] + (num_sentences - number_determiners) * [1]
+            number_np = num_sentences * percentage_noun_phrase / 100
+            np = number_np * [1] + (num_sentences - number_np) * [0]
             random.shuffle(np)
 
+        if add_filler:
+            for s in range(num_sentences):
+                sentence_structures[s][0] = "filler %s" % sentence_structures[s][0]
         # we can keep track of train sentences (messages) that are identical to test ones and exclude them
         full_mess = []
         # now select words according to structure
@@ -552,6 +592,7 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True)
-    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, percentage_pronoun=0,
-                       percentage_l2=50, print_sets=True)
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
+                         allow_free_structure_production=False, ignore_past=True)
+    sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, percentage_noun_phrase=10,
+                       percentage_l2=50, add_filler=True, print_sets=True)

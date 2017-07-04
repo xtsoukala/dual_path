@@ -9,7 +9,7 @@ import word2vec
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, role_fname, evsem_fname, fixed_weights,
-                 fixed_weights_identif, exclude_lang, language, trainset, testset, semantic_gender, emphasis, prodrop,
+                 fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis, prodrop,
                  plot_title):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
@@ -24,7 +24,7 @@ class InputFormatter:
         self.emphasis_percentage = emphasis
         self.semantic_gender = semantic_gender
         self.testset = testset
-        self.trainset = trainset  # names of train and test set file names
+        self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
         self.num_train = len(self.trainlines)
         self.testlines = self.read_set(test=True)
@@ -40,9 +40,9 @@ class InputFormatter:
         self.to_preposition_idx = self.lexicon.index('to')
         # the verb suffix -ó is the first entry in the ES lexicon
         self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
-        self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she')]
+        self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]
         self.determiners = [self.lexicon.index('a'), self.lexicon.index('the')]
-        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the train file)
+        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
         self.concept_size = self.concepts['dog'].size  # concepts.__sizeof__()
@@ -51,22 +51,23 @@ class InputFormatter:
 
         self.plot_title = plot_title
         self.lang = language
-        self.exclude_lang = exclude_lang
 
     def _number_of_test_pronouns(self):
-        return len([line for line in self.testlines if line.startswith('he ') or line.startswith('she ')])
+        regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
+        return len([line for line in self.testlines if regexp.search(line)])
 
     def read_set(self, set_name=None, test=False):
         """
         :param set_name: file name (optional)
-        :param test: if file name is not provided, we need to specify whether it's the testset (test=True) or trainset
+        :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
         :return:
         """
+
         if not set_name:
             if test:
                 set_name = self.testset
             else:
-                set_name = self.trainset
+                set_name = self.trainingset
         lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make pro-drop
@@ -75,13 +76,13 @@ class InputFormatter:
                 num_emphasized = len(es_line_idx) * self.emphasis_percentage / 100
                 for es_idx in np.random.choice(es_line_idx, num_emphasized, replace=False):
                     lines[es_idx] = lines[es_idx].replace('AGENT=', 'AGENT=EMPH,')
-                lines = [re.sub(r'^(él|ella) ', '', line) if 'EMPH,' not in line else line for line in lines]
+                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) if 'EMPH,' not in line else line for line in lines]
             else:
-                lines = [re.sub(r'(él|ella) ', '', line) for line in lines]
+                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) for line in lines]
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.semantic_gender:
-            lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]  # re.sub(',(M|F)(,|;|$)', r'\2', lines)
+            lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]
 
         return lines
 
@@ -184,16 +185,13 @@ class InputFormatter:
             sentence_idx = sentence_idx[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
     
-    def get_message_info(self, message, test_phase=False):
-        """
-        :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-        E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
-        gives information about the event-semantics (E)
-        :param test_phase: Set to True during evaluation and False during training
+    def get_message_info(self, message):
+        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
+                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+                            gives information about the event-semantics (E)
         """
         norm_activation = 1  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
-        # increased_activaton = 2
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
@@ -206,12 +204,8 @@ class InputFormatter:
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
                         activation = reduced_activation
                         break
-                    # if event in ['PRESENT', 'PAST']: activation = increased_activaton
                     if event in self.languages:
-                        if test_phase and self.exclude_lang:  # same activation for all languages
-                            target_lang_activations = [0.5] * len(target_lang_activations)
-                        else:
-                            target_lang_activations[self.languages.index(event)] = activation
+                        target_lang_activations[self.languages.index(event)] = activation
                     else:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
@@ -238,15 +232,15 @@ class InputFormatter:
 def take_average_of_valid_results(valid_results):
     results_average = {}
     for key in valid_results[0].keys():
-        results_average[key] = {'train': [], 'test': []}
+        results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
-            for t in ['train', 'test']:
-                if results_average[key][t] != []:
+            for t in ['training', 'test']:
+                if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
                     results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
     # now average over all simulations
     for key, v in results_average.items():
-        for t in ['train', 'test']:
+        for t in ['training', 'test']:
             results_average[key][t] = np.true_divide(v[t], len(valid_results))
     return results_average
