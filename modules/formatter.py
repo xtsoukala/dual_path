@@ -220,6 +220,7 @@ class InputFormatter:
                         try:
                             activation_vector = self.concepts[lex]
                         except:
+                            print "UNK: %s(%s)" % (lex, concept)
                             activation_vector = self.concepts['unknown']
                         for i, w2v_activation in enumerate(activation_vector):
                             weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation

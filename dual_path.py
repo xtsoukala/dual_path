@@ -402,7 +402,7 @@ if __name__ == "__main__":
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.05)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
-                        type=float, default=0.9)
+                        type=float, default=0.7)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
@@ -494,7 +494,7 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_noun_phrase=args.np,
-                           add_filler=args.filler, include_bilingual_lexicon=True)
+                           add_filler=args.filler, include_bilingual_lexicon=False)
 
     if not args.trainingset:
         args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]

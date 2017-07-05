@@ -28,11 +28,11 @@ class SetsGenerator:
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
                                       'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
-                                                       'host nephew policeman son uncle waiter chairman headmaster'
+                                                       'host nephew policeman son uncle waiter chairman'
                                                        ' bull'.split(),
                                                   'f': 'woman girl mother sister cat nurse actress grandmother wife '
-                                                       'hostess niece policewoman daughter aunt waitress chairwoman'
-                                                       ' headmistress cow'.split(),
+                                                       'hostess niece daughter aunt waitress'
+                                                       ' cow'.split(),
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
                                   },
@@ -152,7 +152,7 @@ class SetsGenerator:
                                      'grandfather': 'GRANDFATHER', 'waitress': 'WAITRESS', 'waiter': 'WAITER',
                                      'aunt': 'AUNT', 'uncle': 'UNCLE', 'nephew': 'NEPHEW', 'niece': 'NIECE',
                                      'woman': 'WOMAN', 'man': 'MAN', 'chairwoman': 'CHAIRWOMAN', 'bull': 'BULL',
-                                     'headmistress': 'HEADMISTRESS', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'chairman': 'CHAIRMAN',
                                      'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
 
             self.concepts_es.update({'hermana': 'SISTER', 'hermano': 'BROTHER', 'ni\xc3\xb1o': 'BOY',
@@ -175,7 +175,7 @@ class SetsGenerator:
                                      'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
                                      'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
                                      'woman': 'HUMAN', 'man': 'HUMAN', 'chairwoman': 'CHAIRMAN', 'bull': 'BULL',
-                                     'headmistress': 'HEADMASTER', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'chairman': 'CHAIRMAN',
                                      'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW'})
 
             self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
