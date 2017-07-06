@@ -98,7 +98,6 @@ class InputFormatter:
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
                  (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
         """
-        pos = dict()
         lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
         pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
         prev_pos = ''

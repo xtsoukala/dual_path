@@ -389,12 +389,12 @@ if __name__ == "__main__":
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any other string for bilingual)', default='es')
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.15)  # or: 0.2, 0.15
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.2)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.05)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
-                        type=float, default=0.9)
+                        type=float, default=0.7)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
