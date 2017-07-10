@@ -85,7 +85,7 @@ class DualPath:
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
-        self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
+        self.srn.add_layer("pred_role", self.inputs.roles_size) #, activation_function="softmax")
         if self.identifiability:
             self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
@@ -418,7 +418,7 @@ if __name__ == "__main__":
     parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
-                        type=int, default=0)
+                        type=int, default=100)
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
@@ -429,8 +429,8 @@ if __name__ == "__main__":
                                                           'training. If empty, the train.* file under -input is used.')
     parser.add_argument('-testset', '-test', help='Test set file name')
     # boolean arguments
-    parser.add_argument('--noidentif', dest='identif', action='store_false', help='Use an identifiability layer')
-    parser.set_defaults(identif=True)
+    parser.add_argument('--identif', dest='identif', action='store_true', help='Use an identifiability layer')
+    parser.set_defaults(identif=False)
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
     parser.add_argument('--rcopy', dest='rcopy', action='store_true',

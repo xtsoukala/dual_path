@@ -24,6 +24,7 @@ class SimpleRecurrentNetwork:
         self.output_size = 0
         self.target_activation = []
 
+        self.has_identif_layer = True
         self.mse = {}
         self.divergence_error = {}
 
@@ -32,6 +33,7 @@ class SimpleRecurrentNetwork:
             if all(layer.in_weights):
                 self.initialization_completed = True
                 break
+        self.has_identif_layer = len([True for layer in self.layers if 'identif' in layer.name]) > 0
 
     def add_layer(self, name, size, has_bias=False, activation_function="tanh",
                   convert_input=False, is_recurrent=False):
@@ -99,13 +101,16 @@ class SimpleRecurrentNetwork:
             role_layer.in_weights[x] = weights_concept_role[x]
 
         # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)
-        pred_identif = self.get_layer("pred_identifiability")
+        pred_identif_size = 0
+        if self.has_identif_layer:
+            pred_identif = self.get_layer("pred_identifiability")
         pred_concept = self.get_layer("pred_concept")
         for x in range(pred_concept.in_size):  # pred_identif.in_size == pred_concept.in_size
-            for s in range(pred_identif.size):
-                pred_identif.in_weights[x][s] = updated_role_concept[x][s]
+            if self.has_identif_layer:
+                for s in range(pred_identif.size):
+                    pred_identif.in_weights[x][s] = updated_role_concept[x][s]
             for s in range(pred_concept.size):
-                pred_concept.in_weights[x][s] = updated_role_concept[x][pred_identif.size + s]
+                pred_concept.in_weights[x][s] = updated_role_concept[x][pred_identif_size + s]
 
         event_sem = self.get_layer("eventsem")
         if event_sem.convert_input:
@@ -173,7 +178,7 @@ class SimpleRecurrentNetwork:
                 continue
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
+                layer.activation = softmax(check_npdot_for_nan(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "tanh":
                 layer.activation = tanh_activation(np.dot(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "sigmoid":
@@ -372,8 +377,31 @@ def tanh_derivative(x, input_activation=False):
 def softmax(x):
     """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
     will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
-    normalized_x = x - x.min()
-    return np.round(np.true_divide(np.exp(normalized_x), np.sum(np.exp(normalized_x), axis=0)), 4)
+    normalized_x = check_for_nan(x, normalize=True)
+
+    return check_for_nan(np.round(np.true_divide(np.exp(normalized_x), np.sum(np.exp(normalized_x), axis=0)), 4))
+
+
+def check_for_nan(x, normalize=False):
+    x_cp = deepcopy(x)
+    print "before ", x
+    if normalize:
+        x = x - x.min()
+    if np.any(np.isnan(x)):
+        print x
+        print "unnormalized ", x_cp
+        sys.exit()
+    return x
+
+
+def check_npdot_for_nan(x, y):
+    dot = np.dot(x, y)
+    if np.any(np.isnan(dot)):
+        print x
+        print y
+        print "dot ", dot
+        sys.exit()
+    return dot
 
 
 def softmax_derivative(x):
