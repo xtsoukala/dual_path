@@ -178,7 +178,7 @@ class SimpleRecurrentNetwork:
                 continue
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = softmax(check_npdot_for_nan(layer.in_activation, layer.in_weights))
+                layer.activation = self.softmax(check_npdot_for_nan(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "tanh":
                 layer.activation = tanh_activation(np.dot(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "sigmoid":
@@ -305,6 +305,30 @@ class SimpleRecurrentNetwork:
         output = self.get_layer("pred_concept")
         return output.activation, output.in_activation
 
+    def check_for_nan(self, x, normalize=False, replace_with_rand=False, decrease_momentum=True):
+        if normalize:
+            x = x - x.min()
+        if np.any(np.isnan(x)):
+            print x
+            if replace_with_rand:
+                x[np.isnan(x)] = np.random.random_sample(len(x[np.isnan(x)]))
+            else:  # relace with 0
+                x[np.isnan(x)] = 1  # x = np.nan_to_num(x)
+            print x
+            if decrease_momentum:
+                self.momentum = 0.6
+                self.learn_rate = 0.1
+            # sys.exit()
+        return x
+
+    def softmax(self, x):
+        """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
+        will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
+        normalized_x = self.check_for_nan(x, normalize=True)
+
+        return self.check_for_nan(
+            np.round(np.true_divide(np.exp(normalized_x), np.sum(np.exp(normalized_x), axis=0)), 4))
+
 
 class NeuronLayer:
     def __init__(self, name, size, has_bias, activation_function, convert_input, context_init, is_recurrent=False):
@@ -372,26 +396,6 @@ def tanh_derivative(x, input_activation=False):
         return 1.0 - np.tanh(x) ** 2
     else:
         return 1.0 - x ** 2
-
-
-def softmax(x):
-    """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
-    will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
-    normalized_x = check_for_nan(x, normalize=True)
-
-    return check_for_nan(np.round(np.true_divide(np.exp(normalized_x), np.sum(np.exp(normalized_x), axis=0)), 4))
-
-
-def check_for_nan(x, normalize=False):
-    x_cp = deepcopy(x)
-    print "before ", x
-    if normalize:
-        x = x - x.min()
-    if np.any(np.isnan(x)):
-        print x
-        print "unnormalized ", x_cp
-        sys.exit()
-    return x
 
 
 def check_npdot_for_nan(x, y):

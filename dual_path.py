@@ -85,7 +85,7 @@ class DualPath:
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
-        self.srn.add_layer("pred_role", self.inputs.roles_size) #, activation_function="softmax")
+        self.srn.add_layer("pred_role", self.inputs.roles_size)#, activation_function="softmax")
         if self.identifiability:
             self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
