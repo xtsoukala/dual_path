@@ -63,7 +63,7 @@ class SetsGenerator:
                                           },
                                   'by': 'por',
                                   'to': 'a_',
-                                  'filler': 'pues'}
+                                  'filler': 'ta'}  # 'pues'}
                            }
 
         self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
@@ -130,10 +130,10 @@ class SetsGenerator:
             self.lexicon_es['es']['ing'] = '-ando'
             self.lexicon_es['es']['verb_suffix'] = {'present': '-a', 'past': '-ó'}
             # EL
-            self.lexicon_en['el']['verb'] = {'intrans': 'κολυμπά πηδά παρπατά τρέχ φτάν πεθαίν τρώ'.split(),
+            self.lexicon_el['el']['verb'] = {'intrans': 'κολυμπά πηδά παρπατά τρέχ φτάν πεθαίν τρώ'.split(),
                                              'trans': 'σπρώσχν χτυπά γλωτσά κουβαλά'.split(),
                                              'double': 'δίν ρίχν δείχν παρουσιάζ'.split()}
-            self.lexicon_en['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
+            self.lexicon_el['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
         # semantic gender, which is a non language-specific concept
@@ -420,9 +420,10 @@ class SetsGenerator:
             np = number_np * [1] + (num_sentences - number_np) * [0]
             random.shuffle(np)
 
-        if add_filler:
-            for s in range(num_sentences):
-                sentence_structures[s][0] = "filler %s" % sentence_structures[s][0]
+        # if add_filler:  # adds filler to both languages
+        #    for s in range(num_sentences):
+        #        sentence_structures[s][0] = "filler %s" % sentence_structures[s][0]
+
         # we can keep track of train sentences (messages) that are identical to test ones and exclude them
         full_mess = []
         # now select words according to structure
@@ -430,6 +431,8 @@ class SetsGenerator:
         for pos_full, mes in sentence_structures:
             message = mes.split(';')
             lang = re.search(r"^E=(\S.)", message[-1]).group(1).lower()
+            if add_filler and lang == 'es' and 'filler' not in pos_full:  # FIXME: why was filler already in pos_full even though I deepcopy?
+                pos_full = "filler %s" % deepcopy(pos_full)
             sentence = []
             msg_idx = 0
             add_det = False
@@ -594,5 +597,5 @@ if __name__ == "__main__":
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True)
-    sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, percentage_noun_phrase=10,
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=0,
                        percentage_l2=50, add_filler=True, print_sets=True)

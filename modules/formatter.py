@@ -30,6 +30,9 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
+        self.translation_dict = {'-a': '-s',
+                                 'un': 'a',}
+        self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
