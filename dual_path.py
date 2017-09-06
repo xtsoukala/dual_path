@@ -526,7 +526,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
-    parser.set_defaults(nolang=True)
+    parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
