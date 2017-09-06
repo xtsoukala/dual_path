@@ -43,9 +43,14 @@ class Plotter:
             plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
             plt.close()
 
-        if sum(results['code_switched']['test']) > 0:
-            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switched']['test']])
-            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switched']['training']], linestyle='--')
+        if sum(results['code_switches']['test']) > 0:
+            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab')
+            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
+                     color='yellowgreen')
+            plt.plot(epochs, [percentage(x, num_test) for x in results['correct_code_switches']['test']],
+                     color='darkslateblue')
+            plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
+                     linestyle='--', color='deepskyblue')
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
             plt.ylim([0, 80])
