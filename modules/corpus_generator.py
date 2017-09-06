@@ -51,7 +51,7 @@ class SetsGenerator:
                                   'pron': {'m': 'él', 'f': 'ella'},
                                   'noun': {'animate': {'m': 'niño padre hermano perro maestro act0r abuelo esposo '
                                                             'sobrino policía hijo tío camarero toro director '
-                                                            'presidente'.split(),
+                                                            'presidente hombre'.split(),
                                                        'f': 'mujer niña madre hermana gata enfermera actríz abuela '
                                                             'esposa sobrina policía hija tía camarera vaca directora '
                                                             'presidenta'.split()},
@@ -146,7 +146,7 @@ class SetsGenerator:
         if use_simple_semantics:
             self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
                                      'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
-                                     'son': 'SON', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEWOMAN',
+                                     'son': 'SON', 'policewoman': 'POLICEWOMAN', 'policeman': 'POLICEMAN',
                                      'actress': 'ACTRESS', 'actor': 'ACTOR', 'wife': 'WIFE', 'husband': 'HUSBAND',
                                      'hostess': 'HOSTESS', 'host': 'HOST', 'grandmother': 'GRANDMOTHER',
                                      'grandfather': 'GRANDFATHER', 'waitress': 'WAITRESS', 'waiter': 'WAITER',

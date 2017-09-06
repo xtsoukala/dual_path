@@ -68,7 +68,8 @@ class DualPath:
                         'correct_pos': {'test': [], 'training': []},
                         'pronoun_errors_flex': {'test': [], 'training': []},
                         'pronoun_errors': {'test': [], 'training': []},
-                        'code_switched': {'test': [], 'training': []},
+                        'correct_code_switches': {'test': [], 'training': []},
+                        'code_switches': {'test': [], 'training': []},
                         'mse': {}}
 
     def initialize_network(self):
@@ -198,20 +199,22 @@ class DualPath:
 
         if evaluate:
             for sim in test_results.values():
-                s, p, pr, pr_pos, c = sim
+                s, p, pr, pr_pos, cc, c = sim
                 self.results['correct_sentences']['test'].append(s)
                 self.results['correct_pos']['test'].append(p)
                 self.results['pronoun_errors']['test'].append(pr)
                 self.results['pronoun_errors_flex']['test'].append(pr_pos)
-                self.results['code_switched']['test'].append(c)
+                self.results['correct_code_switches']['test'].append(cc)
+                self.results['code_switches']['test'].append(c)
 
             for sim in train_results.values():
-                s, p, pr, pr_pos, c = sim
+                s, p, pr, pr_pos, cc, c = sim
                 self.results['correct_sentences']['training'].append(s)
                 self.results['correct_pos']['training'].append(p)
                 self.results['pronoun_errors']['training'].append(pr)
                 self.results['pronoun_errors_flex']['training'].append(pr_pos)
-                self.results['code_switched']['training'].append(c)
+                self.results['correct_code_switches']['training'].append(cc)
+                self.results['code_switches']['training'].append(c)
 
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:  # write results to a (pickled) file
                 pickle.dump(self.results, pckl)
@@ -233,7 +236,7 @@ class DualPath:
         else:
             return True
 
-    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx, flex_order):
+    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx):
         """ Types of code-switches:
                 - intra-sentential (in the middle of the sentence)
                 - inter-sentential (full switch at sentence boundaries)
@@ -242,38 +245,53 @@ class DualPath:
 
             Note: Returns FALSE if the message conveyed was not correct.
         """
-        #if not flex_order:
-        #    # things are easier in this case. Get indexes of switched words and translate them.
-        print "%s %s" % (self.inputs.sentence_from_indeces(out_sentence_idx), out_sentence_idx)
-        print "%s %s" % (self.inputs.sentence_from_indeces(trg_sentence_idx), trg_sentence_idx)
-        # only inspect words that were not part of the target message
-        check_words = [w for w in out_sentence_idx if w not in trg_sentence_idx]
-        print "Inspect %s: %s %s" % ("(FLEX)" if flex_order else "", self.inputs.sentence_from_indeces(check_words), check_words)
-        print self.translate_into_monolingual(out_sentence_idx, trg_sentence_idx[0])
-        # check if switch on nouns only
-        # check if switch in middle of sentence
-        # check if the message is the same
-        cs_type = False
+        # First "translate" message into the target language and compare with target sentence
+        translated_sentence_idx = self.translate_idx_into_monolingual(out_sentence_idx, trg_sentence_idx[0])
+        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
+            return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
+        check_idx = [w for w in out_sentence_idx if w not in trg_sentence_idx]
+        # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
+        if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
+        #if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
+            cs_type = "intra-sentential"
+        else:
+            check_idx_pos = [self.inputs.pos_lookup(w) for w in check_idx]
+            if len(set(check_idx_pos)) == 1:  # only one POS type has been switched
+                cs_type = "%s-borrow" % check_idx_pos[0].lower()
+            else:
+                # print self.inputs.sentence_from_indeces(out_sentence_idx)
+                # print self.inputs.sentence_from_indeces(translated_sentence_idx)
+                # print '---TRANSLATION---'
+                # print check_idx
+                # print "POS: %s" % check_idx_pos
+                # print "INSPECT: %s %s" % (check_idx, self.inputs.sentence_from_indeces(check_idx))
+                cs_type = "Intra-word switching"
         return cs_type
 
-    def translate_into_monolingual(self, out_sentence_idx, trg_lang_word_idx):
+    def translate_idx_into_monolingual(self, out_sentence_idx, trg_lang_word_idx):
         if trg_lang_word_idx < self.inputs.code_switched_idx:
-            trans = [self.find_equivalent_translation(idx) if idx >= self.inputs.code_switched_idx else idx
+            trans = [self.find_equivalent_translation_idx(idx) if idx >= self.inputs.code_switched_idx else idx
                      for idx in out_sentence_idx]
         else:
-            trans = [self.find_equivalent_translation(idx) if idx < self.inputs.code_switched_idx else idx
+            trans = [self.find_equivalent_translation_idx(idx) if idx < self.inputs.code_switched_idx else idx
                      for idx in out_sentence_idx]
         return trans
 
-    def find_equivalent_translation(self, idx):
+    def find_equivalent_translation_idx(self, idx):
         word = self.inputs.lexicon[idx]
         if word in self.inputs.translation_dict:
-            return self.inputs.translation_dict[word]
-        if word in self.inputs.reverse_translation_dict:
-            return self.inputs.reverse_translation_dict[word]
-        print idx, word
-        print self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
-        return self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
+            translation = self.inputs.translation_dict[word]
+        elif word in self.inputs.reverse_translation_dict:
+            translation = self.inputs.reverse_translation_dict[word]
+        else:
+            concept = self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
+            all_translations = [w for w in self.inputs.concept_to_words[concept] if w != word]
+            translation = all_translations[0] if len(all_translations) > 0 else all_translations
+            if not translation:
+                #print word, id, concept
+                #print all_translations
+                return idx
+        return self.inputs.lexicon.index(translation)
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
         out_pronouns = [idx for idx in out_sentence_idx if idx in self.inputs.idx_en_pronoun]
@@ -310,11 +328,12 @@ class DualPath:
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
 
-            has_correct_pos, has_wrong_det, has_correct_meaning = False, False, False  # initialize
+            has_correct_pos, has_wrong_det, correct_meaning, cs_type = False, False, False, None  # initialize
             is_grammatical, flexible_order = self.get_sentence_grammaticality_and_flex_order(produced_sentence_idx,
                                                                                              target_sentence_idx)
             code_switched = self.is_code_switched(produced_sentence_idx)
-            num_all_code_switches += 1
+            if code_switched:
+                num_all_code_switches += 1
 
             if is_grammatical:
                 num_correct_pos += 1
@@ -322,15 +341,14 @@ class DualPath:
 
                 if code_switched:  # only count grammatically correct sentences
                     # determine CS type here
-                    cs_type = self.get_code_switched_type(produced_sentence_idx, target_sentence_idx, flexible_order)
+                    cs_type = self.get_code_switched_type(produced_sentence_idx, target_sentence_idx)
                     if cs_type:
-                        has_correct_meaning = True
+                        correct_meaning = True
                         num_correct_code_switches += 1
                 else:
-                    has_correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx,
-                                                                   flexible_order)
+                    correct_meaning = has_correct_meaning(produced_sentence_idx, target_sentence_idx, flexible_order)
 
-                if has_correct_meaning:
+                if correct_meaning:
                     num_correct_meaning += 1
                 else:
                     has_wrong_det = self.test_for_wrong_determiner(produced_sentence_idx, target_sentence_idx)
@@ -354,13 +372,14 @@ class DualPath:
                                      self.inputs.sentence_from_indeces(target_sentence_idx), message))
             if epoch > 0:
                 suffix = ("flex-" if flexible_order or has_wrong_det
-                          else "in" if produced_sentence_idx != target_sentence_idx else "")
+                          else "in" if not correct_meaning else "")
                 with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nCode-switched:%s Grammatical:%s Definiteness:%s "
-                            "Semantics:%scorrect\n%s\n" %
+                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Definiteness:%s "
+                            "Sentence:%scorrect %s\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
-                             self.inputs.sentence_from_indeces(target_sentence_idx), code_switched, has_correct_pos,
-                             not has_wrong_det, suffix, message))
+                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos, not has_wrong_det,
+                             suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
+                                             if code_switched else ""), message))
 
         # on the set level
         with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
@@ -368,15 +387,10 @@ class DualPath:
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
         results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex,
-                               num_correct_code_switches)  # TODO: Maybe we also want num_all_code_switches for ref.
+                               num_correct_code_switches, num_all_code_switches)
 
-    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx, flexible_order):
-        # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        if out_sentence_idx == trg_sentence_idx or flexible_order:
-            return True
-        return False
-
-    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False):
+    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False,
+                                ignore_det=True):
         """
         :param out_sentence_idx:
         :param trg_sentence_idx:
@@ -388,8 +402,12 @@ class DualPath:
         if out_sentence_idx == trg_sentence_idx and not allow_identical:  # only check non identical sentences
             return False
         flexible_order = False
-        if self.same_unordered_lists([x for x in out_sentence_idx if x != self.inputs.to_preposition_idx],
-                                     [x for x in trg_sentence_idx if x != self.inputs.to_preposition_idx]):
+        ignore_idx = self.inputs.to_prepositions_idx
+        if ignore_det:
+            ignore_idx.extend(self.inputs.determiners)
+
+        if self.same_unordered_lists([x for x in out_sentence_idx if x not in ignore_idx],
+                                     [x for x in trg_sentence_idx if x not in ignore_idx]):
             flexible_order = True
         elif remove_last_word and self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
             flexible_order = True
@@ -416,9 +434,18 @@ class DualPath:
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
             return is_grammatical, not has_flex_order
-        if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO']:  # diff between double object sentences
+        # diff between double object sentences -- but also make sure that output sentence is grammatical and that "to"
+        # isn't the last word in the sentence.
+        if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos in self.inputs.allowed_structures:
             return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
+
+
+def has_correct_meaning(out_sentence_idx, trg_sentence_idx, flexible_order):
+    # flexible_order in the monolingual case means that the only difference is the preposition "to"
+    if out_sentence_idx == trg_sentence_idx or flexible_order:
+        return True
+    return False
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -450,7 +477,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=40)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=25)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -469,9 +496,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=12,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=20,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=12,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
