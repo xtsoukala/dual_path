@@ -46,7 +46,7 @@ class DualPath:
 
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
-        self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
+        self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train * 2)  # 2 epochs#np.true_divide(learn_rate - final_learn_rate, self.inputs.num_train)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=40)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=20)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=25)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -392,16 +392,16 @@ if __name__ == "__main__":
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.2)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
-                        type=float, default=0.05)
+                        type=float, default=0.015)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
-                        type=float, default=0.7)
+                        type=float, default=0.75)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=12,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=20,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=12,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
