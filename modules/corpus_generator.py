@@ -23,6 +23,7 @@ class SetsGenerator:
             self.results_dir += datetime.now().strftime(".%S")
         os.makedirs(self.results_dir)
         self.ignore_past_tense = ignore_past
+        self.use_adjectives = use_full_verb_form
         self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
@@ -35,6 +36,10 @@ class SetsGenerator:
                                                        ' headmistress cow'.split(),
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
+                                  },
+                                  'adj': {
+                                      'animate': 'happy sad tall short'.split(),
+                                      'inanimate': 'cheap expensive long colorful'.split()
                                   },
                                   'aux': {'singular': {'present': 'is', 'past': 'was'},
                                           'plural': {'present': 'are', 'past': 'were'},
@@ -58,6 +63,12 @@ class SetsGenerator:
                                            'inanimate': {'m': 'palo juguete bolso bolígrafo globo'.split(),
                                                          'f': 'pelota llave cometa silla cartera'.split()}
                                            },
+                                  'adj': {
+                                      'animate': {'m': 'feliz triste alto pequeño'.split(),
+                                                  'f': 'feliz triste alta pequeña'.split()},
+                                      'inanimate': {'m': 'barrato caro largo colorido'.split(),
+                                                    'f': 'barrata cara larga colorida'.split()}
+                                  },
                                   'aux': {'singular': {'present': 'está', 'past': 'estaba'},
                                           'plural': {'present': 'están', 'past': 'estaban'},
                                           },
@@ -139,10 +150,15 @@ class SetsGenerator:
         # semantic gender, which is a non language-specific concept
         self.concepts = {'M': 'M', 'F': 'F', 'N': 'N'}
         self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
-                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON'}
+                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON',
+                            'long': 'LONG', 'tall': 'TALL', 'short': 'SHORT', 'cheap': 'CHEAP', 'sad': 'SAD',
+                            'happy': 'HAPPY', 'expensive': 'EXPENSIVE', 'colorful': 'COLORFUL'}
         self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
-                            'pelota': 'BALL'}
+                            'pelota': 'BALL', 'feliz': 'HAPPY', 'triste': 'SAD', 'alto': 'TALL', 'pequeño': 'SMALL',
+                            'alta': 'TALL', 'pequeña': 'SMALL', 'barrato': 'CHEAP', 'barrata': 'CHEAP',
+                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'largo': 'LONG', 'larga': 'LONG',
+                            'colorido': 'COLORFUL', 'colorida': 'COLORFUL'}
         if use_simple_semantics:
             self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
                                      'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
@@ -233,41 +249,46 @@ class SetsGenerator:
         self.structures = []
         self.num_structures = None
         if use_full_verb_form:
-            self.structures_en = [['det noun::animate aux::singular verb::intrans::participle',
+            self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans::participle',
                                    'AGENT=;ACTION=;E=EN,PROG'],
-                                  ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=EN,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::trans::participle det noun',
+                                  ['det adj::animate noun::animate verb::intrans::simple',
+                                   'AGENT=;ACTION=;E=EN,SIMPLE'],
+                                  ['det adj::animate noun::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate verb::trans::simple det noun',
+                                  ['det adj::animate noun::animate verb::trans::simple det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::double::participle '
-                                   'det noun::inanimate to det noun::animate',
+                                  ['det adj::animate noun::animate aux::singular verb::double::participle '
+                                   'det adj::inanimate noun::inanimate to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                  ['det noun::animate aux::singular verb::double::participle det noun::animate '
-                                   'det noun::inanimate',
+                                  ['det adj::animate noun::animate aux::singular verb::double::participle det '
+                                   'noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate verb::double::simple det noun::inanimate to det noun::animate',
+                                  ['det adj::animate noun::animate verb::double::simple det noun::inanimate to '
+                                   'det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                  ['det noun::animate verb::double::simple det noun::animate det noun::inanimate',
+                                  ['det adj::animate noun::animate verb::double::simple det noun::animate det '
+                                   'noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
-            self.structures_es = [['det noun::animate aux::singular verb::intrans::participle',
+            self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans::participle',
                                    'AGENT=;ACTION=;E=ES,PROG'],
-                                  ['det noun::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::trans::participle det noun',
+                                  ['det noun::animate adj::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
+                                  ['det noun::animate adj::animate aux::singular verb::trans::participle det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::trans::simple det noun',
+                                  ['det noun::animate adj::animate verb::trans::simple det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::double::participle '
+                                  ['det noun::animate adj::animate aux::singular verb::double::participle '
                                    'det noun::inanimate to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
-                                  ['det noun::animate aux::singular verb::double::participle '
+                                  ['det noun::animate adj::animate aux::singular verb::double::participle '
                                    'to det noun::animate det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::double::simple det noun::inanimate to det noun::animate',
+                                  ['det noun::animate adj::animate verb::double::simple det noun::inanimate '
+                                   'to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate verb::double::simple to det noun::animate det noun::inanimate',
+                                  ['det noun::animate adj::animate verb::double::simple to det noun::animate '
+                                   'det noun::inanimate',
                                    'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         else:
@@ -496,7 +517,7 @@ class SetsGenerator:
                     elif type(w) is list:
                         random_word = random.choice(w)
                         message[msg_idx] += "," + self.get_concept(random_word)  # nouns
-                        if level == 'animate':  # include semantic gender, we can decide later whether to use it
+                        if level == 'animate' and 'noun' in pos:  # include semantic gender, we can decide later whether to use it
                             message[msg_idx] += "," + gender.upper()
                         if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
@@ -514,20 +535,30 @@ class SetsGenerator:
                             sentence.append(random_word)
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
-                        msg_idx += 1
+                        if (self.use_adjectives and (lang == 'es' and 'adj' in pos) or
+                                (lang == 'en' and 'noun' in pos)) or 'verb' in pos or (msg_idx > 1 and lang == 'es'):
+                            msg_idx += 1
+                        elif not self.use_adjectives:
+                            msg_idx += 1
                     else:  # elif type == str
                         if not np[sen_idx] and w == determiners and msg_idx < 1:
                             continue
                         sentence.append(w)
                 elif type(syn) is list:
-                    random_word = random.choice(syn)
-                    message[msg_idx] += self.get_concept(random_word)  # verb
-                    msg_idx += 1
                     if add_det:
                         det = determiners if gender not in determiners else determiners[gender]
                         sentence.append(det)
                         add_det = False
-                    sentence.append(random_word)
+
+                    random_word = random.choice(syn)
+                    message[msg_idx] += '%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
+
+                    if 'verb' in pos:
+                        msg_idx += 1
+                    #    sentence.append(random_word)
+                    #elif part == 'adj' and not (not np[sen_idx] and msg_idx == 0):
+                    if part != 'adj' or (part == 'adj' and not (not np[sen_idx] and msg_idx == 0)):
+                        sentence.append(random_word)
                 else:
                     sentence.append(syn)
 
@@ -597,5 +628,5 @@ if __name__ == "__main__":
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=0,
-                       percentage_l2=50, add_filler=True, print_sets=True)
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=100,
+                       percentage_l2=50, add_filler=False, print_sets=True)
