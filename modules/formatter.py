@@ -30,15 +30,20 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
+        self.translation_dict = {'-a': '-s', 'a_': 'to', '.': '.', 'está': 'is',
+                                 'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
+                                 '-ando': '-ing', 'ella': 'she', 'él': 'he'}
+        self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}
+        self.concept_to_words = self._reverse_lexicon_to_concept()
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
         self.fixed_weights = fixed_weights
         self.fixed_identif = fixed_weights_identif
         self.period_idx = self.lexicon.index('.')
-        self.to_preposition_idx = self.lexicon.index('to')
+        self.to_prepositions_idx = [self.lexicon.index('to'), self.lexicon.index('a_')]  # self.lexicon.index('to')
         # the verb suffix -ó is the first entry in the ES lexicon
-        self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else None
+        self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else self.lexicon.index('él')
         self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]
         self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
                             self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
@@ -51,6 +56,15 @@ class InputFormatter:
 
         self.plot_title = plot_title
         self.lang = language
+
+    def _reverse_lexicon_to_concept(self):
+        concept_to_words = {}  # use
+        for revkey, revvalue in self.lexicon_to_concept.iteritems():
+            if revvalue in concept_to_words:
+                concept_to_words[revvalue].append(revkey)
+            else:
+                concept_to_words[revvalue] = [revkey]
+        return concept_to_words
 
     def _number_of_test_pronouns(self):
         regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
@@ -190,7 +204,7 @@ class InputFormatter:
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 1  # 0.5 ? 1?
+        norm_activation = 2  # 0.5 ? 1?
         reduced_activation = 0  # 0.1-4
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)

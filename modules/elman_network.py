@@ -9,7 +9,7 @@ np.random.seed(18)
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False):
+    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False, include_input_copy=False):
         self.layers = []
         self.context_init = context_init  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
@@ -17,6 +17,7 @@ class SimpleRecurrentNetwork:
         self.initialization_completed = False  # needs to be set to True for the model to start training
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
+        self.include_input_copy = include_input_copy
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
         self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
@@ -135,6 +136,10 @@ class SimpleRecurrentNetwork:
             crole = self.get_layer("role_copy")
             crole.activation = np.zeros(crole.size)
 
+        if self.include_input_copy:
+            cinput = self.get_layer("input_copy")
+            cinput.activation = np.zeros(cinput.size)
+
     def set_inputs(self, input_idx, target_idx=None):
         input_layer = self.get_layer("input")
         input_layer.activation = np.zeros(input_layer.size)
@@ -183,6 +188,10 @@ class SimpleRecurrentNetwork:
         # Copy output of the hidden to "context" (activation of t-1)
         hidden_layer = self.get_layer("hidden")
         hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
+        if self.include_input_copy:
+            input_layer = self.get_layer("input")
+            input_copy_layer = self.get_layer("input_copy")
+            input_copy_layer.activation = deepcopy(input_layer.activation)
         if self.include_role_copy:
             role_layer = self.get_layer("role")
             role_copy_layer = self.get_layer("role_copy")
