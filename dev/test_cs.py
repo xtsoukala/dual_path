@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pickle
 import collections
+import os
 
 
 def _read_lexicon_and_pos(fname):
@@ -67,18 +68,20 @@ def get_sentence_grammaticality_and_flex_order(out_sentence_idx, trg_sentence_id
         return is_grammatical, not has_flex_order
     out_pos = sentence_indeces_pos(out_sentence_idx)
     trg_pos = sentence_indeces_pos(trg_sentence_idx)
+    print out_pos
+    print trg_pos
     if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
         return is_grammatical, not has_flex_order
     # diff between double object sentences -- but also make sure that output sentence is grammatical and that "to"
     # isn't the last word in the sentence.
-    if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos in allowed_structures():
+    if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos[-1] != 'TO':#and out_pos in allowed_structures():
         return is_grammatical, has_flex_order
     return not is_grammatical, not has_flex_order
 
 
 def allowed_structures():
     import itertools
-    with open('test_input/train.enes') as f:
+    with open(os.path.join(input_path, 'train.enes')) as f:
          trainlines = [line.rstrip('\n') for line in f]
     all_pos = [sentence_indeces_pos(sentence.split("##")[0].split(), convert_to_idx=True)
                for sentence in trainlines]
@@ -121,10 +124,22 @@ def get_code_switched_type(out_sentence_idx, trg_sentence_idx):
         Note: Returns FALSE if the message conveyed was not correct.
     """
     # First "translate" message into the target language and compare with target sentence
-    translated_sentence_idx = translate_idx_into_monolingual(out_sentence_idx, trg_sentence_idx[0])
+    translated_sentence_candidates = translate_idx_into_monolingual_candidates(out_sentence_idx, trg_sentence_idx[0])
+    for translated_sentence_idx in translated_sentence_candidates:
+        cs_type = examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
+        if cs_type:  # if not False no need to look further
+            return cs_type
+    return cs_type  # returns False
+
+
+def examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
+    print translated_sentence_idx
+    print(sentence_from_indeces(translated_sentence_idx))
+    print(sentence_from_indeces(trg_sentence_idx))
     if not test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
         return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
     check_idx = [w for w in out_sentence_idx if w not in trg_sentence_idx]
+    print check_idx
     # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
     if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
         # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
@@ -144,18 +159,32 @@ def get_code_switched_type(out_sentence_idx, trg_sentence_idx):
     return cs_type
 
 
-def translate_idx_into_monolingual(out_sentence_idx, trg_lang_word_idx):
+def translate_idx_into_monolingual_candidates(out_sentence_idx, trg_lang_word_idx):
     if trg_lang_word_idx < code_switched_idx:
-        trans = [find_equivalent_translation_idx(idx) if idx >= code_switched_idx else idx
-                 for idx in out_sentence_idx]
+        trans = [find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
+                 if idx >= code_switched_idx else idx for idx in out_sentence_idx]
     else:
         trans = [find_equivalent_translation_idx(idx) if idx < code_switched_idx else idx
                  for idx in out_sentence_idx]
-    return trans
+    if any(isinstance(i, list) for i in trans):
+        candidate_translations = []
+        # decompose into possile translation paths
+        len_possible_translations = max(len(l) for l in trans if type(l) is list)
+        for i in range(len_possible_translations):
+            t = []
+            for idx in trans:
+                if type(idx) is list:
+                    t.append(idx[i])
+                else:
+                    t.append(idx)
+            candidate_translations.append(t)
+        return candidate_translations
+    return [trans]
 
 
-def find_equivalent_translation_idx(idx):
+def find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=False):
     word = lexicon[idx]
+    print word
     if word in translation_dict:
         translation = translation_dict[word]
     elif word in reverse_translation_dict:
@@ -163,12 +192,19 @@ def find_equivalent_translation_idx(idx):
     else:
         concept = lexicon_to_concept[lexicon[idx]]
         all_translations = [w for w in concept_to_words[concept] if w != word]
-        translation = all_translations[0] if len(all_translations) > 0 else all_translations
-        if not translation:
-            # print word, id
-            # print concept
+        if not all_translations:
+            # print word, id, concept
             # print all_translations
             return idx
+        elif len(all_translations) > 1:
+            if remove_candidates_less_than_cs_point:
+                return [lexicon.index(translation) for translation in all_translations
+                        if lexicon.index(translation) < code_switched_idx]
+            else:
+                return [lexicon.index(translation) for translation in all_translations
+                        if lexicon.index(translation) >= code_switched_idx]
+        else:
+            translation = all_translations[0]
     return lexicon.index(translation)
 
 
@@ -224,10 +260,11 @@ def sentence_indeces(sentence_lst):
     """
     return [lexicon.index(w) for w in sentence_lst]
 
-pos, lexicon = _read_lexicon_and_pos('test_input/lexicon.in')
-code_switched_idx = lexicon.index('-ó') if '-ó' in lexicon else None
+input_path = '../simulations/2017-09-26t11.51.07_enes_h40_c25/input_cp'
+pos, lexicon = _read_lexicon_and_pos(os.path.join(input_path, 'lexicon.in'))
+code_switched_idx = lexicon.index('-ó') if '-ó' in lexicon else lexicon.index('él')
 period_idx = lexicon.index('.')
-lexicon_to_concept = pickle.load(open('test_input/lexicon_to_concept.pickled', 'rb'))
+lexicon_to_concept = pickle.load(open(os.path.join(input_path, 'lexicon_to_concept.pickled'), 'rb'))
 translation_dict = {'-a': '-s', 'a_': 'to', '.': '.', 'está': 'is',
                                  'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
                                  '-ando': '-ing', 'ella': 'she', 'él': 'he'}
@@ -236,8 +273,8 @@ concept_to_words = _reverse_lexicon_to_concept(lexicon_to_concept)
 same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
 to_preposition_idxs = [lexicon.index('to'), lexicon.index('a_')]
 
-s = 'un hombre present_ -a the pelota .'
-t = 'un hombre present_ -a a_ la directora la pelota .'
+s = 'a tall brother está dando a_ un tío the pelota .'
+t = 'a tall brother is giving a uncle the ball .'
 sentence_idx = sentence_indeces(s.split())
 print get_sentence_grammaticality_and_flex_order(sentence_idx, sentence_indeces(t.split()))
 print get_code_switched_type(sentence_idx, sentence_indeces(t.split()))

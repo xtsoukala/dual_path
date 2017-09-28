@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import shutil
 import collections
+import itertools
 from multiprocessing import Process, Manager
 from datetime import datetime
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
@@ -246,38 +247,48 @@ class DualPath:
             Note: Returns FALSE if the message conveyed was not correct.
         """
         # First "translate" message into the target language and compare with target sentence
-        translated_sentence_idx = self.translate_idx_into_monolingual(out_sentence_idx, trg_sentence_idx[0])
+        translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
+                                                                                        trg_sentence_idx[0])
+        for translated_sentence_idx in translated_sentence_candidates:
+            translated_sentences = list(itertools.chain.from_iterable(translated_sentence_idx))
+            cs_type = self.examine_sentences_for_cs_type(translated_sentences, out_sentence_idx, trg_sentence_idx)
+            if cs_type:  # if not False no need to look further
+                return cs_type
+        return False  # no CS type found
+
+    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
+        if trg_lang_word_idx < self.inputs.code_switched_idx:
+            trans = [self.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
+                     if idx >= self.inputs.code_switched_idx else [idx] for idx in out_sentence_idx]
+        else:
+            trans = [self.find_equivalent_translation_idx(idx) if idx < self.inputs.code_switched_idx else [idx]
+                     for idx in out_sentence_idx]
+        if any(len(i) > 1 for i in trans):
+            return [list([x] for x in tup) for tup in list(itertools.product(*trans))]
+        return [trans]
+
+    def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
         check_idx = [w for w in out_sentence_idx if w not in trg_sentence_idx]
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
-        #if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
+            # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
             cs_type = "intra-sentential"
         else:
             check_idx_pos = [self.inputs.pos_lookup(w) for w in check_idx]
-            if len(set(check_idx_pos)) == 1:  # only one POS type has been switched
+            if len(set(check_idx_pos)) == 1:
                 cs_type = "%s-borrow" % check_idx_pos[0].lower()
             else:
                 # print self.inputs.sentence_from_indeces(out_sentence_idx)
                 # print self.inputs.sentence_from_indeces(translated_sentence_idx)
-                # print '---TRANSLATION---'
                 # print check_idx
                 # print "POS: %s" % check_idx_pos
                 # print "INSPECT: %s %s" % (check_idx, self.inputs.sentence_from_indeces(check_idx))
                 cs_type = "Intra-word switching"
         return cs_type
 
-    def translate_idx_into_monolingual(self, out_sentence_idx, trg_lang_word_idx):
-        if trg_lang_word_idx < self.inputs.code_switched_idx:
-            trans = [self.find_equivalent_translation_idx(idx) if idx >= self.inputs.code_switched_idx else idx
-                     for idx in out_sentence_idx]
-        else:
-            trans = [self.find_equivalent_translation_idx(idx) if idx < self.inputs.code_switched_idx else idx
-                     for idx in out_sentence_idx]
-        return trans
-
-    def find_equivalent_translation_idx(self, idx):
+    def find_equivalent_translation_idx(self, idx, remove_candidates_less_than_cs_point=False):
         word = self.inputs.lexicon[idx]
         if word in self.inputs.translation_dict:
             translation = self.inputs.translation_dict[word]
@@ -286,12 +297,19 @@ class DualPath:
         else:
             concept = self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
             all_translations = [w for w in self.inputs.concept_to_words[concept] if w != word]
-            translation = all_translations[0] if len(all_translations) > 0 else all_translations
-            if not translation:
-                #print word, id, concept
-                #print all_translations
-                return idx
-        return self.inputs.lexicon.index(translation)
+            if not all_translations:
+                print word, idx, concept
+                return [idx]  # this is the case where a word exists in one language but not the other
+            elif len(all_translations) > 1:
+                if remove_candidates_less_than_cs_point:
+                    return [self.inputs.lexicon.index(translation) for translation in all_translations
+                            if self.inputs.lexicon.index(translation) < self.inputs.code_switched_idx]
+                else:
+                    return [self.inputs.lexicon.index(translation) for translation in all_translations
+                            if self.inputs.lexicon.index(translation) >= self.inputs.code_switched_idx]
+            else:
+                translation = all_translations[0]
+        return [self.inputs.lexicon.index(translation)]
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
         out_pronouns = [idx for idx in out_sentence_idx if idx in self.inputs.idx_en_pronoun]
@@ -436,7 +454,9 @@ class DualPath:
             return is_grammatical, not has_flex_order
         # diff between double object sentences -- but also make sure that output sentence is grammatical and that "to"
         # isn't the last word in the sentence.
-        if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos in self.inputs.allowed_structures:
+        if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos[-1] != 'TO':
+            # Normally we should be checking "and out_pos in self.inputs.allowed_structures:", but the model generated
+            # novel (correct) structures so for now just make sure that "to" isn't the last word produced.
             return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
@@ -496,9 +516,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=20,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=12,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=12,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
@@ -507,7 +527,7 @@ if __name__ == "__main__":
     parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
-                        type=int, default=0)
+                        type=int, default=100)
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
@@ -526,7 +546,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
-    parser.set_defaults(nolang=False)
+    parser.set_defaults(nolang=True)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
@@ -540,7 +560,7 @@ if __name__ == "__main__":
     parser.set_defaults(ignore_past=True)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
-    parser.set_defaults(full_verb=False)
+    parser.set_defaults(full_verb=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
