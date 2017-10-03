@@ -22,9 +22,9 @@ class DualPath:
 
     role, concept and pred_concept units are unbiased to make them more input driven
     """
-    def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size, role_copy,
-                 exclude_lang, srn_debug_mess, test_every, set_weights_folder, set_weights_epoch, input_format,
-                 check_pronouns, simulation_num=None):
+    def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
+                 role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
+                 input_format, check_pronouns, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -33,13 +33,14 @@ class DualPath:
         :param epochs: Number of training set iterations during training
         :param compress_size: Size of the compress layers (approximately hidden/3)
         :param role_copy: Whether to keep a copy of the role layer activation
-        :param srn_debug_mess: Whether to show debug messages during training
+        :param input_copy: Whether to keep a copy of the input layer activation
+        :param srn_debug: Whether to show debug messages during training
         :param test_every: Test network every x epochs
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
         :param input_format: Instance of InputFormatter Class (contains all the input for the model)
-        :param check_pronouns: Whether we want to evaluate pronoun production
-        :param simulation_num: Number of simulation (in case we run several simulations in parallel)
+        :param check_pronouns: Whether to evaluate pronoun production
+        :param simulation_num: Number of simulation (useful in case we run several simulations in parallel)
         """
         self.inputs = input_format
         self.compress_size = compress_size
@@ -59,12 +60,12 @@ class DualPath:
         self.check_pronouns = check_pronouns
         self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
-        self.input_copy = False
+        self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, dir=results_dir,
-                                          debug_messages=srn_debug_mess, include_role_copy=self.role_copy,
+                                          debug_messages=srn_debug, include_role_copy=self.role_copy,
                                           include_input_copy=self.input_copy)
         self.initialize_network()
 
@@ -372,7 +373,7 @@ class DualPath:
                         correct_meaning = True
                         num_correct_code_switches += 1
                 else:
-                    correct_meaning = has_correct_meaning(produced_sentence_idx, target_sentence_idx, flexible_order)
+                    correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx, flexible_order)
 
                 if correct_meaning:
                     num_correct_meaning += 1
@@ -460,20 +461,28 @@ class DualPath:
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
             return is_grammatical, not has_flex_order
-        # diff between double object sentences -- but also make sure that output sentence is grammatical and that "to"
-        # isn't the last word in the sentence.
-        if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos[-1] != 'TO':
-            # Normally we should be checking "and out_pos in self.inputs.allowed_structures:", but the model generated
-            # novel (correct) structures so for now just make sure that "to" isn't the last word produced.
+        if len(out_pos) > 2 and out_pos[-1] == 'TO':
+            # make sure that output sentence is grammatical and that "to" isn't the last word in the sentence
+            return not is_grammatical, not has_flex_order
+        # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
+        if len(out_pos) > len(trg_pos):
+            trg_pos.append('TO')
+        elif len(out_pos) < len(trg_pos):  # if they are equal don't append
+            out_pos.append('TO')
+        if self.same_unordered_lists(out_pos, trg_pos):
             return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
-
-def has_correct_meaning(out_sentence_idx, trg_sentence_idx, flexible_order):
-    # flexible_order in the monolingual case means that the only difference is the preposition "to"
-    if out_sentence_idx == trg_sentence_idx or flexible_order:
-        return True
-    return False
+    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx, flexible_order):
+        if out_sentence_idx == trg_sentence_idx:
+            return True
+        if flexible_order:
+            # flexible_order in the monolingual case means that the only difference is the preposition "to"
+            out_sentence_idx = [x for x in out_sentence_idx if x not in self.inputs.to_prepositions_idx]
+            trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.inputs.to_prepositions_idx]
+            if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
+                return True
+        return False
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -513,11 +522,11 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any other string for bilingual)', default='enes')
+                                      'or any combination [enes, esen] for bilingual)', default='esen')
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.2)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
-                        type=float, default=0.015)
+                        type=float, default=0.02)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
                         type=float, default=0.75)
     parser.add_argument('-set_weights', '-sw',
@@ -537,24 +546,28 @@ if __name__ == "__main__":
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
-    # input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder
+    """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
     parser.add_argument('-role', help='File name that contains the roles', default='roles.in')
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
+    ####################################################################################################################
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
                                                           'training. If empty, the train.* file under -input is used.')
     parser.add_argument('-testset', '-test', help='Test set file name')
-    # boolean arguments
+    """ ######################################## boolean arguments ################################################# """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
-    parser.add_argument('--rcopy', dest='rcopy', action='store_true',
+    parser.add_argument('--crole', dest='crole', action='store_true',
                         help='If (role copy) is set, the produced role layer is copied back to the comprehension layer')
-    parser.set_defaults(rcopy=False)
+    parser.set_defaults(crole=False)
+    parser.add_argument('--cinput', dest='cinput', action='store_true',
+                        help='If (copy input) is set, the previous activation of the input layer is stored')
+    parser.set_defaults(cinput=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
-    parser.set_defaults(nolang=True)
+    parser.set_defaults(nolang=False)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
@@ -568,7 +581,7 @@ if __name__ == "__main__":
     parser.set_defaults(ignore_past=True)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
-    parser.set_defaults(full_verb=True)
+    parser.set_defaults(full_verb=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
@@ -622,14 +635,14 @@ if __name__ == "__main__":
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
         f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
-                 "Copy role: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis (overt ES "
-                 "pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s (epoch: %s)"
-                 "\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
+                 "Copy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis "
+                 "(overt ES pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s "
+                 "(epoch: %s)\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
                  "Allow free structure production:%s\n") %
                 (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
                  args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
-                 args.compress, args.rcopy, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
-                 args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
+                 args.compress, args.crole, args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw,
+                 args.fwi, args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
@@ -644,7 +657,7 @@ if __name__ == "__main__":
     failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                         epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
+                         epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
                          input_format=inputs, momentum=args.momentum, check_pronouns=args.check_pronouns)
@@ -656,7 +669,7 @@ if __name__ == "__main__":
             os.makedirs(rdir)
             inputs.results_dir = rdir
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                             epochs=args.epochs, role_copy=args.rcopy, srn_debug_mess=args.debug,
+                             epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_format=inputs,

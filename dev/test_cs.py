@@ -68,13 +68,17 @@ def get_sentence_grammaticality_and_flex_order(out_sentence_idx, trg_sentence_id
         return is_grammatical, not has_flex_order
     out_pos = sentence_indeces_pos(out_sentence_idx)
     trg_pos = sentence_indeces_pos(trg_sentence_idx)
-    print out_pos
-    print trg_pos
     if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
         return is_grammatical, not has_flex_order
-    # diff between double object sentences -- but also make sure that output sentence is grammatical and that "to"
-    # isn't the last word in the sentence.
-    if list(set(out_pos).symmetric_difference(trg_pos)) == ['TO'] and out_pos[-1] != 'TO':#and out_pos in allowed_structures():
+    if len(out_pos) > 2 and out_pos[-1] == 'TO':
+        # make sure that output sentence is grammatical and that "to" isn't the last word in the sentence
+        return not is_grammatical, not has_flex_order
+    # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
+    if len(out_pos) > len(trg_pos):
+        trg_pos.append('TO')
+    elif len(out_pos) < len(trg_pos):  # if they are equal don't append
+        out_pos.append('TO')
+    if self.same_unordered_lists(out_pos, trg_pos):
         return is_grammatical, has_flex_order
     return not is_grammatical, not has_flex_order
 
@@ -260,7 +264,7 @@ def sentence_indeces(sentence_lst):
     """
     return [lexicon.index(w) for w in sentence_lst]
 
-input_path = '../simulations/2017-09-26t11.51.07_enes_h40_c25/input_cp'
+input_path = '../simulations/2017-10-02t16.43.11_enes_h40_c25/input'
 pos, lexicon = _read_lexicon_and_pos(os.path.join(input_path, 'lexicon.in'))
 code_switched_idx = lexicon.index('-ó') if '-ó' in lexicon else lexicon.index('él')
 period_idx = lexicon.index('.')
@@ -273,8 +277,8 @@ concept_to_words = _reverse_lexicon_to_concept(lexicon_to_concept)
 same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
 to_preposition_idxs = [lexicon.index('to'), lexicon.index('a_')]
 
-s = 'a tall brother está dando a_ un tío the pelota .'
-t = 'a tall brother is giving a uncle the ball .'
+s = 'the chairwoman está present -ing the bag .'
+t = 'the chairwoman is present -ing the bag to a teacher .'
 sentence_idx = sentence_indeces(s.split())
 print get_sentence_grammaticality_and_flex_order(sentence_idx, sentence_indeces(t.split()))
 print get_code_switched_type(sentence_idx, sentence_indeces(t.split()))

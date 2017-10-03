@@ -9,7 +9,8 @@ np.random.seed(18)
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False, include_input_copy=False):
+    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False,
+                 include_input_copy=False):
         self.layers = []
         self.context_init = context_init  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)

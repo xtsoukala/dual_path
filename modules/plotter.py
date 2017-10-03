@@ -44,17 +44,19 @@ class Plotter:
             plt.close()
 
         if sum(results['code_switches']['test']) > 0:
-            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab')
+            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
+                     label="All CS")
             plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
-                     color='yellowgreen')
+                     color='yellowgreen', label="All CS (training)")
             plt.plot(epochs, [percentage(x, num_test) for x in results['correct_code_switches']['test']],
-                     color='darkslateblue')
+                     color='darkslateblue', label="Correct CS")
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
-                     linestyle='--', color='deepskyblue')
+                     linestyle='--', color='deepskyblue', label="Correct CS (training)")
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
             plt.ylim([0, 80])
             plt.xlim(min(epochs), max(epochs))
+            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
             if summary_sim:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
             else:

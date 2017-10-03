@@ -30,7 +30,7 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
-        self.translation_dict = {'-a': '-s', 'a_': 'to', '.': '.', 'está': 'is',
+        self.translation_dict = {'-a': '-s', '-ó': '-ed', 'a_': 'to', '.': '.', 'está': 'is', 'estaba': 'was',
                                  'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
                                  '-ando': '-ing', 'ella': 'she', 'él': 'he'}
         self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}

@@ -258,7 +258,8 @@ class SetsGenerator:
                                   ['det adj::animate noun::animate verb::trans::simple det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
                                   ['det adj::animate noun::animate aux::singular verb::double::participle '
-                                   'det adj::inanimate noun::inanimate to det noun::animate',
+                                   'det noun::inanimate to det noun::animate',
+                                   #'det adj::inanimate noun::inanimate to det noun::animate',
                                    'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
                                   ['det adj::animate noun::animate aux::singular verb::double::participle det '
                                    'noun::animate det noun::inanimate',
@@ -517,9 +518,9 @@ class SetsGenerator:
                     elif type(w) is list:
                         random_word = random.choice(w)
                         message[msg_idx] += "," + self.get_concept(random_word)  # nouns
-                        if level == 'animate' and 'noun' in pos:  # include semantic gender, we can decide later whether to use it
+                        if level == 'animate' and 'noun' in pos:  # include semantic gender, we can discard it later
                             message[msg_idx] += "," + gender.upper()
-                        if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
+                        if not np[sen_idx] and msg_idx == 0 and 'noun' in pos:  # go for pronoun (instead of NP)
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
                             add_det = False
                             # add pronoun
@@ -628,5 +629,5 @@ if __name__ == "__main__":
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=100,
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=50,
                        percentage_l2=50, add_filler=False, print_sets=True)
