@@ -521,9 +521,6 @@ if __name__ == "__main__":
                             language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
-
-    if not args.final_lrate:
-        args.final_lrate = args.lrate
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
