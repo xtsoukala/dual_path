@@ -237,7 +237,7 @@ class DualPath:
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def is_code_switched(self, sentence_indeces):
-        """ This function only checks whetehr words from different languages were used.
+        """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
         sentence_no_period = [x for x in sentence_indeces if x != self.inputs.period_idx]  # period common in all lang
         if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period) or
@@ -291,9 +291,7 @@ class DualPath:
             else:
                 # print self.inputs.sentence_from_indeces(out_sentence_idx)
                 # print self.inputs.sentence_from_indeces(translated_sentence_idx)
-                # print check_idx
-                # print "POS: %s" % check_idx_pos
-                # print "INSPECT: %s %s" % (check_idx, self.inputs.sentence_from_indeces(check_idx))
+                # print "POS: %s. INSP:%s %s" % (check_idx_pos, check_idx, self.inputs.sentence_from_indeces(check_idx))
                 cs_type = "Intra-word switching"
         return cs_type
 
@@ -568,6 +566,8 @@ if __name__ == "__main__":
     parser.set_defaults(debug=False)
     parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
     parser.set_defaults(nolang=False)
+    parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
+    parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
@@ -630,6 +630,9 @@ if __name__ == "__main__":
     if not args.title:
         args.title = generate_title_from_file_extension(args.testset)
 
+    if not args.decrease_lrate:
+        args.lrate = args.final_lrate
+
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
         f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
@@ -638,7 +641,8 @@ if __name__ == "__main__":
                  "(epoch: %s)\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
                  "Allow free structure production:%s\n") %
                 (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, (args.final_lrate < args.lrate), " (%s)" % args.final_lrate if args.final_lrate else "",
+                 args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate if (args.final_lrate and
+                                                                                 args.decrease_lrate) else "",
                  args.compress, args.crole, args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw,
                  args.fwi, args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
