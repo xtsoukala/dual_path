@@ -598,22 +598,20 @@ if __name__ == "__main__":
                                                    datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
                                                    args.lang, args.hidden, args.compress)
     os.makedirs(results_dir)
-
     original_input_path = None  # keep track of the original input in case it was copied
     if args.input:  # generate a new set (unless "input" was also set)
         if not os.path.isfile(os.path.join(args.input, "test.%s" % args.lang)) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
-            elif os.path.exists(os.path.join(args.input, "input_cp")):
-                args.input = os.path.join(args.input, "input_cp")
             else:
                 import sys
                 sys.exit('No input folder found in the path (%s)' % args.input)
         print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
-        copy_dir(args.input, '%s/input_cp' % results_dir)
+        copy_dir(args.input, '%s/input' % results_dir)
         original_input_path = args.input
-        args.input = '%s/input_cp' % results_dir
+        args.input = '%s/input' % results_dir
+        print args.input
     else:
         from modules.corpus_generator import SetsGenerator
 
@@ -622,12 +620,12 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_noun_phrase=args.np,
-                           add_filler=args.filler, include_bilingual_lexicon=True)
+                           add_filler=args.filler, include_bilingual_lexicon=True, save_lexicon=True)
 
     if not args.trainingset:
-        args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
+         args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
     if not args.testset:
-        args.testset = [filename for filename in os.listdir(args.input) if filename.startswith("test")][0]
+         args.testset = [filename for filename in os.listdir(args.input) if filename.startswith("test")][0]
 
     if not args.title:
         args.title = generate_title_from_file_extension(args.testset)
@@ -639,8 +637,8 @@ if __name__ == "__main__":
                  "(overt ES pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s "
                  "(epoch: %s)\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
                  "Allow free structure production:%s\n") %
-                (args.input, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, (args.final_lrate is not None), " (%s)" % args.final_lrate if args.final_lrate else "",
+                (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
+                 args.lrate, (args.final_lrate < args.lrate), " (%s)" % args.final_lrate if args.final_lrate else "",
                  args.compress, args.crole, args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw,
                  args.fwi, args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
@@ -650,8 +648,6 @@ if __name__ == "__main__":
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
 
-    if not args.final_lrate:
-        args.final_lrate = args.lrate
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []

@@ -337,7 +337,7 @@ class SetsGenerator:
                 self.structures_es[i][1] += additions[i]
 
     def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, add_filler,
-                      percentage_l2=50, print_sets=False):
+                      percentage_l2=50, print_sets=False, save_lexicon=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code
@@ -353,38 +353,39 @@ class SetsGenerator:
         sentence_structures_train = self.generate_sentence_structures(num_train)
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
-        test_set = self.generate_sentences(sentence_structures_test, self.lexicon, fname="test.%s" % lang,
+        test_set = self.generate_sentences(sentence_structures_test, fname="test.%s" % lang,
                                            percentage_noun_phrase=percentage_noun_phrase, print_sets=print_sets,
                                            return_mess=True, add_filler=add_filler)
-        self.generate_sentences(sentence_structures_train, self.lexicon, fname="train.%s" % lang, print_sets=print_sets,
+        self.generate_sentences(sentence_structures_train, fname="train.%s" % lang, print_sets=print_sets,
                                 percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set,
                                 add_filler=add_filler)
 
-        if include_bilingual_lexicon:
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_es)
-            self.target_lang.extend(['EN', 'ES'])
-            self.concepts.update(self.concepts_en)
-            self.concepts.update(self.concepts_es)
-        self.print_lexicon(self.lexicon)
+        if save_lexicon:
+            if include_bilingual_lexicon:
+                self.lexicon = self.lexicon_en.copy()
+                self.lexicon.update(self.lexicon_es)
+                self.target_lang.extend(['EN', 'ES'])
+                self.concepts.update(self.concepts_en)
+                self.concepts.update(self.concepts_es)
+            self.print_lexicon(self.lexicon)
 
-        with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
-            f.write("%s" % "\n".join(self.identifiability))
+            with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
+                f.write("%s" % "\n".join(self.identifiability))
 
-        with codecs.open('%s/concepts.in' % self.results_dir, 'w',  "utf-8") as f:
-            f.write("%s" % "\n".join(set(self.concepts.values())).encode("utf-8"))
+            with codecs.open('%s/concepts.in' % self.results_dir, 'w',  "utf-8") as f:
+                f.write("%s" % "\n".join(set(self.concepts.values())).encode("utf-8"))
 
-        with open('%s/event_sem.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.event_sem))
+            with open('%s/event_sem.in' % self.results_dir, 'w') as f:
+                f.write("%s" % "\n".join(self.event_sem))
 
-        with open('%s/target_lang.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(set(self.target_lang)))
+            with open('%s/target_lang.in' % self.results_dir, 'w') as f:
+                f.write("%s" % "\n".join(set(self.target_lang)))
 
-        with open('%s/roles.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.roles))
+            with open('%s/roles.in' % self.results_dir, 'w') as f:
+                f.write("%s" % "\n".join(self.roles))
 
-        with codecs.open('%s/lexicon_to_concept.pickled' % self.results_dir, 'w', "utf-8") as pckl:
-            pickle.dump(self.concepts, pckl)
+            with codecs.open('%s/lexicon_to_concept.pickled' % self.results_dir, 'w', "utf-8") as pckl:
+                pickle.dump(self.concepts, pckl)
 
     def get_structures_and_lexicon(self, lang):
         lang = lang.lower()
@@ -418,11 +419,10 @@ class SetsGenerator:
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, lexicon, fname, percentage_noun_phrase, exclude_test_sentences=[],
+    def generate_sentences(self, sentence_structures, fname, percentage_noun_phrase, exclude_test_sentences=[],
                            add_filler=True, return_mess=False, print_sets=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
-        :param lexicon: dict that contains words (with syntactic labeling)
         :param fname: filename where results will be stored
         :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
         :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
@@ -463,13 +463,13 @@ class SetsGenerator:
                 if '::' in pos:
                     if len(pos.split('::')) == 2:
                         part, level = pos.split("::")
-                        syn = lexicon[lang][part][level]
+                        syn = self.lexicon[lang][part][level]
                     else:
                         part, level, sublevel = pos.split("::")
-                        syn = lexicon[lang][part][level][sublevel]
+                        syn = self.lexicon[lang][part][level][sublevel]
                 else:
                     level = ''
-                    syn = lexicon[lang][pos]
+                    syn = self.lexicon[lang][pos]
 
                 if type(syn) is dict:
                     random_key = random.choice(syn.keys())
@@ -505,7 +505,7 @@ class SetsGenerator:
                             if not np[sen_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
                                 message[0] = re.sub(r"def|indef", "", message[0]) + "PRON"  # remove def/indef info
                                 # add pronoun
-                                sentence.append(lexicon[lang]['pron'][gender])
+                                sentence.append(self.lexicon[lang]['pron'][gender])
                             elif add_det or np[sen_idx] or msg_idx > 0:
                                 if type(determiners) is dict:
                                     sentence.append(determiners[gender])
@@ -524,7 +524,7 @@ class SetsGenerator:
                             message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
                             add_det = False
                             # add pronoun
-                            sentence.append(lexicon[lang]['pron'][gender])
+                            sentence.append(self.lexicon[lang]['pron'][gender])
                         elif add_det:
                             sentence.append(determiners[gender])
                             add_det = False  # reset
