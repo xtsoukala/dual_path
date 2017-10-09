@@ -17,11 +17,24 @@ class SetsGenerator:
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 ignore_past):
+                 ignore_past, percentage_noun_phrase, add_filler):
+        """
+        :param results_dir:
+        :param use_simple_semantics:
+        :param allow_free_structure_production:
+        :param use_full_verb_form:
+        :param ignore_past:
+        :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns in subject position
+        :param percentage_l2: percentage of L2 (e.g., English) vs L1
+        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
+        """
+
         self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
         os.makedirs(self.results_dir)
+        self.percentage_noun_phrase = percentage_noun_phrase
+        self.add_filler = add_filler
         self.ignore_past_tense = ignore_past
         self.use_adjectives = use_full_verb_form
         self.lexicon = {}
@@ -336,16 +349,13 @@ class SetsGenerator:
                 self.structures_en[i][1] += additions[i]
                 self.structures_es[i][1] += additions[i]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, percentage_noun_phrase, add_filler,
-                      percentage_l2=50, print_sets=False, save_lexicon=False):
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, print_onscreen=False, save_lexicon=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
-        :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns
-        :param percentage_l2: percentage of L2 (e.g., English) vs L1
-        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
-        :param print_sets: whether to print results on screen or just save in file
+        :param print_onscreen: whether to print results on screen or just save in file
+        :param save_lexicon: whether to save lexicon/concepts etc or just training/test sets
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
         self.get_structures_and_lexicon(lang)
@@ -354,11 +364,9 @@ class SetsGenerator:
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
         test_set = self.generate_sentences(sentence_structures_test, fname="test.%s" % lang,
-                                           percentage_noun_phrase=percentage_noun_phrase, print_sets=print_sets,
-                                           return_mess=True, add_filler=add_filler)
-        self.generate_sentences(sentence_structures_train, fname="train.%s" % lang, print_sets=print_sets,
-                                percentage_noun_phrase=percentage_noun_phrase, exclude_test_sentences=test_set,
-                                add_filler=add_filler)
+                                           print_onscreen=print_onscreen, return_mess=True)
+        self.generate_sentences(sentence_structures_train, fname="train.%s" % lang, print_onscreen=print_onscreen,
+                                exclude_test_sentences=test_set)
 
         if save_lexicon:
             if include_bilingual_lexicon:
@@ -419,26 +427,24 @@ class SetsGenerator:
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, fname, percentage_noun_phrase, exclude_test_sentences=[],
-                           add_filler=True, return_mess=False, print_sets=False):
+    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[], return_mess=False,
+                           print_onscreen=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename where results will be stored
-        :param percentage_noun_phrase: percentage of NPs vs pronouns in subject position
         :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
-        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
-        :param print_sets: whether to print results on screen apart from just saving them
+        :param print_onscreen: whether to print results on screen apart from just saving them
         :return:
         """
         generated_sentences = []  # keep track of generated sentences
         num_sentences = len(sentence_structures)
 
         # determine how often we will use NPs vs determiners
-        if not percentage_noun_phrase:  # use pronouns only
+        if not self.percentage_noun_phrase:  # use pronouns only
             np = [0] * num_sentences
         else:  # any other percentage
-            number_np = num_sentences * percentage_noun_phrase / 100
+            number_np = num_sentences * self.percentage_noun_phrase / 100
             np = number_np * [1] + (num_sentences - number_np) * [0]
             random.shuffle(np)
 
@@ -453,7 +459,7 @@ class SetsGenerator:
         for pos_full, mes in sentence_structures:
             message = mes.split(';')
             lang = re.search(r"^E=(\S.)", message[-1]).group(1).lower()
-            if add_filler and lang == 'es' and 'filler' not in pos_full:  # FIXME: why was filler already in pos_full even though I deepcopy?
+            if self.add_filler and lang == 'es' and 'filler' not in pos_full:  # FIXME: why was filler already in pos_full even though I deepcopy?
                 pos_full = "filler %s" % deepcopy(pos_full)
             sentence = []
             msg_idx = 0
@@ -556,8 +562,6 @@ class SetsGenerator:
 
                     if 'verb' in pos:
                         msg_idx += 1
-                    #    sentence.append(random_word)
-                    #elif part == 'adj' and not (not np[sen_idx] and msg_idx == 0):
                     if part != 'adj' or (part == 'adj' and not (not np[sen_idx] and msg_idx == 0)):
                         sentence.append(random_word)
                 else:
@@ -573,7 +577,7 @@ class SetsGenerator:
             else:
                 generated_sentences.append(message)
                 sen_idx += 1
-                if print_sets:
+                if print_onscreen:
                     print u"%s## %s" % (sentence, message)
                 with codecs.open('%s/%s' % (self.results_dir, fname), 'a',  "utf-8") as f:
                     f.write(u"%s## %s\n" % (sentence, message))
@@ -628,6 +632,6 @@ if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
-                         allow_free_structure_production=False, ignore_past=True)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, percentage_noun_phrase=50,
-                       percentage_l2=50, add_filler=False, print_sets=True)
+                         allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=50,
+                         add_filler=False)
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, print_onscreen=True)

@@ -599,6 +599,7 @@ if __name__ == "__main__":
                                                    args.lang, args.hidden, args.compress)
     os.makedirs(results_dir)
     original_input_path = None  # keep track of the original input in case it was copied
+    sets = None
     if args.input:  # generate a new set (unless "input" was also set)
         if not os.path.isfile(os.path.join(args.input, "test.%s" % args.lang)) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
@@ -617,10 +618,11 @@ if __name__ == "__main__":
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_simple_semantics=args.simple_semantics,
-                             allow_free_structure_production=args.free_pos, ignore_past=args.ignore_past)
-        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, percentage_noun_phrase=args.np,
-                           add_filler=args.filler, include_bilingual_lexicon=True, save_lexicon=True)
+                             use_simple_semantics=args.simple_semantics, add_filler=args.filler,
+                             percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
+                             ignore_past=args.ignore_past)
+        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True,
+                           save_lexicon=True)
 
     if not args.trainingset:
          args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
@@ -668,6 +670,14 @@ if __name__ == "__main__":
             rdir = "%s/%s" % (results_dir, sim)
             os.makedirs(rdir)
             inputs.results_dir = rdir
+            if sets:
+                sets.results_dir = rdir
+                sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
+                inputs.trainingset = [filename for filename in os.listdir(rdir) if filename.startswith("train")][0]
+                inputs.testset = [filename for filename in os.listdir(rdir) if filename.startswith("test")][0]
+            else:
+                # use existing test/training set
+                print 'todo'
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
