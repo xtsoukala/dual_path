@@ -348,7 +348,7 @@ class DualPath:
         num_all_code_switches = 0
         num_correct_code_switches = 0
 
-        file_suffix = "test" if is_test_set else "train"
+        file_prefix = "test" if is_test_set else "train"
 
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
@@ -389,7 +389,7 @@ class DualPath:
                             correctedness_status = "(POS only)"
                             num_pron_err_flex += 1
 
-                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_suffix),
+                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_prefix),
                                   'a') as f:
                             f.write("--------%s--------%s\nOUT:%s\nTRG:%s\n%s\n" %
                                     (epoch, correctedness_status,
@@ -398,7 +398,7 @@ class DualPath:
             if epoch > 0:
                 suffix = ("flex-" if flexible_order or has_wrong_det
                           else "in" if not correct_meaning else "")
-                with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
+                with open("%s/%s.eval" % (self.inputs.results_dir, file_prefix), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Definiteness:%s "
                             "Sentence:%scorrect %s\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
@@ -407,7 +407,7 @@ class DualPath:
                                              if code_switched else ""), message))
 
         # on the set level
-        with open("%s/%s.eval" % (self.inputs.results_dir, file_suffix), 'a') as f:
+        with open("%s/%s.eval" % (self.inputs.results_dir, file_prefix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
@@ -495,15 +495,21 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 
-def generate_title_from_file_extension(file_name):
+def copy_files_endwith(src, dest, ends_with=".input"):
+    for filename in os.listdir(src):
+        if filename.endswith(ends_with):
+            shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
+
+
+def generate_title_from_lang(lang_code):
     title = ''
-    if file_name.endswith('.en'):
+    if lang_code == 'en':
         title = 'English monolingual model'
-    elif file_name.endswith('.es'):
+    elif lang_code == 'es':
         title = 'Spanish monolingual model'
-    elif file_name.endswith('.el'):
+    elif lang_code == 'el':
         title = 'Greek monolingual model'
-    elif file_name.endswith('.enes') or file_name.endswith('.esen'):
+    elif lang_code == 'enes' or lang_code == 'esen':
         title = 'Bilingual EN-ES model'
     return title
 
@@ -551,8 +557,8 @@ if __name__ == "__main__":
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
     ####################################################################################################################
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
-                                                          'training. If empty, the train.* file under -input is used.')
-    parser.add_argument('-testset', '-test', help='Test set file name')
+                                                          'training.', default="train.input")
+    parser.add_argument('-testset', '-test', help='Test set file name', default="test.input")
     """ ######################################## boolean arguments ################################################# """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -601,7 +607,7 @@ if __name__ == "__main__":
     original_input_path = None  # keep track of the original input in case it was copied
     sets = None
     if args.input:  # generate a new set (unless "input" was also set)
-        if not os.path.isfile(os.path.join(args.input, "test.%s" % args.lang)) and 'input' not in args.input:
+        if not os.path.isfile(os.path.join(args.input, "test.input")) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
@@ -610,9 +616,8 @@ if __name__ == "__main__":
                 sys.exit('No input folder found in the path (%s)' % args.input)
         print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
         copy_dir(args.input, '%s/input' % results_dir)
-        original_input_path = args.input
+        original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir
-        print args.input
     else:
         from modules.corpus_generator import SetsGenerator
 
@@ -624,16 +629,11 @@ if __name__ == "__main__":
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True,
                            save_lexicon=True)
 
-    if not args.trainingset:
-         args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
-    if not args.testset:
-         args.testset = [filename for filename in os.listdir(args.input) if filename.startswith("test")][0]
-
     if not args.title:
-        args.title = generate_title_from_file_extension(args.testset)
+        args.title = generate_title_from_lang(args.lang)
 
     if not args.decrease_lrate:
-        args.lrate = args.final_lrate
+        args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
     # Save the parameters of the simulation(s)
     with open("%s/simulation.info" % results_dir, 'w') as f:
@@ -673,11 +673,10 @@ if __name__ == "__main__":
             if sets:
                 sets.results_dir = rdir
                 sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
-                inputs.trainingset = [filename for filename in os.listdir(rdir) if filename.startswith("train")][0]
-                inputs.testset = [filename for filename in os.listdir(rdir) if filename.startswith("test")][0]
-            else:
-                # use existing test/training set
-                print 'todo'
+            elif original_input_path:
+                # use existing test/training set (copy them first)
+                copy_files_endwith(os.path.join(original_input_path, str(sim)), rdir)
+            inputs.update_sets(new_input_dir=rdir)
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,

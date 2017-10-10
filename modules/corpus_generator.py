@@ -363,9 +363,9 @@ class SetsGenerator:
         sentence_structures_train = self.generate_sentence_structures(num_train)
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
-        test_set = self.generate_sentences(sentence_structures_test, fname="test.%s" % lang,
+        test_set = self.generate_sentences(sentence_structures_test, fname="test.input",
                                            print_onscreen=print_onscreen, return_mess=True)
-        self.generate_sentences(sentence_structures_train, fname="train.%s" % lang, print_onscreen=print_onscreen,
+        self.generate_sentences(sentence_structures_train, fname="train.input", print_onscreen=print_onscreen,
                                 exclude_test_sentences=test_set)
 
         if save_lexicon:

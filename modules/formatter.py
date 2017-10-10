@@ -57,6 +57,14 @@ class InputFormatter:
         self.plot_title = plot_title
         self.lang = language
 
+    def update_sets(self, new_input_dir):
+        self.input_dir = new_input_dir
+        self.trainlines = self.read_set()  # re-read files
+        self.num_train = len(self.trainlines)
+        self.testlines = self.read_set(test=True)
+        self.num_test = len(self.testlines)
+        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+
     def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
         for revkey, revvalue in self.lexicon_to_concept.iteritems():
@@ -76,7 +84,6 @@ class InputFormatter:
         :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
         :return:
         """
-
         if not set_name:
             if test:
                 set_name = self.testset
