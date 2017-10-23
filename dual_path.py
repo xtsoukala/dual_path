@@ -139,15 +139,13 @@ class DualPath:
         for trg_idx in ids:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=(prod_idx is None))
-            if self.exclude_lang and prod_idx is None:  # reset the target language for the rest of the sentence
-                self.srn.reset_target_lang()
+
             if backpropagate:
                 prod_idx = trg_idx  # training with target word, NOT produced one
                 self.srn.backpropagate(epoch)
             else:  # no "target" word in this case. Also, return the produced sentence
-                # first, reset the target language for the rest of the sentence
-                #if self.exclude_lang and prod_idx is None:
-                #    self.srn.reset_target_lang()
+                if self.exclude_lang and prod_idx is None:  # reset the target language for the rest of the sentence
+                    self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
@@ -519,8 +517,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=40)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=25)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=70)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=35)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
