@@ -292,7 +292,7 @@ class DualPath:
                 # print self.inputs.sentence_from_indeces(out_sentence_idx)
                 # print self.inputs.sentence_from_indeces(translated_sentence_idx)
                 # print "POS: %s. INSP:%s %s" % (check_idx_pos, check_idx, self.inputs.sentence_from_indeces(check_idx))
-                cs_type = "Intra-word switching"
+                cs_type = "inter-word switching"
         return cs_type
 
     def find_equivalent_translation_idx(self, idx, remove_candidates_less_than_cs_point=False):

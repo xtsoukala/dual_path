@@ -40,13 +40,16 @@ class InputFormatter:
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
         self.fixed_weights = fixed_weights
         self.fixed_identif = fixed_weights_identif
-        self.period_idx = self.lexicon.index('.')
-        self.to_prepositions_idx = [self.lexicon.index('to'), self.lexicon.index('a_')]  # self.lexicon.index('to')
+        self.period_idx = self._get_lexicon_index('.')
+        self.to_prepositions_idx = [self._get_lexicon_index('to'), self._get_lexicon_index('a_')]
         # the verb suffix -ó is the first entry in the ES lexicon
-        self.code_switched_idx = self.lexicon.index('-ó') if '-ó' in self.lexicon else self.lexicon.index('él')
-        self.idx_en_pronoun = [self.lexicon.index('he'), self.lexicon.index('she'), self.lexicon.index('it')]
-        self.determiners = [self.lexicon.index('a'), self.lexicon.index('the'), self.lexicon.index('un'),
-                            self.lexicon.index('una'), self.lexicon.index('la'), self.lexicon.index('el')]
+        self.code_switched_idx = (self.lexicon.index('-ando') if '-ando' in self.lexicon else
+                                  self.lexicon.index('colorida'))
+        self.idx_en_pronoun = [self._get_lexicon_index('he'), self._get_lexicon_index('she'),
+                               self._get_lexicon_index('it')]
+        self.determiners = [self._get_lexicon_index('a'), self._get_lexicon_index('the'),
+                            self._get_lexicon_index('un'), self._get_lexicon_index('una'),
+                            self._get_lexicon_index('la'), self._get_lexicon_index('el')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -64,6 +67,11 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+
+    def _get_lexicon_index(self, word):
+        if word in self.lexicon:
+            return self.lexicon.index(word)
+        return []
 
     def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
@@ -189,7 +197,7 @@ class InputFormatter:
         :param sentence_lst: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'walk', '-s']
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
         """
-        return [self.lexicon.index(w) for w in sentence_lst]
+        return [self._get_lexicon_index(w) for w in sentence_lst]
 
     def sentence_indeces_pos(self, sentence_idx, remove_period=True, convert_to_idx=False):
         """

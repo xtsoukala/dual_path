@@ -7,9 +7,11 @@ from datetime import datetime
 import sys
 import pickle
 from copy import deepcopy
+from itertools import chain
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
+random.seed(18)
 
 
 class SetsGenerator:
@@ -349,12 +351,12 @@ class SetsGenerator:
                 self.structures_en[i][1] += additions[i]
                 self.structures_es[i][1] += additions[i]
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, print_onscreen=False, save_lexicon=False):
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, debug=False, save_lexicon=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
-        :param print_onscreen: whether to print results on screen or just save in file
+        :param debug: whether to print results on screen
         :param save_lexicon: whether to save lexicon/concepts etc or just training/test sets
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
@@ -364,18 +366,21 @@ class SetsGenerator:
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
         test_set = self.generate_sentences(sentence_structures_test, fname="test.input",
-                                           print_onscreen=print_onscreen, return_mess=True)
-        self.generate_sentences(sentence_structures_train, fname="train.input", print_onscreen=print_onscreen,
+                                           debug=debug, return_mess=True)
+        self.generate_sentences(sentence_structures_train, fname="train.input", debug=debug,
                                 exclude_test_sentences=test_set)
 
         if save_lexicon:
             if include_bilingual_lexicon:
-                self.lexicon = self.lexicon_en.copy()
-                self.lexicon.update(self.lexicon_es)
-                self.target_lang.extend(['EN', 'ES'])
-                self.concepts.update(self.concepts_en)
-                self.concepts.update(self.concepts_es)
-            self.print_lexicon(self.lexicon)
+                if 'EN' not in self.target_lang:
+                    self.lexicon.update(self.lexicon_en)
+                    self.target_lang.append('EN')
+                    self.concepts.update(self.concepts_en)
+                elif 'ES' not in self.target_lang:
+                    self.lexicon.update(self.lexicon_es)
+                    self.target_lang.append('ES')
+                    self.concepts.update(self.concepts_es)
+            self.print_lexicon()
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
                 f.write("%s" % "\n".join(self.identifiability))
@@ -387,7 +392,7 @@ class SetsGenerator:
                 f.write("%s" % "\n".join(self.event_sem))
 
             with open('%s/target_lang.in' % self.results_dir, 'w') as f:
-                f.write("%s" % "\n".join(set(self.target_lang)))
+                f.write("%s" % "\n".join(self.target_lang))
 
             with open('%s/roles.in' % self.results_dir, 'w') as f:
                 f.write("%s" % "\n".join(self.roles))
@@ -428,13 +433,13 @@ class SetsGenerator:
         return sentence_structures
 
     def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[], return_mess=False,
-                           print_onscreen=False):
+                           debug=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename where results will be stored
         :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
         :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
-        :param print_onscreen: whether to print results on screen apart from just saving them
+        :param debug: whether to print results on screen
         :return:
         """
         generated_sentences = []  # keep track of generated sentences
@@ -577,7 +582,7 @@ class SetsGenerator:
             else:
                 generated_sentences.append(message)
                 sen_idx += 1
-                if print_onscreen:
+                if debug:
                     print u"%s## %s" % (sentence, message)
                 with codecs.open('%s/%s' % (self.results_dir, fname), 'a',  "utf-8") as f:
                     f.write(u"%s## %s\n" % (sentence, message))
@@ -606,21 +611,45 @@ class SetsGenerator:
         if len(keylist) > 1:
             return keylist[1]
 
-    def print_lexicon(self, d, key=None, keylist=[]):
-        for k, v in d.iteritems():
-            keylist.append(k)
-            if len(keylist) > 1:
-                key = self.get_layered_key(keylist)
+    def print_lexicon(self):
+        all_structures = set([pos[0] for pos in self.structures])
+        all_pos = set(chain.from_iterable([pos.split() for pos in all_structures]))
+        main_pos = set([p.split('::')[0] if '::' in p else p for p in all_pos])  # get rid of animate/inanimate info etc
 
-            if isinstance(v, dict):
-                self.print_lexicon(v, key, keylist=keylist)
+        for lang in self.target_lang:
+            for pos in main_pos:
+                # keep separate for now because of code-switching
+                lex = list(get_dict_items(pos, self.lexicon[lang.lower()]))
+                if any(isinstance(i, list) for i in lex):
+                    lex = list(chain.from_iterable(lex))
+                with codecs.open('%s/lexicon.in' % self.results_dir, 'a', "utf-8") as f:
+                    f.write("{0}:\n{1}\n".format(pos.upper(), "\n".join(lex)))
+
+
+def get_dict_items(key, dictionary):
+    dd = dictionary[key]
+    if not isinstance(dd, dict):
+        yield dd
+    else:
+        list_words = []  # TODO: replace with recursive function, this is ugly
+        for idx, value in dd.iteritems():
+            if not isinstance(value, dict):
+                list_words.append(value)
             else:
-                if type(v) is list:
-                    with codecs.open('%s/lexicon.in' % self.results_dir, 'a',  "utf-8") as f:
-                        f.write("{0}:\n{1}\n".format(key.upper(), "\n".join(v)))
-                else:
-                    with codecs.open('%s/lexicon.in' % self.results_dir, 'a',  "utf-8") as f:
-                        f.write("{0}:\n{1}\n".format(key.upper(), v))
+                for r, v in value.iteritems():
+                    if not isinstance(v, dict):
+                        list_words.append(v)
+                    else:
+                        for rr, vv in v.iteritems():
+                            list_words.append(vv)
+        yield flatten_list(list_words)
+
+
+def flatten_list(nested_list):
+    if any(isinstance(i, list) for i in nested_list):
+        return flatten_list(list(chain.from_iterable(nested_list)))
+    else:
+        return nested_list
 
 
 def calculate_number_of_sentences_per_set(num_sentences):
@@ -631,7 +660,7 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=50,
                          add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, print_onscreen=True)
+    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
