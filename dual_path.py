@@ -574,27 +574,27 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
-    parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
-    parser.set_defaults(gender=True)
+    parser.add_argument('--gender', dest='gender', action='store_true', help='Exclude semantic gender for nouns')
+    parser.set_defaults(gender=False)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
                         help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
     parser.set_defaults(simple_semantics=True)
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
-    parser.add_argument('--past', dest='ignore_past', action='store_false',
+    parser.add_argument('--nopast', dest='ignore_past', action='store_true',
                         help='Include past tense')
-    parser.set_defaults(ignore_past=True)
+    parser.set_defaults(ignore_past=False)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
-    parser.set_defaults(full_verb=True)
+    parser.set_defaults(full_verb=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
-    parser.add_argument('--no_pronoun_eval', dest='check_pronouns', action='store_false',
+    parser.add_argument('--pronoun_eval', dest='check_pronouns', action='store_true',
                         help='Do not evaluate pronoun production')
-    parser.set_defaults(check_pronouns=True)
+    parser.set_defaults(check_pronouns=False)
     parser.add_argument('--filler', dest='filler', action='store_true',
                         help='Add filler word ("actually", "pues") at the beginning of the sentence')
     parser.set_defaults(filler=False)
@@ -700,7 +700,7 @@ if __name__ == "__main__":
         if all_results:
             valid_results = []
             for i, simulation in enumerate(all_results):
-                if inputs.training_is_successful(simulation['correct_pos']['test']):
+                if inputs.training_is_successful(simulation['correct_sentences']['test']):
                     valid_results.append(simulation)
                 else:
                     failed_sim_id.append(str(i))  # keep track of simulations that failed
