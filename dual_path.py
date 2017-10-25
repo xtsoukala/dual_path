@@ -517,8 +517,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=70)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=35)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=45)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -587,7 +587,7 @@ if __name__ == "__main__":
     parser.set_defaults(ignore_past=True)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
-    parser.set_defaults(full_verb=False)
+    parser.set_defaults(full_verb=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')

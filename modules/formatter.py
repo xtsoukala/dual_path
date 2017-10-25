@@ -43,8 +43,8 @@ class InputFormatter:
         self.period_idx = self._get_lexicon_index('.')
         self.to_prepositions_idx = [self._get_lexicon_index('to'), self._get_lexicon_index('a_')]
         # the verb suffix -ó is the first entry in the ES lexicon
-        self.code_switched_idx = (self.lexicon.index('-ando') if '-ando' in self.lexicon else
-                                  self.lexicon.index('colorida'))
+        self.code_switched_idx = (self.lexicon.index('-ed') if '-ed' in self.lexicon else
+                                  self.lexicon.index('man'))
         self.idx_en_pronoun = [self._get_lexicon_index('he'), self._get_lexicon_index('she'),
                                self._get_lexicon_index('it')]
         self.determiners = [self._get_lexicon_index('a'), self._get_lexicon_index('the'),
