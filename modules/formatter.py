@@ -5,6 +5,8 @@ import itertools
 import pickle
 from elman_network import np
 
+np.random.seed(18)
+
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,

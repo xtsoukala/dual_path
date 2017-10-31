@@ -67,11 +67,10 @@ class SimpleRecurrentNetwork:
                                                      "_%s" % set_weights_epoch if set_weights_epoch is not None else "")
                 layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
             else:
-                layer.sd = input_sd(layer.in_size)
+                layer.sd = 0.05  # or calculate according to input size: input_sd(layer.in_size)
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
-                # layer.in_weights = np.random.uniform(low=-layer.sd, high=layer.sd, size=[])
                 mean = 0
                 layer.in_weights = np.random.normal(mean, layer.sd,
                                                     size=[layer.in_size + int(layer.has_bias), layer.size])
