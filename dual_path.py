@@ -493,7 +493,8 @@ if __name__ == "__main__":
         sets = SetsGenerator(results_dir=args.input, use_simple_semantics=args.simple_semantics,
                              allow_free_structure_production=args.free_pos, use_full_verb_form=args.full_verb,
                              ignore_past=args.ignore_past, percentage_noun_phrase=args.np, add_filler=args.filler)
-        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=False)
+        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=False,
+                           save_lexicon=True)
 
     if not args.trainingset:
         args.trainingset = [filename for filename in os.listdir(args.input) if filename.startswith("train")][0]
