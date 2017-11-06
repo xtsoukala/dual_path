@@ -631,8 +631,8 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
                              ignore_past=args.ignore_past)
-        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True,
-                           save_lexicon=True)
+        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
+                           include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
 
     if not args.title:
         args.title = generate_title_from_lang(args.lang)
