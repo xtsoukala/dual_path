@@ -594,12 +594,15 @@ if __name__ == "__main__":
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
-    parser.add_argument('--pronoun_eval', dest='check_pronouns', action='store_true',
-                        help='Do not evaluate pronoun production')
+    parser.add_argument('--check_pron', dest='check_pronouns', action='store_true',
+                        help='Evaluate pronoun production')
     parser.set_defaults(check_pronouns=False)
     parser.add_argument('--filler', dest='filler', action='store_true',
                         help='Add filler word ("actually", "pues") at the beginning of the sentence')
     parser.set_defaults(filler=False)
+    parser.add_argument('--emb', dest='word_embeddings', action='store_true',
+                        help='Represent semantics using word embeddings instead of one-hot vectors.')
+    parser.set_defaults(word_embeddings=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -654,7 +657,8 @@ if __name__ == "__main__":
                             concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
-                            plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi)
+                            plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
+                            use_word_embeddings=args.word_embeddings)
 
     num_valid_simulations = None
     simulations_with_pron_err = 0

@@ -11,11 +11,15 @@ np.random.seed(18)
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lex_fname, concept_fname, role_fname, evsem_fname, fixed_weights,
                  fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis,
-                 prodrop, plot_title):
+                 prodrop, plot_title, use_word_embeddings):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.pos, self.lexicon = self._read_lexicon_and_pos(lex_fname)
-        self.concepts = self._read_file_to_list(concept_fname)
+        if use_word_embeddings:
+            import word2vec
+        self.use_word_embeddings = use_word_embeddings
+        self.concepts = (self._read_file_to_list(concept_fname) if not use_word_embeddings
+                         else word2vec.load('word2vec/text8.bin'))
         self.identif = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
@@ -55,7 +59,7 @@ class InputFormatter:
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
-        self.concept_size = len(self.concepts)
+        self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
         self.identif_size = len(self.identif)
         self.roles_size = len(self.roles)
 
@@ -121,7 +125,7 @@ class InputFormatter:
         all_pos = [self.sentence_indeces_pos(sentence.split("##")[0].split(), convert_to_idx=True)
                    for sentence in self.trainlines]
         all_pos.sort()
-        return list(all_pos for all_pos,_ in itertools.groupby(all_pos))
+        return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
 
     def _read_lexicon_and_pos(self, fname):
         """
@@ -215,7 +219,7 @@ class InputFormatter:
         if remove_period and sentence_idx[-1] == self.period_idx:
             sentence_idx = sentence_idx[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
-    
+
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
@@ -247,9 +251,25 @@ class InputFormatter:
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
                     else:
-                        idx_concept = self.identif_size + self.concepts.index(concept)
-                        weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                        if self.use_word_embeddings:
+                            activation_vector = self.concepts['unknown']
+                            lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
+                            if lex in self.concepts:
+                                activation_vector = self.concepts[lex]
+                            else:
+                                print "UNK: %s(%s)" % (lex, concept)
+
+                            for i, w2v_activation in enumerate(activation_vector):
+                                weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
+                        else:
+                            idx_concept = self.identif_size + self.concepts.index(concept)
+                            weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
         return weights_role_concept, event_sem_activations, target_lang_activations, message
+
+    def cosine_similarity(self, first_word, second_word):
+        """ Cosine similarity between words when using word2vec"""
+        return np.dot(self.concepts[first_word], self.concepts[second_word] /
+                      np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold=75):
         return np.true_divide(x[-1] * 100, self.num_test) > threshold

@@ -615,6 +615,8 @@ class SetsGenerator:
         all_structures = set([pos[0] for pos in self.structures])
         all_pos = set(chain.from_iterable([pos.split() for pos in all_structures]))
         main_pos = set([p.split('::')[0] if '::' in p else p for p in all_pos])  # get rid of animate/inanimate info etc
+        if 'pron' not in main_pos:
+            main_pos.add('pron')
 
         for lang in self.target_lang:
             for pos in main_pos:
