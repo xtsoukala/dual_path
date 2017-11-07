@@ -67,8 +67,8 @@ class DualPath:
         self.set_weights_epoch = set_weights_epoch
         self.simulation_num = simulation_num
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, dir=results_dir,
-                                          debug_messages=srn_debug, include_role_copy=self.role_copy,
-                                          include_input_copy=self.input_copy)
+                                          debug_messages=srn_debug, include_role_copy=role_copy,
+                                          include_input_copy=input_copy)
         self.initialize_network()
 
         self.same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
@@ -92,7 +92,7 @@ class DualPath:
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
-        self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
+        self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")# if self.inputs.use_word_embeddings else "tanh")
         self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
         self.srn.add_layer("pred_compress", self.compress_size)

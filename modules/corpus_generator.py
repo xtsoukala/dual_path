@@ -43,12 +43,12 @@ class SetsGenerator:
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
                                   'noun': {
-                                      'animate': {'m': 'man boy father brother dog teacher actor grandfather husband '
-                                                       'host nephew policeman son uncle waiter monk widower'
-                                                       ' bull'.split(),
-                                                  'f': 'woman girl mother sister cat nurse actress grandmother wife '
-                                                       'hostess niece policewoman daughter aunt waitress nun'
-                                                       ' widow cow'.split(),
+                                      'animate': {'m': 'man boy father brother teacher actor grandfather husband '
+                                                       'host nephew son uncle waiter monk widower'
+                                                       ' bull dog'.split(),
+                                                  'f': 'woman girl mother sister nurse actress grandmother wife '
+                                                       'hostess niece daughter aunt waitress nun'
+                                                       ' widow cow cat'.split(),
                                                   },
                                       'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
                                   },
