@@ -60,6 +60,7 @@ class SetsGenerator:
                                           'plural': {'present': 'are', 'past': 'were'},
                                           },
                                   'by': 'by',
+                                  'with': 'with',
                                   'to': 'to',
                                   'filler': 'actually'
                                   }
@@ -182,8 +183,7 @@ class SetsGenerator:
                                      'hostess': 'HOSTESS', 'host': 'HOST', 'grandmother': 'GRANDMOTHER',
                                      'grandfather': 'GRANDFATHER', 'waitress': 'WAITRESS', 'waiter': 'WAITER',
                                      'aunt': 'AUNT', 'uncle': 'UNCLE', 'nephew': 'NEPHEW', 'niece': 'NIECE',
-                                     'woman': 'WOMAN', 'man': 'MAN', 'chairwoman': 'CHAIRWOMAN', 'bull': 'BULL',
-                                     'headmistress': 'HEADMISTRESS', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'woman': 'WOMAN', 'man': 'MAN', 'bull': 'BULL',
                                      'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW',
                                      'widow': 'WIDOW', 'widower': 'WIDOWER', 'nun': 'NUN', 'monk': 'MONK'})
 
@@ -206,8 +206,7 @@ class SetsGenerator:
                                      'hostess': 'HOST', 'host': 'HOST', 'grandmother': 'GRANDPARENT',
                                      'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
                                      'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
-                                     'woman': 'HUMAN', 'man': 'HUMAN', 'chairwoman': 'CHAIRMAN', 'bull': 'BULL',
-                                     'headmistress': 'HEADMASTER', 'headmaster': 'HEADMASTER', 'chairman': 'CHAIRMAN',
+                                     'woman': 'HUMAN', 'man': 'HUMAN', 'bull': 'BULL',
                                      'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW',
                                      'widow': 'WIDOW', 'widower': 'WIDOW', 'nun': 'MONK', 'monk': 'MONK'})
 
@@ -261,7 +260,7 @@ class SetsGenerator:
 
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
         self.target_lang = []
-        self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']
+        self.roles = ['AGENT', 'AGENT-MOD', 'PATIENT', 'ACTION', 'RECIPIENT']
 
         self.structures = []
         self.num_structures = None
@@ -311,6 +310,8 @@ class SetsGenerator:
                                   ]
         else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
+                                  ['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans ing det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
@@ -382,6 +383,7 @@ class SetsGenerator:
                     self.lexicon.update(self.lexicon_es)
                     self.target_lang.append('ES')
                     self.concepts.update(self.concepts_es)
+            # FIXME: make sure that concepts and lexicon are aligned
             self.print_lexicon()
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
@@ -631,22 +633,23 @@ class SetsGenerator:
 
 
 def get_dict_items(key, dictionary):
-    dd = dictionary[key]
-    if not isinstance(dd, dict):
-        yield dd
-    else:
-        list_words = []  # TODO: replace with recursive function, this is ugly
-        for idx, value in dd.iteritems():
-            if not isinstance(value, dict):
-                list_words.append(value)
-            else:
-                for r, v in value.iteritems():
-                    if not isinstance(v, dict):
-                        list_words.append(v)
-                    else:
-                        for rr, vv in v.iteritems():
-                            list_words.append(vv)
-        yield flatten_list(list_words)
+    if key in dictionary:
+        dd = dictionary[key]
+        if not isinstance(dd, dict):
+            yield dd
+        else:
+            list_words = []  # TODO: replace with recursive function, this is ugly
+            for idx, value in dd.iteritems():
+                if not isinstance(value, dict):
+                    list_words.append(value)
+                else:
+                    for r, v in value.iteritems():
+                        if not isinstance(v, dict):
+                            list_words.append(v)
+                        else:
+                            for rr, vv in v.iteritems():
+                                list_words.append(vv)
+            yield flatten_list(list_words)
 
 
 def flatten_list(nested_list):
@@ -667,4 +670,4 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=50,
                          add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='es', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
+    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
