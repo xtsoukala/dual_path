@@ -260,7 +260,7 @@ class SetsGenerator:
 
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
         self.target_lang = []
-        self.roles = ['AGENT', 'AGENT-MOD', 'PATIENT', 'ACTION', 'RECIPIENT']
+        self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']  # 'AGENT-MOD',
 
         self.structures = []
         self.num_structures = None
@@ -310,8 +310,8 @@ class SetsGenerator:
                                   ]
         else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
-                                  ['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                  #['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
+                                  # 'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans ing det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
