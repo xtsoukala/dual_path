@@ -52,7 +52,14 @@ class SimpleRecurrentNetwork:
     def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=False,
                       simulation_num=None):
         if not os.path.isdir('%s/weights' % results_dir):
-            os.mkdir('%s/weights' % results_dir)
+            # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
+            # exception even though we have checked. Ss of Python >= 3.2 os.makedirs() takes optional argument
+            # "exist_ok", but for now include a try/except.
+            try:
+                os.mkdir('%s/weights' % results_dir)
+            except OSError, e:
+                if e.errno != os.errno.EEXIST:
+                    raise
         means = []
         std = []
         labels = []
