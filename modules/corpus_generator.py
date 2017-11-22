@@ -71,11 +71,11 @@ class SetsGenerator:
                                           },
                                   'pron': {'m': 'él', 'f': 'ella'},
                                   'noun': {'animate': {'m': 'niño padre hermano perro maestro act0r abuelo esposo '
-                                                            'sobrino policía hijo tío camarero toro director '
+                                                            'sobrino investigador hijo tío camarero toro director '
                                                             'presidente hombre'.split(),
                                                        'f': 'mujer niña madre hermana gata enfermera actríz abuela '
-                                                            'esposa sobrina policía hija tía camarera vaca directora '
-                                                            'presidenta'.split()},
+                                                            'esposa sobrina investigadora hija tía camarera vaca '
+                                                            'directora presidenta'.split()},
                                            'inanimate': {'m': 'palo juguete bolso bolígrafo globo'.split(),
                                                          'f': 'pelota llave cometa silla cartera'.split()}
                                            },
@@ -189,7 +189,8 @@ class SetsGenerator:
 
             self.concepts_es.update({'hermana': 'SISTER', 'hermano': 'BROTHER', 'ni\xc3\xb1o': 'BOY',
                                      'ni\xc3\xb1a': 'GIRL', 'madre': 'MOTHER', 'padre': 'FATHER', 'hija': 'DAUGHTER',
-                                     'hijo': 'SON', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
+                                     'hijo': 'SON', 'investigador': 'RESEARCHER', 'investigadora': 'FRESEARCHER',
+                                     'act0r': 'ACTOR',
                                      'esposa': 'WIFE', 'esposo': 'HUSBAND', 'actríz': 'ACTRESS',
                                      'abuela': 'GRANDMOTHER', 'abuelo': 'GRANDFATHER', 'camarera': 'WAITRESS',
                                      'camarero': 'WAITER', 'tía': 'AUNT', 'tío': 'UNCLE', 'sobrino': 'NEPHEW',
@@ -212,8 +213,8 @@ class SetsGenerator:
 
             self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
                                      'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
-                                     'hijo': 'OFFSPRING', 'policía': 'POLICEMAN', 'act0r': 'ACTOR',
-                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
+                                     'hijo': 'OFFSPRING', 'investigador': 'RESEARCHER', 'investigadora': 'RESEARCHER',
+                                     'act0r': 'ACTOR', 'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
                                      'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
                                      'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
                                      'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
@@ -260,7 +261,7 @@ class SetsGenerator:
 
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
         self.target_lang = []
-        self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT']  # 'AGENT-MOD',
+        self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT', 'AGENT-MOD', 'PATIENT-MOD']
 
         self.structures = []
         self.num_structures = None
@@ -310,11 +311,14 @@ class SetsGenerator:
                                   ]
         else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
-                                  #['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
-                                  # 'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                  ['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans ing det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
+                                  ['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
+                                   'det noun::animate with det noun::inanimate',
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
                                   ['det noun::animate verb::trans verb_suffix det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::double ing '
@@ -368,9 +372,9 @@ class SetsGenerator:
         sentence_structures_train = self.generate_sentence_structures(num_train)
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
-        test_set = self.generate_sentences(sentence_structures_test, fname="test.input",
+        test_set = self.generate_sentences(sentence_structures_test, fname="test.in",
                                            debug=debug, return_mess=True)
-        self.generate_sentences(sentence_structures_train, fname="train.input", debug=debug,
+        self.generate_sentences(sentence_structures_train, fname="train.in", debug=debug,
                                 exclude_test_sentences=test_set)
 
         if save_lexicon:

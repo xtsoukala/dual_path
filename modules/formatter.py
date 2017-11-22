@@ -225,11 +225,12 @@ class InputFormatter:
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 2  # 0.5 ? 1?
-        reduced_activation = 0  # 0.1-4
+        norm_activation = 1  # 0.5 ? 1?
+        reduced_activation = 0.2  # 0.1-4
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
+        weights_role_concept = np.full((self.roles_size, self.identif_size + self.concept_size), -1.0)
+        # alternatively for weights_role_concept: np.zeros((self.roles_size, self.identif_size + self.concept_size))
         target_lang_activations = np.zeros(len(self.languages))
         for info in message.split(';'):
             role, what = info.split("=")

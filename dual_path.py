@@ -93,8 +93,8 @@ class DualPath:
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False, activation_function="softmax")
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False, activation_function="softmax")
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
@@ -203,6 +203,7 @@ class DualPath:
 
             for train_line in self.inputs.trainlines:  # start training
                 self.feed_line(train_line, epoch, backpropagate=True)
+                #sys.exit()
                 if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
                     self.srn.learn_rate -= self.lrate_decrease_step
             epoch += 1  # increase number of epochs, begin new iteration
@@ -497,7 +498,7 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 
-def copy_files_endwith(src, dest, ends_with=".input"):
+def copy_files_endwith(src, dest, ends_with=".in*"):
     for filename in os.listdir(src):
         if filename.endswith(ends_with):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
@@ -539,9 +540,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=20,
+    parser.add_argument('-fw', '-fixed_weights', type=float, default=20,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
@@ -559,8 +560,8 @@ if __name__ == "__main__":
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
     ####################################################################################################################
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
-                                                          'training.', default="train.input")
-    parser.add_argument('-testset', '-test', help='Test set file name', default="test.input")
+                                                          'training.', default="train.in")
+    parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
     """ ######################################## boolean arguments ################################################# """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -612,7 +613,7 @@ if __name__ == "__main__":
     original_input_path = None  # keep track of the original input in case it was copied
     sets = None
     if args.input:  # generate a new set (unless "input" was also set)
-        if not os.path.isfile(os.path.join(args.input, "test.input")) and 'input' not in args.input:
+        if not os.path.isfile(os.path.join(args.input, "test.in")) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
