@@ -133,10 +133,12 @@ class InputFormatter:
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
                  (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
         """
-        lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
-        pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
+        #lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
+        #pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
+        lexicon = []
+        pos = {}
         prev_pos = ''
-        pos_start = pos_end = 2
+        pos_start = pos_end = 0
         for line in self._read_file_to_list(fname):
             if line.endswith(":"):  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
                 if prev_pos:
@@ -153,6 +155,8 @@ class InputFormatter:
             pos[prev_pos] += range(pos_start, pos_end)
         else:
             pos[prev_pos] = range(pos_start, pos_end)  # this adds the last syntactic category
+        pos.update({'.': [pos_end + 1]})
+        lexicon.append('.')
         return pos, lexicon
 
     def _read_file_to_list(self, fname):
@@ -229,8 +233,7 @@ class InputFormatter:
         reduced_activation = 0.2  # 0.1-4
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.full((self.roles_size, self.identif_size + self.concept_size), -1.0)
-        # alternatively for weights_role_concept: np.zeros((self.roles_size, self.identif_size + self.concept_size))
+        weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
         target_lang_activations = np.zeros(len(self.languages))
         for info in message.split(';'):
             role, what = info.split("=")

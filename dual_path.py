@@ -93,8 +93,8 @@ class DualPath:
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False, activation_function="softmax")
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False, activation_function="softmax")
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)#, activation_function="softmax")
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)#, activation_function="softmax")
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
@@ -401,7 +401,7 @@ class DualPath:
             if epoch > 0:
                 suffix = ("flex-" if flexible_order or has_wrong_det
                           else "in" if not correct_meaning else "")
-                with open("%s/%s.eval" % (self.inputs.results_dir, file_prefix), 'a') as f:
+                with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Definiteness:%s "
                             "Sentence:%scorrect %s\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
@@ -410,7 +410,7 @@ class DualPath:
                                              if code_switched else ""), message))
 
         # on the set level
-        with open("%s/%s.eval" % (self.inputs.results_dir, file_prefix), 'a') as f:
+        with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
