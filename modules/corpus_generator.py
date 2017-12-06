@@ -90,6 +90,7 @@ class SetsGenerator:
                                           },
                                   'by': 'por',
                                   'to': 'a_',
+                                  'with': 'con',
                                   'filler': 'ta'}  # 'pues'}
                            }
 
@@ -311,14 +312,14 @@ class SetsGenerator:
                                   ]
         else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
-                                  ['det noun::animate with det noun::inanimate aux::singular verb::intrans ing',
+                                  ['det adj::animate noun::animate with det noun::inanimate aux::singular verb::intrans ing',
                                    'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
                                   ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::trans ing det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
-                                   'det noun::animate with det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
+                                  #['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
+                                  # 'det noun::animate with det noun::inanimate',
+                                  # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
                                   ['det noun::animate verb::trans verb_suffix det noun',
                                    'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
                                   ['det noun::animate aux::singular verb::double ing '
@@ -571,7 +572,10 @@ class SetsGenerator:
                         add_det = False
 
                     random_word = random.choice(syn)
-                    message[msg_idx] += '%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
+                    if "AGENT-MOD=" in message and part == "adj":
+                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
+                    else:
+                        message[msg_idx] += self.get_concept(random_word) #'%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
 
                     if 'verb' in pos:
                         msg_idx += 1
@@ -672,6 +676,6 @@ if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
-                         allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=50,
+                         allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False)
     sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
