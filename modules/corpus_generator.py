@@ -268,47 +268,48 @@ class SetsGenerator:
         self.num_structures = None
         if use_full_verb_form:
             self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans::participle',
-                                   'AGENT=;ACTION=;E=EN,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
                                   ['det adj::animate noun::animate verb::intrans::simple',
-                                   'AGENT=;ACTION=;E=EN,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
                                   ['det adj::animate noun::animate aux::singular verb::trans::participle det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
                                   ['det adj::animate noun::animate verb::trans::simple det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
                                   ['det adj::animate noun::animate aux::singular verb::double::participle '
                                    'det noun::inanimate to det noun::animate',
                                    #'det adj::inanimate noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
                                   ['det adj::animate noun::animate aux::singular verb::double::participle det '
                                    'noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
                                   ['det adj::animate noun::animate verb::double::simple det noun::inanimate to '
                                    'det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
                                   ['det adj::animate noun::animate verb::double::simple det noun::animate det '
                                    'noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
             self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans::participle',
-                                   'AGENT=;ACTION=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::intrans::simple', 'AGENT=;ACTION=;E=ES,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,PROG'],
+                                  ['det noun::animate adj::animate verb::intrans::simple',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
                                   ['det noun::animate adj::animate aux::singular verb::trans::participle det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,PROG'],
                                   ['det noun::animate adj::animate verb::trans::simple det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,SIMPLE'],
                                   ['det noun::animate adj::animate aux::singular verb::double::participle '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
                                   ['det noun::animate adj::animate aux::singular verb::double::participle '
                                    'to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
                                   ['det noun::animate adj::animate verb::double::simple det noun::inanimate '
                                    'to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
                                   ['det noun::animate adj::animate verb::double::simple to det noun::animate '
                                    'det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         else:
             self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
@@ -537,7 +538,10 @@ class SetsGenerator:
                             add_det = True
                     elif type(w) is list:
                         random_word = random.choice(w)
-                        message[msg_idx] += "," + self.get_concept(random_word)  # nouns
+                        if "AGENT-MOD=" in message and part == "adj":
+                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
+                        else:
+                            message[msg_idx] += "," + self.get_concept(random_word)  # nouns
                         if level == 'animate' and 'noun' in pos:  # include semantic gender, we can discard it later
                             message[msg_idx] += "," + gender.upper()
                         if not np[sen_idx] and msg_idx == 0 and 'noun' in pos:  # go for pronoun (instead of NP)
@@ -557,9 +561,9 @@ class SetsGenerator:
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
                         if (self.use_adjectives and (lang == 'es' and 'adj' in pos) or
-                                (lang == 'en' and 'noun' in pos)) or 'verb' in pos or (msg_idx > 1 and lang == 'es'):
-                            msg_idx += 1
-                        elif not self.use_adjectives:
+                                (lang == 'en' and 'noun' in pos and msg_idx < 1)):
+                            msg_idx += 2
+                        elif not self.use_adjectives or 'verb' in pos or (msg_idx > 1 and lang == 'es') or lang == 'en' and 'noun' in pos:
                             msg_idx += 1
                     else:  # elif type == str
                         if not np[sen_idx] and w == determiners and msg_idx < 1:
@@ -573,7 +577,7 @@ class SetsGenerator:
 
                     random_word = random.choice(syn)
                     if "AGENT-MOD=" in message and part == "adj":
-                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
+                        message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
                     else:
                         message[msg_idx] += self.get_concept(random_word) #'%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
 
@@ -675,7 +679,7 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='en', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
+    sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, debug=True, save_lexicon=True)

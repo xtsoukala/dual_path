@@ -203,7 +203,6 @@ class DualPath:
 
             for train_line in self.inputs.trainlines:  # start training
                 self.feed_line(train_line, epoch, backpropagate=True)
-                #sys.exit()
                 if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
                     self.srn.learn_rate -= self.lrate_decrease_step
             epoch += 1  # increase number of epochs, begin new iteration
