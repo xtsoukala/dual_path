@@ -44,10 +44,10 @@ class Plotter:
             plt.close()
 
         if sum(results['code_switches']['test']) > 0:
-            # plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
-            #         label="All CS")
-            # plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
-            #         color='yellowgreen', label="All CS (training)")
+            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
+                     label="All CS")
+            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
+                     color='yellowgreen', label="All CS (training)")
             plt.plot(epochs, [percentage(x, num_test) for x in results['correct_code_switches']['test']],
                      color='darkslateblue', label="Code-switches")
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
@@ -61,6 +61,50 @@ class Plotter:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
             else:
                 fname = '%s/code_switches_percentage.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
+            # plot each type individually (get all keys first from list of dicts)
+            type_training = sorted(set().union(*(d.keys() for d in results['type_code_switches']['training'])))
+            type_test = sorted(set().union(*(d.keys() for d in results['type_code_switches']['test'])))
+
+            for type in type_test:
+                val = []
+                for epoch in epochs:
+                    v = results['type_code_switches']['test'][epoch][type] \
+                        if type in results['type_code_switches']['test'][epoch] else 0
+                    val.append(v)
+                plt.plot(epochs, [percentage(x, num_test) for x in val],
+                         label=type)
+            plt.xlabel('Epochs')
+            plt.ylabel('Percentage of type of code-switches')
+            plt.ylim([0, 30])
+            plt.xlim(min(epochs), max(epochs))
+            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+            if summary_sim:
+                fname = '%s/summary_%s_type_code_switches_test.pdf' % (self.results_dir, summary_sim)
+            else:
+                fname = '%s/type_code_switches_test.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
+            for type in type_training:
+                val = []
+                for epoch in epochs:
+                    v = results['type_code_switches']['training'][epoch][type] \
+                        if type in results['type_code_switches']['training'][epoch] else 0
+                    val.append(v)
+                plt.plot(epochs, [percentage(x, num_test) for x in val],
+                         label=type, linestyle='--')
+            plt.xlabel('Epochs')
+            plt.ylabel('Percentage of type of code-switches (training set)')
+            plt.ylim([0, 30])
+            plt.xlim(min(epochs), max(epochs))
+            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+            if summary_sim:
+                fname = '%s/summary_%s_type_code_switches_training.pdf' % (self.results_dir, summary_sim)
+            else:
+                fname = '%s/type_code_switches_training.pdf' % self.results_dir
             plt.savefig(fname)
             plt.close()
 

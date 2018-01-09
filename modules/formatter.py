@@ -231,6 +231,7 @@ class InputFormatter:
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
         target_lang_activations = np.zeros(len(self.languages))
+        target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
             if role == "E":  # retrieve activations for the event-sem layer
@@ -240,6 +241,7 @@ class InputFormatter:
                         activation = reduced_activation
                         break
                     if event in self.languages:
+                        target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
                     else:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
@@ -264,7 +266,7 @@ class InputFormatter:
                         else:
                             idx_concept = self.identif_size + self.concepts.index(concept)
                             weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
-        return weights_role_concept, event_sem_activations, target_lang_activations, message
+        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec"""
@@ -282,11 +284,23 @@ def take_average_of_valid_results(valid_results):
         for simulation in valid_results:
             for t in ['training', 'test']:
                 if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
-                    results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
+                    if key == 'type_code_switches':
+                        for epoch in simulation[key][t]:
+                            for lang_code, val in epoch.items():
+                                if val in results_average[key][t]:
+                                    results_average[key][t] += simulation[key][t]
+                                else:
+                                    results_average[key][t] = simulation[key][t]
+                    else:
+                        results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
     # now average over all simulations
     for key, v in results_average.items():
         for t in ['training', 'test']:
-            results_average[key][t] = np.true_divide(v[t], len(valid_results))
+            if key == 'type_code_switches':
+                results_average[key][t] = [{k: np.true_divide(v, len(valid_results)) for k, v in r.iteritems()}
+                                           for r in results_average[key][t]]
+            else:
+                results_average[key][t] = np.true_divide(v[t], len(valid_results))
     return results_average

@@ -38,7 +38,7 @@ class SetsGenerator:
         self.percentage_noun_phrase = percentage_noun_phrase
         self.add_filler = add_filler
         self.ignore_past_tense = ignore_past
-        self.use_adjectives = use_full_verb_form
+        self.use_adjectives = True  # TODO: use_full_verb_form
         self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
@@ -312,49 +312,56 @@ class SetsGenerator:
                                    'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         else:
-            self.structures_en = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate with det noun::inanimate aux::singular verb::intrans ing',
+            self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
                                    'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=EN,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,PROG'],
+                                  ['det adj::animate noun::animate with det noun::inanimate '
+                                   'aux::singular verb::intrans ing',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                  ['det adj::animate noun::animate verb::intrans verb_suffix',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
+                                  ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
                                   #['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
                                   # 'det noun::animate with det noun::inanimate',
                                   # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
-                                  ['det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::double ing '
+                                  ['det adj::animate noun::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                  ['det adj::animate noun::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                  ['det noun::animate aux::singular verb::double ing det noun::animate '
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                  ['det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
                                    'det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                  ['det noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                  ['det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                  ['det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
                                   ]
 
-            self.structures_es = [['det noun::animate aux::singular verb::intrans ing', 'AGENT=;ACTION=;E=ES,PROG'],
-                                  ['det noun::animate verb::intrans verb_suffix', 'AGENT=;ACTION=;E=ES,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;ACTION=;PATIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate aux::singular verb::double ing '
+            self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans ing',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,PROG'],
+                                  ['det noun::animate adj::animate verb::intrans verb_suffix',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
+                                  ['det noun::animate adj::animate verb::intrans verb_suffix',
+                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
+                                  ['det noun::animate adj::animate aux::singular verb::trans ing det noun',
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate adj::animate verb::trans verb_suffix det noun',
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate adj::animate aux::singular verb::double ing '
                                    'det noun::inanimate to det noun::animate',
-                                   'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
-                                  ['det noun::animate aux::singular verb::double ing '
+                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
+                                  ['det noun::animate adj::animate aux::singular verb::double ing '
                                    'to det noun::animate det noun::inanimate',
-                                   'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                      , 'AGENT=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate verb::double verb_suffix to det noun::animate det noun::inanimate'
-                                      , 'AGENT=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
+                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
+                                  ['det noun::animate adj::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                      , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
+                                  ['det noun::animate adj::animate verb::double verb_suffix to det noun::animate det noun::inanimate'
+                                      , 'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         if not allow_free_structure_production:
             self.event_sem.extend(['AGT', 'PAT', 'REC'])
-            additions = [',AGT', ',AGT', ',AGT,PAT', ',AGT,PAT', ',AGT,PAT,REC', ',AGT,-1,PAT,REC',
+            additions = [',AGT', ',AGT', ',AGT', ',AGT,PAT', ',AGT,PAT', ',AGT,PAT,REC', ',AGT,-1,PAT,REC',
                          ',AGT,PAT,REC', ',AGT,-1,PAT,REC']
             for i in range(len(additions)):
                 self.structures_en[i][1] += additions[i]
@@ -560,10 +567,11 @@ class SetsGenerator:
                             sentence.append(random_word)
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
-                        if (self.use_adjectives and (lang == 'es' and 'adj' in pos) or
-                                (lang == 'en' and 'noun' in pos and msg_idx < 1)):
+                        if (self.use_adjectives and ((lang == 'es' and 'adj' in pos and 'with' not in pos_full) or
+                                (lang == 'en' and 'noun' in pos and 'with' not in pos_full and msg_idx < 1))):
                             msg_idx += 2
-                        elif not self.use_adjectives or 'verb' in pos or (msg_idx > 1 and lang == 'es') or lang == 'en' and 'noun' in pos:
+                        elif not self.use_adjectives or 'verb' in pos or (msg_idx > 1 and lang == 'es') or \
+                                (lang == 'en' and 'noun' in pos) or (lang == 'es' and 'adj' in pos):
                             msg_idx += 1
                     else:  # elif type == str
                         if not np[sen_idx] and w == determiners and msg_idx < 1:
@@ -679,7 +687,7 @@ def calculate_number_of_sentences_per_set(num_sentences):
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=True, use_simple_semantics=True,
+    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False)
     sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, debug=True, save_lexicon=True)

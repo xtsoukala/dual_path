@@ -79,6 +79,7 @@ class DualPath:
                         'pronoun_errors': {'test': [], 'training': []},
                         'correct_code_switches': {'test': [], 'training': []},
                         'code_switches': {'test': [], 'training': []},
+                        'type_code_switches': {'test': [], 'training': []},
                         'mse': {}}
 
     def initialize_network(self):
@@ -86,7 +87,7 @@ class DualPath:
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")
+        self.srn.add_layer("role", self.inputs.roles_size)#, activation_function="softmax")
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
@@ -130,7 +131,7 @@ class DualPath:
         produced_sent_ids = []
         sentence, message = line.split('## ')
         target_sentence_ids = self.inputs.sentence_indeces(sentence.split())
-        weights_role_concept, evsem_act, target_lang_act, message = self.inputs.get_message_info(message)
+        weights_role_concept, evsem_act, target_lang_act, message, lang = self.inputs.get_message_info(message)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, event_sem_activations=evsem_act,
                                            target_lang_act=target_lang_act)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
@@ -152,7 +153,7 @@ class DualPath:
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
                     break
-        return produced_sent_ids, target_sentence_ids, message
+        return produced_sent_ids, target_sentence_ids, message, lang
 
     def train_network(self, shuffle_set, plot_results=True, evaluate=True):
         """
@@ -211,22 +212,24 @@ class DualPath:
 
         if evaluate:
             for sim in test_results.values():
-                s, p, pr, pr_pos, cc, c = sim
+                s, p, pr, pr_pos, cc, c, t = sim
                 self.results['correct_sentences']['test'].append(s)
                 self.results['correct_pos']['test'].append(p)
                 self.results['pronoun_errors']['test'].append(pr)
                 self.results['pronoun_errors_flex']['test'].append(pr_pos)
                 self.results['correct_code_switches']['test'].append(cc)
                 self.results['code_switches']['test'].append(c)
+                self.results['type_code_switches']['test'].append(t)
 
             for sim in train_results.values():
-                s, p, pr, pr_pos, cc, c = sim
+                s, p, pr, pr_pos, cc, c, t = sim
                 self.results['correct_sentences']['training'].append(s)
                 self.results['correct_pos']['training'].append(p)
                 self.results['pronoun_errors']['training'].append(pr)
                 self.results['pronoun_errors_flex']['training'].append(pr_pos)
                 self.results['correct_code_switches']['training'].append(cc)
                 self.results['code_switches']['training'].append(c)
+                self.results['type_code_switches']['training'].append(t)
 
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:  # write results to a (pickled) file
                 pickle.dump(self.results, pckl)
@@ -349,12 +352,11 @@ class DualPath:
         num_pron_err_flex = 0
         num_all_code_switches = 0
         num_correct_code_switches = 0
-
+        type_all_code_switches = {}
         file_prefix = "test" if is_test_set else "train"
 
         for line in set_lines:
-            produced_sentence_idx, target_sentence_idx, message = self.feed_line(line)
-
+            produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
             has_correct_pos, has_wrong_det, correct_meaning, cs_type = False, False, False, None  # initialize
             is_grammatical, flexible_order = self.get_sentence_grammaticality_and_flex_order(produced_sentence_idx,
                                                                                              target_sentence_idx)
@@ -369,11 +371,17 @@ class DualPath:
                 if code_switched:  # only count grammatically correct sentences
                     # determine CS type here
                     cs_type = self.get_code_switched_type(produced_sentence_idx, target_sentence_idx)
-                    if cs_type:
+                    if cs_type:  # TODO: it could be interesting to check the failed sentences too
                         correct_meaning = True
                         num_correct_code_switches += 1
+                        cs_type_with_lang = "%s-%s" % (lang, cs_type)
+                        if cs_type_with_lang in type_all_code_switches:
+                            type_all_code_switches[cs_type_with_lang] += 1
+                        else:
+                            type_all_code_switches.update({cs_type_with_lang: 1})
                 else:
-                    correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx, flexible_order)
+                    correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx,
+                                                               flexible_order)
 
                 if correct_meaning:
                     num_correct_meaning += 1
@@ -414,7 +422,7 @@ class DualPath:
                     (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
 
         results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex,
-                               num_correct_code_switches, num_all_code_switches)
+                               num_correct_code_switches, num_all_code_switches, type_all_code_switches)
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False,
                                 ignore_det=True):
@@ -519,8 +527,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=45)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=80)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=40)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -547,14 +555,14 @@ if __name__ == "__main__":
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=2, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=10)
+                        type=int, default=1)
     """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
