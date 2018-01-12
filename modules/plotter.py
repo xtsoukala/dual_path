@@ -64,47 +64,52 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
-            # plot each type individually (get all keys first from list of dicts)
-            type_training = sorted(set().union(*(d.keys() for d in results['type_code_switches']['training'])))
-            type_test = sorted(set().union(*(d.keys() for d in results['type_code_switches']['test'])))
+            # plot each type individually
 
-            for type in type_test:
-                val = []
-                for epoch in epochs:
-                    v = results['type_code_switches']['test'][epoch][type] \
-                        if type in results['type_code_switches']['test'][epoch] else 0
-                    val.append(v)
-                plt.plot(epochs, [percentage(x, num_test) for x in val],
-                         label=type)
-            plt.xlabel('Epochs')
-            plt.ylabel('Percentage of type of code-switches')
-            plt.ylim([0, 30])
-            plt.xlim(min(epochs), max(epochs))
-            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+            # first get all keywords (all CS types)
+            all_cs_types = set([x.replace("ES-", "").replace("EN-", "")
+                                for x in results['type_code_switches']['test'].keys()] +
+                               [x.replace("ES-", "").replace("EN-", "")
+                                for x in results['type_code_switches']['training'].keys()])
+
+            type_test_EN = []
+            type_test_ES = []
+            for type in all_cs_types:
+                es_type = "ES-%s" % type
+                if es_type in results['type_code_switches']['test']:  # exclude first 2 epochs
+                    type_test_ES.append((np.mean(results['type_code_switches']['test'][es_type][2:]),
+                                         np.std(results['type_code_switches']['test'][es_type][2:])))
+                else:
+                    type_test_ES.append((0, 0))
+
+                # same for EN
+                en_type = "EN-%s" % type
+                if en_type in results['type_code_switches']['test']:  # exclude first 2 epochs
+                    type_test_EN.append((np.mean(results['type_code_switches']['test'][en_type][2:]),
+                                         np.std(results['type_code_switches']['test'][en_type][2:])))
+                else:
+                    type_test_EN.append((0, 0))
+
+            ind = np.arange(len(all_cs_types))  # the x locations for the groups
+            width = 0.35  # the width of the bars
+
+            fig, ax = plt.subplots()
+            rects_EN = ax.bar(ind, [x[0] for x in type_test_EN], width, color='r', yerr=[x[1] for x in type_test_EN])
+            rects_ES = ax.bar(ind + width, [x[0] for x in type_test_ES], width, color='y',
+                              yerr=[x[1] for x in type_test_ES])
+
+            # add some text for labels, title and axes ticks
+            ax.set_ylabel('Types of code-switches')
+            #ax.set_title('Early bilingual group')
+            ax.set_xticks(ind + width / 2)
+            ax.legend((rects_EN[0], rects_ES[0]), ('EN', 'ES'))
+            ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
+            plt.tight_layout()  # make room for labels
+
             if summary_sim:
                 fname = '%s/summary_%s_type_code_switches_test.pdf' % (self.results_dir, summary_sim)
             else:
                 fname = '%s/type_code_switches_test.pdf' % self.results_dir
-            plt.savefig(fname)
-            plt.close()
-
-            for type in type_training:
-                val = []
-                for epoch in epochs:
-                    v = results['type_code_switches']['training'][epoch][type] \
-                        if type in results['type_code_switches']['training'][epoch] else 0
-                    val.append(v)
-                plt.plot(epochs, [percentage(x, num_test) for x in val],
-                         label=type, linestyle='--')
-            plt.xlabel('Epochs')
-            plt.ylabel('Percentage of type of code-switches (training set)')
-            plt.ylim([0, 30])
-            plt.xlim(min(epochs), max(epochs))
-            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
-            if summary_sim:
-                fname = '%s/summary_%s_type_code_switches_training.pdf' % (self.results_dir, summary_sim)
-            else:
-                fname = '%s/type_code_switches_training.pdf' % self.results_dir
             plt.savefig(fname)
             plt.close()
 

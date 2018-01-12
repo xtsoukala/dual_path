@@ -231,7 +231,32 @@ class DualPath:
                 self.results['code_switches']['training'].append(c)
                 self.results['type_code_switches']['training'].append(t)
 
-            with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:  # write results to a (pickled) file
+            # convert "type_code_switches" from list of dicts to a single dict
+            type_training = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['training'])))
+            type_test = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['test'])))
+
+            types_dict = {}
+            for type in type_training:
+                val = []
+                for epoch in range(self.epochs):
+                    v = self.results['type_code_switches']['training'][epoch][type] \
+                        if type in self.results['type_code_switches']['training'][epoch] else 0
+                    val.append(v)
+                types_dict[type] = val
+            self.results['type_code_switches']['training'] = types_dict
+
+            types_dict = {}
+            for type in type_test:
+                val = []
+                for epoch in range(self.epochs):
+                    v = self.results['type_code_switches']['test'][epoch][type] \
+                        if type in self.results['type_code_switches']['test'][epoch] else 0
+                    val.append(v)
+                types_dict[type] = val
+            self.results['type_code_switches']['test'] = types_dict
+
+            # write (single) simulation results to a pickled file
+            with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
                 pickle.dump(self.results, pckl)
 
             if plot_results:
@@ -297,7 +322,7 @@ class DualPath:
                 # print self.inputs.sentence_from_indeces(out_sentence_idx)
                 # print self.inputs.sentence_from_indeces(translated_sentence_idx)
                 # print "POS: %s. INSP:%s %s" % (check_idx_pos, check_idx, self.inputs.sentence_from_indeces(check_idx))
-                cs_type = "inter-word switching"
+                cs_type = "inter-word switch"
         return cs_type
 
     def find_equivalent_translation_idx(self, idx, remove_candidates_less_than_cs_point=False):

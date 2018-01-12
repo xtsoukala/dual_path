@@ -278,29 +278,32 @@ class InputFormatter:
 
 
 def take_average_of_valid_results(valid_results):
+    """
+    :param valid_results: list of dicts (simulations)
+    :return:
+    """
     results_average = {}
     for key in valid_results[0].keys():
         results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
             for t in ['training', 'test']:
                 if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
-                    if key == 'type_code_switches':
-                        for epoch in simulation[key][t]:
-                            for lang_code, val in epoch.items():
-                                if val in results_average[key][t]:
-                                    results_average[key][t] += simulation[key][t]
-                                else:
-                                    results_average[key][t] = simulation[key][t]
+                    if type(simulation[key][t]) is dict:  # case: type_code_switches
+                        for cs_type, val in simulation[key][t].items():
+                            if cs_type in results_average[key][t]:
+                                results_average[key][t][cs_type] = np.add(results_average[key][t][cs_type], val)
+                            else:
+                                results_average[key][t][cs_type] = val
                     else:
                         results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
     # now average over all simulations
-    for key, v in results_average.items():
+    for key, val in results_average.items():
         for t in ['training', 'test']:
-            if key == 'type_code_switches':
-                results_average[key][t] = [{k: np.true_divide(v, len(valid_results)) for k, v in r.iteritems()}
-                                           for r in results_average[key][t]]
+            if type(results_average[key][t]) is dict:  # case: type_code_switches
+                results_average[key][t] = {k: np.true_divide(v, len(valid_results))
+                                           for k, v in results_average[key][t].iteritems()}
             else:
-                results_average[key][t] = np.true_divide(v[t], len(valid_results))
+                results_average[key][t] = np.true_divide(val[t], len(valid_results))
     return results_average
