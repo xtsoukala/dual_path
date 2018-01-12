@@ -396,7 +396,6 @@ class SetsGenerator:
                     self.lexicon.update(self.lexicon_es)
                     self.target_lang.append('ES')
                     self.concepts.update(self.concepts_es)
-            # FIXME: make sure that concepts and lexicon are aligned
             self.print_lexicon()
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
@@ -641,10 +640,11 @@ class SetsGenerator:
         main_pos = set([p.split('::')[0] if '::' in p else p for p in all_pos])  # get rid of animate/inanimate info etc
         if 'pron' not in main_pos:
             main_pos.add('pron')
+        if 'with' not in main_pos:
+            main_pos.add('with')
 
-        for lang in self.target_lang:
+        for lang in self.target_lang:  # keep separate for now because of code-switching
             for pos in main_pos:
-                # keep separate for now because of code-switching
                 lex = list(get_dict_items(pos, self.lexicon[lang.lower()]))
                 if any(isinstance(i, list) for i in lex):
                     lex = list(chain.from_iterable(lex))
@@ -690,4 +690,4 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='enes', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
+    sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=False, save_lexicon=True)
