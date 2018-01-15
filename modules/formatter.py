@@ -274,7 +274,7 @@ class InputFormatter:
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold=75):
-        return np.true_divide(x[-1] * 100, self.num_test) > threshold
+        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
 
 
 def take_average_of_valid_results(valid_results):

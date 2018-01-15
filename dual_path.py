@@ -588,7 +588,7 @@ if __name__ == "__main__":
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=1)
+                        type=int, default=20)
     """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
@@ -745,6 +745,8 @@ if __name__ == "__main__":
             for i, simulation in enumerate(all_results):
                 if inputs.training_is_successful(simulation['correct_sentences']['test'], threshold=args.threshold):
                     valid_results.append(simulation)
+                    if not inputs.training_is_successful(simulation['correct_sentences']['test'], threshold=75):
+                        failed_sim_id.append("[%s]" % i)  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(i))  # keep track of simulations that failed
 
@@ -767,7 +769,7 @@ if __name__ == "__main__":
             layers_with_softmax_act_function.append(layer.name)
 
     with open("%s/simulation.info" % results_dir, 'a') as f:  # Append information regarding the simulations' success
-        f.write("Layers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n%s%s" %
+        f.write("\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n%s%s" %
                 (', '.join(layers_with_softmax_act_function), simulations_with_pron_err, args.sim,
                  "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
                  "\nIndeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))
