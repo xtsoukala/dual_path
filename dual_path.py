@@ -456,6 +456,7 @@ class DualPath:
         :param trg_sentence_idx:
         :param remove_last_word:
         :param allow_identical: Whether to return False if sentences are identical
+        :param ignore_det: Whether to count article definiteness (a/the) as a mistake
         :return: if produced sentence was not identical to the target one, check if the meaning was correct but
         expressed with a different syntactic structure (due to, e.g., priming)
         """
@@ -530,7 +531,7 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 
-def copy_files_endwith(src, dest, ends_with=".in*"):
+def copy_files_endwith(src, dest, ends_with=".in"):
     for filename in os.listdir(src):
         if filename.endswith(ends_with):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
@@ -712,12 +713,12 @@ if __name__ == "__main__":
             rdir = "%s/%s" % (results_dir, sim)
             os.makedirs(rdir)
             inputs.results_dir = rdir
-            if sets:
+            if sets:  # generate new test/training sets
                 sets.results_dir = rdir
                 sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
             elif original_input_path:
                 # use existing test/training set (copy them first)
-                copy_files_endwith(os.path.join(original_input_path, str(sim)), rdir)
+                copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)
             inputs.update_sets(new_input_dir=rdir)
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,

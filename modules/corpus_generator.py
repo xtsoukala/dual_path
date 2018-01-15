@@ -39,6 +39,7 @@ class SetsGenerator:
         self.add_filler = add_filler
         self.ignore_past_tense = ignore_past
         self.use_adjectives = True  # TODO: use_full_verb_form
+        self.use_with = False  # TODO: set automtically
         self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
@@ -312,31 +313,60 @@ class SetsGenerator:
                                    'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
                                   ]
         else:
-            self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate with det noun::inanimate '
-                                   'aux::singular verb::intrans ing',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::intrans verb_suffix',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
-                                  #['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
-                                  # 'det noun::animate with det noun::inanimate',
-                                  # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate aux::singular verb::double ing '
-                                   'det noun::inanimate to det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
-                                   'det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                      , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
-                                  ]
+            if self.use_with:
+                self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate with det noun::inanimate '
+                                       'aux::singular verb::intrans ing',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate verb::intrans verb_suffix',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
+                                      ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
+                                      #['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
+                                      # 'det noun::animate with det noun::inanimate',
+                                      # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate verb::trans verb_suffix det noun',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                      ['det adj::animate noun::animate aux::singular verb::double ing '
+                                       'det noun::inanimate to det noun::animate',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
+                                       'det noun::inanimate',
+                                       'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                          , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                      ['det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
+                                       'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
+                                      ]
+            else:
+                self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate aux::singular verb::intrans ing',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate verb::intrans verb_suffix',
+                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
+                                      ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
+                                      # ['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
+                                      # 'det noun::animate with det noun::inanimate',
+                                      # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
+                                      ['det adj::animate noun::animate verb::trans verb_suffix det noun',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
+                                      ['det adj::animate noun::animate aux::singular verb::double ing '
+                                       'det noun::inanimate to det noun::animate',
+                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
+                                      [
+                                          'det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
+                                          'det noun::inanimate',
+                                          'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
+                                      [
+                                          'det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
+                                          , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
+                                      [
+                                          'det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
+                                          'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
+                                      ]
 
             self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans ing',
                                    'AGENT=;AGENT-MOD=;ACTION=;E=ES,PROG'],
@@ -690,4 +720,4 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=False, save_lexicon=True)
+    sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
