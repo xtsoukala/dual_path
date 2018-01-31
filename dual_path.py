@@ -313,11 +313,11 @@ class DualPath:
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
             # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
-            cs_type = "intra-sentential"
+            cs_type = "alternational CS"
         else:
             check_idx_pos = [self.inputs.pos_lookup(w) for w in check_idx]
             if len(set(check_idx_pos)) == 1:
-                cs_type = "%s-borrow" % check_idx_pos[0].lower()
+                cs_type = "%s" % check_idx_pos[0].lower()
             else:
                 # print self.inputs.sentence_from_indeces(out_sentence_idx)
                 # print self.inputs.sentence_from_indeces(translated_sentence_idx)
