@@ -211,7 +211,8 @@ class SimpleRecurrentNetwork:
             self._compute_current_layer_gradient()
             self._compute_current_delta_weight_matrix()
             self._update_total_error_for_backpropagation()
-            self._update_current_weights_and_previous_delta()
+            if self.current_layer.name not in ["role", "pred_concept"]:
+                self._update_current_weights_and_previous_delta()
             self._backpropagate_error_to_incoming_layers()
 
     def _compute_output_error(self, epoch):

@@ -44,10 +44,10 @@ class Plotter:
             plt.close()
 
         if sum(results['code_switches']['test']) > 0:
-            # plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
-            #         label="All CS")
-            # plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
-            #         color='yellowgreen', label="All CS (training)")
+            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
+                     label="All CS")
+            plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
+                     color='yellowgreen', label="All CS (training)")
             plt.plot(epochs, [percentage(x, num_test) for x in results['correct_code_switches']['test']],
                      color='darkslateblue', label="Code-switches")
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
@@ -59,8 +59,76 @@ class Plotter:
             plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
             if summary_sim:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
+                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                    f.write("\nCode-switched percentage (test set): %s" % [percentage(x, num_test) for x
+                                                                           in results['correct_code_switches']['test']])
             else:
                 fname = '%s/code_switches_percentage.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
+            # plot each code-switch type individually
+
+            # first get all keywords (all CS types)
+            all_cs_types = set([x.replace("ES-", "").replace("EN-", "")
+                                for x in results['type_code_switches']['test'].keys()] +
+                               [x.replace("ES-", "").replace("EN-", "")
+                                for x in results['type_code_switches']['training'].keys()])
+
+            for dataset_type in ['training', 'test']:
+                type_test_EN = []
+                type_test_ES = []
+                for cs_type in all_cs_types:
+                    es_type = "ES-%s" % cs_type
+                    if es_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                        values_percentage_testset = [percentage(x, num_test)
+                                                     for x in results['type_code_switches'][dataset_type][es_type][2:]]
+                        type_test_ES.append((np.mean(values_percentage_testset),
+                                             np.std(values_percentage_testset)))
+                    else:
+                        type_test_ES.append((0, 0))
+
+                    # same for EN
+                    en_type = "EN-%s" % cs_type
+                    if en_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                        # take the percentage of sum in test set
+                        values_percentage_testset = [percentage(x, num_test)
+                                                     for x in results['type_code_switches'][dataset_type][en_type][2:]]
+                        type_test_EN.append((np.mean(values_percentage_testset),
+                                             np.std(values_percentage_testset)))
+                    else:
+                        type_test_EN.append((0, 0))
+
+            # make sure there is still something to be plotted after the manipulations
+            if type_test_ES or type_test_EN:
+                ind = np.arange(len(all_cs_types))  # the x locations for the groups
+                width = 0.35  # the width of the bars
+
+                fig, ax = plt.subplots()
+                rects_EN = ax.bar(ind, [x[0] for x in type_test_EN], width, color='r',
+                                  yerr=[x[1] for x in type_test_EN])
+                rects_ES = ax.bar(ind + width, [x[0] for x in type_test_ES], width, color='y',
+                                  yerr=[x[1] for x in type_test_ES])
+
+                # add some text for labels, title and axes ticks
+                label = 'Types of code-switches (%% of %s set)' % dataset_type
+                ax.set_ylabel(label)
+                #ax.set_title('Early bilingual group')
+                ax.set_xticks(ind + width / 2)
+                ax.legend((rects_EN[0], rects_ES[0]), ('EN', 'ES'))
+                ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
+                plt.tight_layout()  # make room for labels
+
+            if summary_sim:
+                fname = '%s/summary_%s_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
+                                                                     dataset_type)
+                # also save type_test_ES and type_test_EN
+                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s" %
+                            (type_test_ES, type_test_EN))
+
+            else:
+                fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
             plt.savefig(fname)
             plt.close()
 

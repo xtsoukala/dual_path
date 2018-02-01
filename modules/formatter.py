@@ -225,12 +225,13 @@ class InputFormatter:
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 2  # 0.5 ? 1?
-        reduced_activation = 0  # 0.1-4
+        norm_activation = 1  # 0.5 ? 1?
+        reduced_activation = 0.2  # 0.1-4
         event_sem_activations = np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
         target_lang_activations = np.zeros(len(self.languages))
+        target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
             if role == "E":  # retrieve activations for the event-sem layer
@@ -240,6 +241,7 @@ class InputFormatter:
                         activation = reduced_activation
                         break
                     if event in self.languages:
+                        target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
                     else:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
@@ -264,7 +266,7 @@ class InputFormatter:
                         else:
                             idx_concept = self.identif_size + self.concepts.index(concept)
                             weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
-        return weights_role_concept, event_sem_activations, target_lang_activations, message
+        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec"""
@@ -272,21 +274,36 @@ class InputFormatter:
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold=75):
-        return np.true_divide(x[-1] * 100, self.num_test) > threshold
+        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
 
 
 def take_average_of_valid_results(valid_results):
+    """
+    :param valid_results: list of dicts (simulations)
+    :return:
+    """
     results_average = {}
     for key in valid_results[0].keys():
         results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
             for t in ['training', 'test']:
                 if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
-                    results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
+                    if type(simulation[key][t]) is dict:  # case: type_code_switches
+                        for cs_type, val in simulation[key][t].items():
+                            if cs_type in results_average[key][t]:
+                                results_average[key][t][cs_type] = np.add(results_average[key][t][cs_type], val)
+                            else:
+                                results_average[key][t][cs_type] = val
+                    else:
+                        results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
                 elif t in simulation[key]:
                     results_average[key][t] = simulation[key][t]
     # now average over all simulations
-    for key, v in results_average.items():
+    for key, val in results_average.items():
         for t in ['training', 'test']:
-            results_average[key][t] = np.true_divide(v[t], len(valid_results))
+            if type(results_average[key][t]) is dict:  # case: type_code_switches
+                results_average[key][t] = {k: np.true_divide(v, len(valid_results))
+                                           for k, v in results_average[key][t].iteritems()}
+            else:
+                results_average[key][t] = np.true_divide(val[t], len(valid_results))
     return results_average
