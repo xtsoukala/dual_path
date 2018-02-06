@@ -40,6 +40,16 @@ class SetsGenerator:
         self.ignore_past_tense = ignore_past
         self.use_adjectives = True  # TODO: use_full_verb_form
         self.use_with = False  # TODO: set automtically
+        # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
+        self.cognates = {'noun': {'animate': 'actor animal conductor criminal director doctor inspector'.split(),
+                                  'inanimate': 'chocolate melon piano radio'.split()},
+                         'adj': 'popular social simple superficial terrible vulnerable'.split()
+                         }
+        # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
+        self.false_friends = {'en': {'noun': {'animate': 'bombero'.split() },
+                                     'adj': 'sano'.split()},
+                              'es': {'adj': 'sano'.split()}
+                             }
         self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
                                   'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
