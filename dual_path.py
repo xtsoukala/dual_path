@@ -24,6 +24,7 @@ class DualPath:
 
     role, concept and pred_concept units are unbiased to make them more input driven
     """
+
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
                  input_format, check_pronouns, simulation_num=None):
@@ -87,15 +88,16 @@ class DualPath:
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size)#, activation_function="softmax")
+        self.srn.add_layer("role", self.inputs.roles_size)  # , activation_function="softmax")
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         self.srn.add_layer("hidden", self.hidden_size, is_recurrent=True)
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)#, activation_function="softmax")
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)#, activation_function="softmax")
+        self.srn.add_layer("pred_identifiability", self.inputs.identif_size,
+                           has_bias=False)  # , activation_function="softmax")
+        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)  # , activation_function="softmax")
         self.srn.add_layer("pred_compress", self.compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
@@ -231,6 +233,7 @@ class DualPath:
                 self.results['code_switches']['training'].append(c)
                 self.results['type_code_switches']['training'].append(t)
 
+            print self.results['type_code_switches']['test']
             # convert "type_code_switches" from list of dicts to a single dict
             type_training = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['training'])))
             type_test = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['test'])))
@@ -254,7 +257,7 @@ class DualPath:
                     val.append(v)
                 types_dict[type] = val
             self.results['type_code_switches']['test'] = types_dict
-
+            print self.results['type_code_switches']['test']
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
                 pickle.dump(self.results, pckl)
@@ -269,10 +272,13 @@ class DualPath:
     def is_code_switched(self, sentence_indeces):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
-        sentence_no_period = [x for x in sentence_indeces if x != self.inputs.period_idx]  # period common in all lang
-        if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period) or
-                all(i < self.inputs.code_switched_idx for i in sentence_no_period)):
-                return False
+        skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_values + self.inputs.false_friend_values
+        print skipped_idx
+        # skip indeces that are common in all lang
+        sentence_no_period_cognate_ff = [x for x in sentence_indeces if x not in skipped_idx]
+        if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff) or
+                all(i < self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff)):
+            return False
         else:
             return True
 
@@ -298,18 +304,30 @@ class DualPath:
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
         if trg_lang_word_idx < self.inputs.code_switched_idx:
             trans = [self.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
-                     if idx >= self.inputs.code_switched_idx else [idx] for idx in out_sentence_idx]
+                     if (idx >= self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx))
+                     else [idx] for idx in out_sentence_idx]
         else:
-            trans = [self.find_equivalent_translation_idx(idx) if idx < self.inputs.code_switched_idx else [idx]
+            trans = [self.find_equivalent_translation_idx(idx)
+                     if (idx < self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx)) else [idx]
                      for idx in out_sentence_idx]
         if any(len(i) > 1 for i in trans):
             return [list([x] for x in tup) for tup in list(itertools.product(*trans))]
         return [trans]
 
+    def _idx_is_cognate_or_ff(self, idx):
+        w = self.inputs.lexicon[idx]
+        if w in self.inputs.cognate_values or w in self.inputs.false_friend_values:
+            return True
+        return False
+
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
-        check_idx = [w for w in out_sentence_idx if w not in trg_sentence_idx]
+        check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx
+                                                     and w is not self._idx_is_cognate_or_ff(w))]
+        if len(check_idx) == 0:
+            return False  # it was either a cognate or a false friend
+
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
             # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
@@ -404,6 +422,22 @@ class DualPath:
                             type_all_code_switches[cs_type_with_lang] += 1
                         else:
                             type_all_code_switches.update({cs_type_with_lang: 1})
+
+                        # check for cognates vs FFs vs regular (no lang)
+                        # COG and FF in message
+                        if ',COG' in message and ',FF' in message:  # we don't really want this category
+                            cs_type_with_lang = "%s-COG-FF" % cs_type
+                        elif ',COG' in message:
+                            cs_type_with_lang = "%s-COG" % cs_type
+                        elif ',FF' in message:
+                            cs_type_with_lang = "%s-COG" % cs_type
+                        else:  # no cognates or false friends
+                            cs_type_with_lang = "%s" % cs_type
+                        if cs_type_with_lang in type_all_code_switches:
+                            type_all_code_switches[cs_type_with_lang] += 1
+                        else:
+                            type_all_code_switches.update({cs_type_with_lang: 1})
+
                 else:
                     correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx,
                                                                flexible_order)
@@ -549,6 +583,7 @@ def generate_title_from_lang(lang_code):
         title = 'Bilingual EN-ES model'
     return title
 
+
 if __name__ == "__main__":
     import argparse
 
@@ -624,6 +659,9 @@ if __name__ == "__main__":
     parser.add_argument('--nopast', dest='ignore_past', action='store_true',
                         help='Include past tense')
     parser.set_defaults(ignore_past=False)
+    parser.add_argument('--noadj', dest='use_adjectives', action='store_false',
+                        help='Do not use adjectives')
+    parser.set_defaults(use_adjectives=True)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
     parser.set_defaults(full_verb=False)
@@ -655,6 +693,7 @@ if __name__ == "__main__":
                 args.input = corrected_dir
             else:
                 import sys
+
                 sys.exit('No input folder found in the path (%s)' % args.input)
         print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
         copy_dir(args.input, '%s/input' % results_dir)
@@ -667,7 +706,7 @@ if __name__ == "__main__":
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
-                             ignore_past=args.ignore_past)
+                             ignore_past=args.ignore_past, use_adjectives=args.use_adjectives)
         sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
                            include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
 
@@ -726,7 +765,7 @@ if __name__ == "__main__":
                              set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_format=inputs,
                              check_pronouns=args.check_pronouns)
-            process = Process(target=dualp.train_network, args=(args.shuffle, ))
+            process = Process(target=dualp.train_network, args=(args.shuffle,))
             process.start()
             processes.append(process)
         for p in processes:

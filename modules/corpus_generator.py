@@ -6,12 +6,13 @@ import codecs
 from datetime import datetime
 import sys
 import pickle
+import json
 from copy import deepcopy
-from itertools import chain
+from itertools import chain, izip_longest
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
-random.seed(18)
+#random.seed(18)
 
 
 class SetsGenerator:
@@ -19,7 +20,7 @@ class SetsGenerator:
     Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
     """
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 ignore_past, percentage_noun_phrase, add_filler):
+                 ignore_past, percentage_noun_phrase, add_filler, use_adjectives, extend_np_using_with=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -29,39 +30,78 @@ class SetsGenerator:
         :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns in subject position
         :param percentage_l2: percentage of L2 (e.g., English) vs L1
         :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
+        :param use_adjectives: whether to use adjectives in NPs
         """
 
         self.results_dir = results_dir
+        self.path = os.path.dirname(os.path.realpath('__file__'))
+        if 'modules' not in self.path:
+            self.path += '/modules/'
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
         os.makedirs(self.results_dir)
         self.percentage_noun_phrase = percentage_noun_phrase
         self.add_filler = add_filler
         self.ignore_past_tense = ignore_past
-        self.use_adjectives = True  # TODO: use_full_verb_form
-        self.use_with = False  # TODO: set automtically
+        self.use_adjectives = use_adjectives
+        self.extend_np_using_with = extend_np_using_with
+        self.use_cognates_and_ff = True
+        self.concept_to_words = {}
+        self.concepts = {'M': 'M', 'F': 'F'}  # initialize concepts with semantic gender (non language-specific)
+        self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
+                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON',
+                            'long': 'LONG', 'tall': 'TALL', 'short': 'SHORT', 'cheap': 'CHEAP', 'sad': 'SAD',
+                            'happy': 'HAPPY', 'expensive': 'EXPENSIVE', 'colorful': 'COLORFUL'}
+        self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
+                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
+                            'pelota': 'BALL', 'feliz': 'HAPPY', 'triste': 'SAD', 'alto': 'TALL', 'pequeño': 'SMALL',
+                            'alta': 'TALL', 'pequeña': 'SMALL', 'barrato': 'CHEAP', 'barrata': 'CHEAP',
+                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'largo': 'LONG', 'larga': 'LONG',
+                            'colorido': 'COLORFUL', 'colorida': 'COLORFUL'}
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
-        self.cognates = {'noun': {'animate': 'actor animal conductor criminal director doctor inspector'.split(),
-                                  'inanimate': 'chocolate melon piano radio'.split()},
+        self.cognates = {'noun': {'animate': {'f': 'conductor criminal director doctor'.split(),
+                                              'm': 'actor animal director doctor inspector'.split()},
+                                  'inanimate': {'m': 'chocolate melon piano'.split(),
+                                                'f': ['radio']}},
                          'adj': 'popular social simple superficial terrible vulnerable'.split()
                          }
+        self.cognate_values = ['actor', 'animal', 'conductor', 'criminal', 'director', 'doctor', 'inspector',
+                               'chocolate', 'melon', 'piano', 'radio', 'popular', 'social', 'simple', 'superficial',
+                               'terrible', 'vulnerable']
+        self._add_cognates_to_concepts()
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
-        self.false_friends = {'en': {'noun': {'animate': 'bombero'.split() },
-                                     'adj': 'sano'.split()},
-                              'es': {'adj': 'sano'.split()}
-                             }
+        # ropa (clothes) - rope / bombero (fire-fighter) - bomber / sano (healthy) - sane / carpeta (folder) - carpet /
+        # bizarro (brave) - bizarre / chocar (hit, collide) - choke / contestar (answer) - contest /
+        # embarazada (pregnant) - embarassed / enviar (send) - to envy / largo (long) - large /
+        # pariente (relative) - parent / pretender (attempt) - pretend / preocupado (worried) - preoccupied /
+        # realizar (become true) - realize / recordar (remember) - record / sopa (soup) - soap /
+        # soportar (tolerate) - support / tuna (prickly pear) - tuna / vaso (drinking glass) - vase /
+        # rapista (barber) - rapist / bizcocho (cake) - biscuit
+        self.false_friends = {'noun': {'animate': {'m': 'bombero pariente rapista'.split(),
+                                                   'f': 'embarazada pariente'.split()},
+                                       'inanimate': {'f': 'ropa carpeta sopa tuna'.split(),
+                                                     'm': 'vaso bizcocho'.split()}},
+                              'adj': 'sano bizarro largo preocupado'.split()
+                              # TODO: 'verb': 'chocar contestar enviar pretender realizar recordar soportar'.split()
+                              }
+        self.false_friends_values = ['bombero', 'embarazada', 'pariente', 'rapista', 'ropa',
+                                     'carpeta', 'sopa', 'tuna', 'vaso', 'bizcocho', 'sano', 'bizarro', 'largo',
+                                     'preocupado', 'chocar', 'contestar', 'enviar', 'pretender', 'realizar',
+                                     'recordar', 'soportar']
+        self._add_false_friends_to_concepts()
         self.lexicon = {}
         self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
-                                  'pron': {'m': 'he', 'f': 'she', 'n': 'it', 'c': ['he', 'she']},
+                                  'pron': {'m': 'he', 'f': 'she', 'n': 'it'}, #'c': ['he', 'she']},
                                   'noun': {
-                                      'animate': {'m': 'man boy father brother teacher actor grandfather husband '
+                                      'animate': {'m': 'man boy father brother teacher grandfather husband '
                                                        'host nephew son uncle waiter monk widower'
                                                        ' bull dog'.split(),
                                                   'f': 'woman girl mother sister nurse actress grandmother wife '
                                                        'hostess niece daughter aunt waitress nun'
                                                        ' widow cow cat'.split(),
                                                   },
-                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
+                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split(),
+                                                    'f': '', 'm': ''}
                                   },
                                   'adj': {
                                       'animate': 'happy sad tall short'.split(),
@@ -81,7 +121,7 @@ class SetsGenerator:
                                           'indef': {'m': 'un', 'f': 'una'},
                                           },
                                   'pron': {'m': 'él', 'f': 'ella'},
-                                  'noun': {'animate': {'m': 'niño padre hermano perro maestro act0r abuelo esposo '
+                                  'noun': {'animate': {'m': 'niño padre hermano perro maestro abuelo esposo '
                                                             'sobrino investigador hijo tío camarero toro director '
                                                             'presidente hombre'.split(),
                                                        'f': 'mujer niña madre hermana gata enfermera actríz abuela '
@@ -175,19 +215,7 @@ class SetsGenerator:
             self.lexicon_el['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
 
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
-        # semantic gender, which is a non language-specific concept
-        self.concepts = {'M': 'M', 'F': 'F', 'N': 'N'}
-        self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
-                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON',
-                            'long': 'LONG', 'tall': 'TALL', 'short': 'SHORT', 'cheap': 'CHEAP', 'sad': 'SAD',
-                            'happy': 'HAPPY', 'expensive': 'EXPENSIVE', 'colorful': 'COLORFUL'}
-        self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
-                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
-                            'pelota': 'BALL', 'feliz': 'HAPPY', 'triste': 'SAD', 'alto': 'TALL', 'pequeño': 'SMALL',
-                            'alta': 'TALL', 'pequeña': 'SMALL', 'barrato': 'CHEAP', 'barrata': 'CHEAP',
-                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'largo': 'LONG', 'larga': 'LONG',
-                            'colorido': 'COLORFUL', 'colorida': 'COLORFUL'}
-        if use_simple_semantics:
+        if use_simple_semantics:  # update concepts
             self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
                                      'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
                                      'son': 'SON', 'policewoman': 'POLICEWOMAN', 'policeman': 'POLICEMAN',
@@ -202,7 +230,6 @@ class SetsGenerator:
             self.concepts_es.update({'hermana': 'SISTER', 'hermano': 'BROTHER', 'ni\xc3\xb1o': 'BOY',
                                      'ni\xc3\xb1a': 'GIRL', 'madre': 'MOTHER', 'padre': 'FATHER', 'hija': 'DAUGHTER',
                                      'hijo': 'SON', 'investigador': 'RESEARCHER', 'investigadora': 'FRESEARCHER',
-                                     'act0r': 'ACTOR',
                                      'esposa': 'WIFE', 'esposo': 'HUSBAND', 'actríz': 'ACTRESS',
                                      'abuela': 'GRANDMOTHER', 'abuelo': 'GRANDFATHER', 'camarera': 'WAITRESS',
                                      'camarero': 'WAITER', 'tía': 'AUNT', 'tío': 'UNCLE', 'sobrino': 'NEPHEW',
@@ -226,7 +253,7 @@ class SetsGenerator:
             self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
                                      'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
                                      'hijo': 'OFFSPRING', 'investigador': 'RESEARCHER', 'investigadora': 'RESEARCHER',
-                                     'act0r': 'ACTOR', 'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
+                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
                                      'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
                                      'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
                                      'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
@@ -270,144 +297,159 @@ class SetsGenerator:
             self.concepts_es.update({'d': 'GIVE', 'present_': 'PRESENT', 'salt': 'JUMP', 'mostr': 'SHOW', 'nad': 'SWIM',
                                      'pate': 'KICK', 'dorm': 'SLEEP', 'empuj': 'PUSH', 'tir': 'THROW', 'corr': 'RUN',
                                      'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'estornud': 'SNEEZE'})
-
-        self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST']
+        self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC']
         self.target_lang = []
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT', 'AGENT-MOD', 'PATIENT-MOD']
 
         self.structures = []
         self.num_structures = None
         if use_full_verb_form:
-            self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans::participle',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::intrans::simple',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate aux::singular verb::trans::participle det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::trans::simple det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate aux::singular verb::double::participle '
-                                   'det noun::inanimate to det noun::animate',
-                                   #'det adj::inanimate noun::inanimate to det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate aux::singular verb::double::participle det '
-                                   'noun::animate det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                  ['det adj::animate noun::animate verb::double::simple det noun::inanimate to '
-                                   'det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                  ['det adj::animate noun::animate verb::double::simple det noun::animate det '
-                                   'noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
-                                  ]
-
-            self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans::participle',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::intrans::simple',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate aux::singular verb::trans::participle det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::trans::simple det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate aux::singular verb::double::participle '
-                                   'det noun::inanimate to det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate aux::singular verb::double::participle '
-                                   'to det noun::animate det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::double::simple det noun::inanimate '
-                                   'to det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate verb::double::simple to det noun::animate '
-                                   'det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
-                                  ]
-        else:
-            if self.use_with:
-                self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate with det noun::inanimate '
-                                       'aux::singular verb::intrans ing',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate verb::intrans verb_suffix',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
-                                      ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
-                                      #['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
-                                      # 'det noun::animate with det noun::inanimate',
-                                      # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate verb::trans verb_suffix det noun',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                      ['det adj::animate noun::animate aux::singular verb::double ing '
-                                       'det noun::inanimate to det noun::animate',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
-                                       'det noun::inanimate',
-                                       'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                          , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                      ['det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                       'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
-                                      ]
+            self.structures_en = read_structures(os.path.join(self.path, 'corpus/full_verb_structures.en'))
+            self.structures_es = read_structures(os.path.join(self.path, 'corpus/full_verb_structures.es'))
+        else:  # separate lemma from suffix
+            if self.extend_np_using_with:
+                self.structures_en = read_structures(os.path.join(self.path, 'corpus/morph_and_with_structures.en'))
+                self.structures_es = read_structures(os.path.join(self.path, 'corpus/morph_and_with_structures.es'))
             else:
-                self.structures_en = [['det adj::animate noun::animate aux::singular verb::intrans ing',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate aux::singular verb::intrans ing',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate verb::intrans verb_suffix',
-                                       'AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE'],
-                                      ['det adj::animate noun::animate aux::singular verb::trans ing det noun',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG'],
-                                      # ['det noun::animate with det noun::inanimate aux::singular verb::trans ing '
-                                      # 'det noun::animate with det noun::inanimate',
-                                      # 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;PATIENT-MOD=;E=EN,PROG'],
-                                      ['det adj::animate noun::animate verb::trans verb_suffix det noun',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE'],
-                                      ['det adj::animate noun::animate aux::singular verb::double ing '
-                                       'det noun::inanimate to det noun::animate',
-                                       'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG'],
-                                      [
-                                          'det adj::animate noun::animate aux::singular verb::double ing det noun::animate '
-                                          'det noun::inanimate',
-                                          'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG'],
-                                      [
-                                          'det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                          , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE'],
-                                      [
-                                          'det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate',
-                                          'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE'],
-                                      ]
+                self.structures_en = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.en'))
+                self.structures_es = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.es'))
 
-            self.structures_es = [['det noun::animate adj::animate aux::singular verb::intrans ing',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::intrans verb_suffix',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate verb::intrans verb_suffix',
-                                   'AGENT=;AGENT-MOD=;ACTION=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate aux::singular verb::trans ing det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::trans verb_suffix det noun',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate aux::singular verb::double ing '
-                                   'det noun::inanimate to det noun::animate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate aux::singular verb::double ing '
-                                   'to det noun::animate det noun::inanimate',
-                                   'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,PROG'],
-                                  ['det noun::animate adj::animate verb::double verb_suffix det noun::inanimate to det noun::animate'
-                                      , 'AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=ES,SIMPLE'],
-                                  ['det noun::animate adj::animate verb::double verb_suffix to det noun::animate det noun::inanimate'
-                                      , 'AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=ES,SIMPLE']
-                                  ]
         if not allow_free_structure_production:
-            self.event_sem.extend(['AGT', 'PAT', 'REC'])
-            additions = [',AGT', ',AGT', ',AGT', ',AGT,PAT', ',AGT,PAT', ',AGT,PAT,REC', ',AGT,-1,PAT,REC',
-                         ',AGT,PAT,REC', ',AGT,-1,PAT,REC']
-            for i in range(len(additions)):
-                self.structures_en[i][1] += additions[i]
-                self.structures_es[i][1] += additions[i]
+            self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
+            self.structures_en = strip_roles(self.structures_en)
+            self.structures_es = strip_roles(self.structures_es)
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, debug=False, save_lexicon=False):
+    def add_cognates_and_ff_to_lexicon(self):
+        self.lexicon_en['en']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
+        self.lexicon_en['en']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
+        self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['m']
+        self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['f']
+        self.lexicon_en['en']['adj']['animate'] += self.cognates['adj']
+        self.lexicon_en['en']['adj']['inanimate'] += self.cognates['adj']
+        self.lexicon_en['en']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
+        self.lexicon_en['en']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
+        self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['m']
+        self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['f']
+        self.lexicon_en['en']['adj']['animate'] += self.false_friends['adj']
+        self.lexicon_en['en']['adj']['inanimate'] += self.false_friends['adj']
+        # TODO: self.lexicon_en['en']['verb'] += self.false_friends['verb']
+        # same for ES
+        self.lexicon_es['es']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
+        self.lexicon_es['es']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
+        self.lexicon_es['es']['noun']['inanimate']['m'] += self.cognates['noun']['inanimate']['m']
+        self.lexicon_es['es']['noun']['inanimate']['f'] += self.cognates['noun']['inanimate']['f']
+        self.lexicon_es['es']['adj']['animate']['m'] += self.cognates['adj']
+        self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
+        self.lexicon_es['es']['adj']['animate']['m'] += self.cognates['adj']
+        self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
+        self.lexicon_es['es']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
+        self.lexicon_es['es']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
+        self.lexicon_es['es']['noun']['inanimate']['m'] += self.false_friends['noun']['inanimate']['m']
+        self.lexicon_es['es']['noun']['inanimate']['f'] += self.false_friends['noun']['inanimate']['f']
+        self.lexicon_es['es']['adj']['animate']['m'] += self.false_friends['adj']
+        self.lexicon_es['es']['adj']['animate']['f'] += self.false_friends['adj']
+        self.lexicon_es['es']['adj']['inanimate']['m'] += self.false_friends['adj']
+        self.lexicon_es['es']['adj']['inanimate']['f'] += self.false_friends['adj']
+        # TODO: self.lexicon_es['es']['verb'] += self.false_friends['verb']
+
+        self.concept_to_words = self._reverse_lexicon_to_concept()
+
+    def generate_sets_for_cognate_experiment(self, num_sentences, lang):
+        # first select cognate-free sentences
+        original_sets = self.generate_sets(num_sentences/3, lang, include_bilingual_lexicon=True,
+                                           save_lexicon=True, return_full_sets=True)
+        # replace one sentence per word with a cognate
+        cognate_sets = self.generate_replacement_sets(original_sets)
+        # replace one sentence per word with a false friend
+        false_friend_sets = self.generate_replacement_sets(original_sets, cognates=False)
+        all = [[original_sets[0] + cognate_sets[0] + false_friend_sets[0]] +
+               [original_sets[1] + cognate_sets[1] + false_friend_sets[1]]]
+        print all
+        random.shuffle(all)
+        sets_fname = ['test', 'training']
+        for set_type, i in enumerate(all):
+            print set_type
+            for message, sentence in set:
+                with codecs.open('%s/%s' % (self.results_dir, "%s.in" % sets_fname[i]), 'a', "utf-8") as f:
+                    f.write(u"%s## %s\n" % (sentence, message))
+
+    def generate_replacement_sets(self, original_sets, cognates=True):
+        """
+        :param original_sets: the sentence/message pairs that need to be modified to include cognates or false friends
+        :param cognates: if False, insert false friends instead (default: True)
+        :return:
+        """
+        if cognates:
+            replacement_dict = self.cognates
+        else:
+            replacement_dict = self.false_friends
+        replacement_sets = []
+        for set_type in original_sets:
+            replacement_set_type = []
+            for sentence, message in set_type:  # test, training
+                # choose between noun and adjective
+                print 'PRIN: %s \n %s' % (message, sentence)
+                lang = re.search(r";E=(\S.),", message).group(1).lower()
+                rep_pos = random.choice(['noun', 'adj'])
+                if rep_pos == 'adj':
+                    new_adj = random.choice(replacement_dict['adj'])
+                    candidate_roles = [r for r in message.split(';') if '-MOD' in r]
+                    role_to_replace = random.choice(candidate_roles)
+                    new_role = role_to_replace.split('=')
+                    new_role[1] = new_adj.upper()
+                    # in case of false friends
+                    if not cognates and lang != 'en':
+                        new_role[1] += "_ES"
+                    message = message.replace(role_to_replace, '='.join(new_role))
+                    old_role = role_to_replace.split('=')[1]
+                    if lang == 'en':
+                        sentence = sentence.replace(old_role.lower(), new_adj)
+                    else:  # need to look up concept -> word before replacing
+                        word_to_replace = self.concept_to_words[old_role]
+                        for word in word_to_replace:
+                            sentence = sentence.replace(word, new_adj)
+                else:  # noun
+                    ignore = ['-MOD=', 'E=', 'ACTION=']
+                    candidate_roles = [r for r in message.split(';') if not any(x in r for x in ignore)]
+                    role_to_replace = random.choice(candidate_roles).split('=')[1].split(',')
+                    if lang == 'en':
+                        word_to_replace = role_to_replace[1].lower()
+                    else:
+                        list_word_to_replace = self.concept_to_words[role_to_replace[1]]
+                        for w in list_word_to_replace:
+                            if w in sentence:
+                                word_to_replace = w
+                                break
+
+                    if len(role_to_replace) == 3:  # it means that it has M, F info and that it's animate
+                        print role_to_replace[2]
+                        new_word = random.choice(replacement_dict['noun']['animate'][role_to_replace[2].lower()])
+                    else:
+                        # find gender of word
+                        gender = 'm'
+                        if word_to_replace in self.lexicon[lang]['noun']['inanimate']['f']:
+                            gender = 'f'
+                        new_word = random.choice(replacement_dict['noun']['inanimate'][gender])
+                    new_role = deepcopy(role_to_replace)
+                    new_role[1] = new_word.upper()
+                    if not cognates and lang != 'en':  # Spansish FF
+                        new_role[1] += "_ES"
+                    message = message.replace(','.join(role_to_replace), ','.join(new_role))
+                    for i in re.finditer(word_to_replace, sentence):
+                        if i.start() != -1:
+                            print sentence
+                            print message
+                            print 'AAA'
+                            sys.exit()  # FIXME: If more than once?
+                    sentence = sentence.replace(word_to_replace, new_word)
+                print "META: %s \n %s" % (sentence, message)
+                replacement_set_type.append((sentence, message))
+                print '----'
+            replacement_sets.append(replacement_set_type)
+        return replacement_sets
+
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon,
+                      debug=False, save_lexicon=False, return_full_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
         :param lang: language code
@@ -416,15 +458,21 @@ class SetsGenerator:
         :param save_lexicon: whether to save lexicon/concepts etc or just training/test sets
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
-        self.get_structures_and_lexicon(lang)
+        self.set_structures_and_lexicon(lang)
 
         sentence_structures_train = self.generate_sentence_structures(num_train)
         sentence_structures_test = self.generate_sentence_structures(num_test)
 
-        test_set = self.generate_sentences(sentence_structures_test, fname="test.in",
-                                           debug=debug, return_mess=True)
-        self.generate_sentences(sentence_structures_train, fname="train.in", debug=debug,
-                                exclude_test_sentences=test_set)
+        if return_full_sets:
+            test_set = self.generate_sentences(sentence_structures_test, fname=None,
+                                               debug=debug, return_info_type='full')
+            training_set = self.generate_sentences(sentence_structures_train, fname=None, debug=debug,
+                                                   exclude_test_sentences=test_set, return_info_type='full')
+        else:
+            test_set = self.generate_sentences(sentence_structures_test, fname="test.in",
+                                               debug=debug, return_info_type='set')
+            self.generate_sentences(sentence_structures_train, fname="train.in", debug=debug,
+                                    exclude_test_sentences=test_set)
 
         if save_lexicon:
             if include_bilingual_lexicon:
@@ -436,6 +484,7 @@ class SetsGenerator:
                     self.lexicon.update(self.lexicon_es)
                     self.target_lang.append('ES')
                     self.concepts.update(self.concepts_es)
+            self.add_cognates_and_ff_to_lexicon()
             self.print_lexicon()
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
@@ -456,7 +505,10 @@ class SetsGenerator:
             with codecs.open('%s/lexicon_to_concept.pickled' % self.results_dir, 'w', "utf-8") as pckl:
                 pickle.dump(self.concepts, pckl)
 
-    def get_structures_and_lexicon(self, lang):
+        if return_full_sets:
+            return test_set, training_set
+
+    def set_structures_and_lexicon(self, lang):
         lang = lang.lower()
         if lang == 'es':
             structures = self.structures_es
@@ -488,13 +540,14 @@ class SetsGenerator:
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[], return_mess=False,
+    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[], return_info_type=None,
                            debug=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename where results will be stored
         :param exclude_test_sentences: list of sentences to exclude (test set needs to contain novel messages only)
-        :param return_mess: return set of generated messages (so as to exclude them when generating the train set)
+        :param return_info_type: 'set' to return the set of generated messages (to exclude them when generating the
+        training set), 'full' to return both messages and sentences, None (default)
         :param debug: whether to print results on screen
         :return:
         """
@@ -513,8 +566,8 @@ class SetsGenerator:
         #    for s in range(num_sentences):
         #        sentence_structures[s][0] = "filler %s" % sentence_structures[s][0]
 
-        # we can keep track of train sentences (messages) that are identical to test ones and exclude them
-        full_mess = []
+        # we can keep track of training sentences (messages) that are identical to test ones and exclude them
+        full_msg = []
         # now select words according to structure
         sen_idx = 0
         for pos_full, mes in sentence_structures:
@@ -578,16 +631,16 @@ class SetsGenerator:
                                     sentence.append(determiners[gender])
                                 add_det = False  # reset
                                 sentence.append(wd)
-                            message[msg_idx] += "," + self.get_concept(wd)
+                            message[msg_idx] += "," + self.get_concept(wd, lang)
                             msg_idx += 1
                         else:
                             add_det = True
                     elif type(w) is list:
                         random_word = random.choice(w)
                         if "AGENT-MOD=" in message and part == "adj":
-                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
+                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word, lang)
                         else:
-                            message[msg_idx] += "," + self.get_concept(random_word)  # nouns
+                            message[msg_idx] += "," + self.get_concept(random_word, lang)  # nouns
                         if level == 'animate' and 'noun' in pos:  # include semantic gender, we can discard it later
                             message[msg_idx] += "," + gender.upper()
                         if not np[sen_idx] and msg_idx == 0 and 'noun' in pos:  # go for pronoun (instead of NP)
@@ -624,9 +677,9 @@ class SetsGenerator:
 
                     random_word = random.choice(syn)
                     if "AGENT-MOD=" in message and part == "adj":
-                        message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word)
+                        message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word, lang)
                     else:
-                        message[msg_idx] += self.get_concept(random_word) #'%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
+                        message[msg_idx] += self.get_concept(random_word, lang) #'%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
 
                     if 'verb' in pos:
                         msg_idx += 1
@@ -641,26 +694,34 @@ class SetsGenerator:
             message = re.sub(r"=,", "=", message)
 
             if message in (exclude_test_sentences or generated_sentences):
-                sentence_structures.append((pos_full, mes))  # find unique sentence, don't add it to the train set
+                sentence_structures.append((pos_full, mes))  # find unique sentence, don't add it to the training set
             else:
                 generated_sentences.append(message)
                 sen_idx += 1
                 if debug:
                     print u"%s## %s" % (sentence, message)
-                with codecs.open('%s/%s' % (self.results_dir, fname), 'a',  "utf-8") as f:
-                    f.write(u"%s## %s\n" % (sentence, message))
+                if fname:  # fname is None in the cognate experiment case
+                    with codecs.open('%s/%s' % (self.results_dir, fname), 'a',  "utf-8") as f:
+                        f.write(u"%s## %s\n" % (sentence, message))
 
-            if return_mess:
-                full_mess.append(message)
-        return full_mess
+            if return_info_type == 'set':
+                full_msg.append(message)
+            elif return_info_type == 'full':
+                full_msg.append((sentence, message))
+        return full_msg
 
-    def get_concept(self, word):
+    def get_concept(self, word, lang):
         if word in self.concepts:
+            if word in self.cognate_values:
+                return "%s,COG" % self.concepts[word]
+            if word in self.false_friends_values:
+                return "%s%s,FF" % (self.concepts[word], "_ES" if lang == 'es' else '')
             return self.concepts[word]
-        else:
-            self.concepts[word] = word.upper()
-            print "'%s': '%s'," % (word, word.upper())
-            return word
+
+        # in case we haven't updated the concept of the word
+        self.concepts[word] = word.upper()
+        print "'%s': '%s'," % (word, word.upper())  # so that we can add it manually
+        return word
 
     def get_layered_key(self, keylist):
         lex = self.lexicon
@@ -683,13 +744,62 @@ class SetsGenerator:
         if 'with' not in main_pos:
             main_pos.add('with')
 
+        unique_dict = []
         for lang in self.target_lang:  # keep separate for now because of code-switching
             for pos in main_pos:
                 lex = list(get_dict_items(pos, self.lexicon[lang.lower()]))
                 if any(isinstance(i, list) for i in lex):
                     lex = list(chain.from_iterable(lex))
+                if self.use_cognates_and_ff:
+                    lex = set([v for v in lex if v not in unique_dict])  # avoid duplicate words
+                    unique_dict.extend(lex)
                 with codecs.open('%s/lexicon.in' % self.results_dir, 'a', "utf-8") as f:
                     f.write("{0}:\n{1}\n".format(pos.upper(), "\n".join(lex)))
+
+    def _add_cognates_to_concepts(self):
+        for v in self.cognate_values:
+            self.concepts.update({v: v.upper()})
+
+    def _add_false_friends_to_concepts(self):
+        for v in self.false_friends_values:
+            self.concepts_en.update({v: v.upper()})
+            self.concepts_es.update({v+"_ES": v.upper()+"_ES"})
+
+    def _reverse_lexicon_to_concept(self):
+        concept_to_words = {}  # use
+        for revkey, revvalue in self.concepts.iteritems():
+            if revkey != revvalue.lower():
+                if revvalue in concept_to_words:
+                   concept_to_words[revvalue].append(revkey)
+                else:
+                    concept_to_words[revvalue] = [revkey]
+        return concept_to_words
+
+
+def read_structures(fname):
+    structures = []
+    with open(fname) as f:
+        for pos, msg in izip_longest(*[f] * 2):
+            structures.append((pos.rstrip(), msg.rstrip()))
+    return structures
+
+
+def write_structures(fname, structures):
+    with open(fname, 'w') as f:
+        for i in structures:
+            f.write("%s\n%s\n" % (i[0], i[1]))
+
+
+def strip_roles(structures):
+    structures = [(pos, re.sub(r'|'.join(map(re.escape, [',AGT', ',PAT', ',-1', ',REC'])), '', msg))
+                  for pos, msg in structures]
+    return structures
+
+
+def dump_to_json(fname, dictionary):
+    # d = json.dumps(dictionary, indent=4)
+    with open(fname, 'w') as f:
+        json.dump(dictionary, f)
 
 
 def get_dict_items(key, dictionary):
@@ -724,10 +834,12 @@ def calculate_number_of_sentences_per_set(num_sentences):
     num_train = num_sentences - num_test
     return num_test, num_train
 
+
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
-                         add_filler=False)
-    sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
+                         add_filler=False, use_adjectives=True)
+    sets.generate_sets_for_cognate_experiment(num_sentences=3000, lang='esen')
+    #sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_lexicon=True)

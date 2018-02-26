@@ -90,3 +90,99 @@ def plot_code_switches():
 
 
 
+import itertools
+
+
+def is_code_switched(self, sentence_indeces):
+    """ This function only checks whether words from different languages were used.
+    It doesn't verify the validity of the expressed message """
+    sentence_no_period = [x for x in sentence_indeces if x != self.inputs.period_idx]  # period common in all lang
+    if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period) or
+            all(i < self.inputs.code_switched_idx for i in sentence_no_period)):
+        return False
+    else:
+        return True
+
+def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx):
+    """ Types of code-switches:
+            - intra-sentential (in the middle of the sentence)
+            - inter-sentential (full switch at sentence boundaries)
+            - extra-sentential (insertion of tag)
+            - noun borrowing? (if no determiners were switched)
+
+        Note: Returns FALSE if the message conveyed was not correct.
+    """
+    # First "translate" message into the target language and compare with target sentence
+    translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
+                                                                                    trg_sentence_idx[0])
+    for translated_sentence_idx in translated_sentence_candidates:
+        translated_sentences = list(itertools.chain.from_iterable(translated_sentence_idx))
+        cs_type = self.examine_sentences_for_cs_type(translated_sentences, out_sentence_idx, trg_sentence_idx)
+        if cs_type:  # if not False no need to look further
+            return cs_type
+    return False  # no CS type found
+
+def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
+    if trg_lang_word_idx < self.inputs.code_switched_idx:
+        trans = [self.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
+                 if (idx >= self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx))
+                 else [idx] for idx in out_sentence_idx]
+    else:
+        trans = [self.find_equivalent_translation_idx(idx)
+                 if (idx < self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx)) else [idx]
+                 for idx in out_sentence_idx]
+    if any(len(i) > 1 for i in trans):
+        return [list([x] for x in tup) for tup in list(itertools.product(*trans))]
+    return [trans]
+
+def _idx_is_cognate_or_ff(self, idx):
+    w = self.inputs.lexicon[idx]
+    if w in self.inputs.cognate_values or w in self.inputs.false_friend_values:
+        return True
+    return False
+
+def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
+    if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
+        return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
+    check_idx = [w for w in out_sentence_idx if w not in trg_sentence_idx]
+    # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
+    if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
+        # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
+        cs_type = "alternational CS"
+    else:
+        check_idx_pos = [self.inputs.pos_lookup(w) for w in check_idx]
+        if len(set(check_idx_pos)) == 1:
+            cs_type = "%s" % check_idx_pos[0].lower()
+        else:
+            # print self.inputs.sentence_from_indeces(out_sentence_idx)
+            # print self.inputs.sentence_from_indeces(translated_sentence_idx)
+            # print "POS: %s. INSP:%s %s" % (check_idx_pos, check_idx, self.inputs.sentence_from_indeces(check_idx))
+            cs_type = "inter-word switch"
+    return cs_type
+
+def find_equivalent_translation_idx(self, idx, remove_candidates_less_than_cs_point=False):
+    word = self.inputs.lexicon[idx]
+    if word in self.inputs.translation_dict:
+        translation = self.inputs.translation_dict[word]
+    elif word in self.inputs.reverse_translation_dict:
+        translation = self.inputs.reverse_translation_dict[word]
+    else:
+        concept = self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
+        all_translations = [w for w in self.inputs.concept_to_words[concept] if w != word]
+        if not all_translations:
+            # print word, idx, concept
+            return [idx]  # this is the case where a word exists in one language but not the other
+        elif len(all_translations) > 1:
+            if remove_candidates_less_than_cs_point:
+                return [self.inputs.lexicon.index(translation) for translation in all_translations
+                        if self.inputs.lexicon.index(translation) < self.inputs.code_switched_idx]
+            else:
+                return [self.inputs.lexicon.index(translation) for translation in all_translations
+                        if self.inputs.lexicon.index(translation) >= self.inputs.code_switched_idx]
+        else:
+            translation = all_translations[0]
+    return [self.inputs.lexicon.index(translation)]
+
+
+
+

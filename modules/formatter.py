@@ -41,6 +41,13 @@ class InputFormatter:
                                  '-ando': '-ing', 'ella': 'she', 'él': 'he'}
         self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}
         self.concept_to_words = self._reverse_lexicon_to_concept()
+        self.cognate_values = ['actor', 'animal', 'conductor', 'criminal', 'director', 'doctor', 'inspector',
+                               'chocolate', 'melon', 'piano', 'radio', 'popular', 'social', 'simple', 'superficial',
+                               'terrible', 'vulnerable']
+        self.false_friend_values = ['bombero', 'embarazada', 'pariente', 'rapista', 'ropa',
+                                     'carpeta', 'sopa', 'tuna', 'vaso', 'bizcocho', 'sano', 'bizarro', 'largo',
+                                     'preocupado', 'chocar', 'contestar', 'enviar', 'pretender', 'realizar',
+                                     'recordar', 'soportar']
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -252,7 +259,7 @@ class InputFormatter:
                 for concept in what.split(","):
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
-                    else:
+                    elif concept not in ['FF', 'COG']:  # ignore False Friends and Cognates
                         if self.use_word_embeddings:
                             activation_vector = self.concepts['unknown']
                             lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
