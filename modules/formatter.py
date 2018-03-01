@@ -131,6 +131,10 @@ class InputFormatter:
     def _read_allowed_structures(self):
         all_pos = [self.sentence_indeces_pos(sentence.split("##")[0].split(), convert_to_idx=True)
                    for sentence in self.trainlines]
+        if [] in all_pos:
+            print sentence
+            import sys
+            sys.exit
         all_pos.sort()
         return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
 
@@ -225,7 +229,11 @@ class InputFormatter:
             sentence_idx = self.sentence_indeces(sentence_idx)
         if remove_period and sentence_idx[-1] == self.period_idx:
             sentence_idx = sentence_idx[:-1]
-        return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
+        r = [self.pos_lookup(word_idx) for word_idx in sentence_idx]
+        if [] in r:
+            print sentence_idx
+            import sys;sys.exit()
+        return r
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -250,7 +258,7 @@ class InputFormatter:
                     if event in self.languages:
                         target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
-                    else:  # activate
+                    elif event not in ['FF', 'COG']:  # ignore False Friends and Cognates:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
             else:
@@ -259,7 +267,7 @@ class InputFormatter:
                 for concept in what.split(","):
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
-                    elif concept not in ['FF', 'COG']:  # ignore False Friends and Cognates
+                    else:
                         if self.use_word_embeddings:
                             activation_vector = self.concepts['unknown']
                             lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
@@ -271,8 +279,12 @@ class InputFormatter:
                             for i, w2v_activation in enumerate(activation_vector):
                                 weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
                         else:
-                            idx_concept = self.identif_size + self.concepts.index(concept)
-                            weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                            if concept in self.concepts:
+                                idx_concept = self.identif_size + self.concepts.index(concept)
+                                weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                            else:
+                                print message
+                                import sys;sys.exit()
         return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
 
     def cosine_similarity(self, first_word, second_word):
@@ -281,7 +293,10 @@ class InputFormatter:
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold=75):
-        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
+        if x:
+            return np.true_divide(x[-1] * 100, self.num_test) >= threshold
+        print x
+        return False
 
 
 def take_average_of_valid_results(valid_results):

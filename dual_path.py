@@ -232,8 +232,6 @@ class DualPath:
                 self.results['correct_code_switches']['training'].append(cc)
                 self.results['code_switches']['training'].append(c)
                 self.results['type_code_switches']['training'].append(t)
-
-            print self.results['type_code_switches']['test']
             # convert "type_code_switches" from list of dicts to a single dict
             type_training = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['training'])))
             type_test = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['test'])))
@@ -273,7 +271,6 @@ class DualPath:
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
         skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_values + self.inputs.false_friend_values
-        print skipped_idx
         # skip indeces that are common in all lang
         sentence_no_period_cognate_ff = [x for x in sentence_indeces if x not in skipped_idx]
         if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff) or
@@ -425,12 +422,10 @@ class DualPath:
 
                         # check for cognates vs FFs vs regular (no lang)
                         # COG and FF in message
-                        if ',COG' in message and ',FF' in message:  # we don't really want this category
-                            cs_type_with_lang = "%s-COG-FF" % cs_type
-                        elif ',COG' in message:
+                        if ',COG' in message:
                             cs_type_with_lang = "%s-COG" % cs_type
                         elif ',FF' in message:
-                            cs_type_with_lang = "%s-COG" % cs_type
+                            cs_type_with_lang = "%s-FF" % cs_type
                         else:  # no cognates or false friends
                             cs_type_with_lang = "%s" % cs_type
                         if cs_type_with_lang in type_all_code_switches:
@@ -707,8 +702,12 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
                              ignore_past=args.ignore_past, use_adjectives=args.use_adjectives)
-        sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
-                           include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
+        if True:  # if cognate_experiment
+            sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
+                                                      save_lexicon=True)
+        else:
+            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
+                               include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
 
     if not args.title:
         args.title = generate_title_from_lang(args.lang)
@@ -754,7 +753,10 @@ if __name__ == "__main__":
             inputs.results_dir = rdir
             if sets:  # generate new test/training sets
                 sets.results_dir = rdir
-                sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
+                if True:  # cognate_experiment
+                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang, save_lexicon=False)
+                else:
+                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
             elif original_input_path:
                 # use existing test/training set (copy them first)
                 copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)
