@@ -673,6 +673,9 @@ if __name__ == "__main__":
     parser.add_argument('--emb', dest='word_embeddings', action='store_true',
                         help='Represent semantics using word embeddings instead of one-hot vectors.')
     parser.set_defaults(word_embeddings=False)
+    parser.add_argument('--cognates', dest='use_cognates', action='store_true',
+                        help='Run cognate experiment')
+    parser.set_defaults(use_cognates=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -702,7 +705,7 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
                              ignore_past=args.ignore_past, use_adjectives=args.use_adjectives)
-        if True:  # if cognate_experiment
+        if args.use_cognates:  # if cognate_experiment
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
                                                       save_lexicon=True)
         else:
@@ -753,7 +756,7 @@ if __name__ == "__main__":
             inputs.results_dir = rdir
             if sets:  # generate new test/training sets
                 sets.results_dir = rdir
-                if True:  # cognate_experiment
+                if args.use_cognates:  # cognate_experiment
                     sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang, save_lexicon=False)
                 else:
                     sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
@@ -813,4 +816,5 @@ if __name__ == "__main__":
         f.write("\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n%s%s" %
                 (', '.join(layers_with_softmax_act_function), simulations_with_pron_err, args.sim,
                  "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
-                 "\nIndeces of failed simulations: %s" % ", ".join(failed_sim_id) if failed_sim_id else ""))
+                 "\nIndeces of failed simulations (or simulations that would fail): %s" % ", ".join(failed_sim_id)
+                 if failed_sim_id else ""))

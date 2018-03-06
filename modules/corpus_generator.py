@@ -313,7 +313,7 @@ class SetsGenerator:
                 self.structures_en = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.en'))
                 self.structures_es = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.es'))
 
-        if not allow_free_structure_production:
+        if allow_free_structure_production:
             self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
             self.structures_en = strip_roles(self.structures_en)
             self.structures_es = strip_roles(self.structures_es)
@@ -496,7 +496,7 @@ class SetsGenerator:
                     self.lexicon.update(self.lexicon_es)
                     self.target_lang.append('ES')
                     self.concepts.update(self.concepts_es)
-            self.add_cognates_and_ff_to_lexicon()
+            #self.add_cognates_and_ff_to_lexicon()
             self.print_lexicon()
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
