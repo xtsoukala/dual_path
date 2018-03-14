@@ -454,9 +454,10 @@ class SetsGenerator:
                     new_role[concept_idx] = new_word.upper()
                     if not cognates and lang != 'en':  # Spansish FF
                         new_role[concept_idx] += "_ES"
-                    message = message.replace(','.join(role_to_replace), ','.join(new_role))
+                    message = message.replace(','.join(role_to_replace) + ',', ','.join(new_role) + ',')
+                    message = message.replace(','.join(role_to_replace) + ';', ','.join(new_role) + ';')
                     if sentence.split().count(word_to_replace) > 1:   # if more than once change all roles
-                        message = message.replace(role_to_replace[concept_idx], new_word.upper())
+                        message = message.replace(role_to_replace[concept_idx] + ',', new_word.upper() + ',')
                     sentence = sentence.replace(" %s " % word_to_replace, " %s " % new_word)
                 if cognates:
                     message += ',COG'
