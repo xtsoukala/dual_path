@@ -709,7 +709,7 @@ if __name__ == "__main__":
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
                                                       save_lexicon=True)
         else:
-            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
+            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, use_cognates_and_ff=True,
                                include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
 
     if not args.title:
@@ -757,9 +757,11 @@ if __name__ == "__main__":
             if sets:  # generate new test/training sets
                 sets.results_dir = rdir
                 if args.use_cognates:  # cognate_experiment
-                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang, save_lexicon=False)
+                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
+                                                              save_lexicon=False)
                 else:
-                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
+                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True,
+                                       use_cognates_and_ff=True)
             elif original_input_path:
                 # use existing test/training set (copy them first)
                 copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)

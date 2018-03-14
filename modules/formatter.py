@@ -131,10 +131,6 @@ class InputFormatter:
     def _read_allowed_structures(self):
         all_pos = [self.sentence_indeces_pos(sentence.split("##")[0].split(), convert_to_idx=True)
                    for sentence in self.trainlines]
-        if [] in all_pos:
-            print sentence
-            import sys
-            sys.exit
         all_pos.sort()
         return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
 
@@ -267,7 +263,7 @@ class InputFormatter:
                 for concept in what.split(","):
                     if concept in self.identif:
                         weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
-                    else:
+                    elif concept not in ['COG', 'FF']:
                         if self.use_word_embeddings:
                             activation_vector = self.concepts['unknown']
                             lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
@@ -283,7 +279,7 @@ class InputFormatter:
                                 idx_concept = self.identif_size + self.concepts.index(concept)
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
-                                print message
+                                print message, '#####', concept
                                 import sys;sys.exit()
         return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
 

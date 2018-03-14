@@ -45,7 +45,6 @@ class SetsGenerator:
         self.ignore_past_tense = ignore_past
         self.use_adjectives = use_adjectives
         self.extend_np_using_with = extend_np_using_with
-        self.use_cognates_and_ff = True
         self.concept_to_es_words = {}
         self.concepts = {'M': 'M', 'F': 'F'}  # initialize concepts with semantic gender (non language-specific)
         self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
@@ -56,7 +55,7 @@ class SetsGenerator:
                             'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
                             'pelota': 'BALL', 'feliz': 'HAPPY', 'triste': 'SAD', 'alto': 'TALL', 'pequeño': 'SMALL',
                             'alta': 'TALL', 'pequeña': 'SMALL', 'barrato': 'CHEAP', 'barrata': 'CHEAP',
-                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'largo': 'LONG', 'larga': 'LONG',
+                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'larga': 'LONG',
                             'colorido': 'COLORFUL', 'colorida': 'COLORFUL'}
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
         self.cognates = {'noun': {'animate': {'f': 'conductor criminal director doctor'.split(),
@@ -104,7 +103,7 @@ class SetsGenerator:
                                   },
                                   'adj': {
                                       'animate': 'happy sad tall short'.split(),
-                                      'inanimate': 'cheap expensive long colorful'.split()
+                                      'inanimate': 'cheap expensive big colorful'.split()
                                   },
                                   'aux': {'singular': {'present': 'is', 'past': 'was'},
                                           'plural': {'present': 'are', 'past': 'were'},
@@ -132,8 +131,8 @@ class SetsGenerator:
                                   'adj': {
                                       'animate': {'m': 'feliz triste alto pequeño'.split(),
                                                   'f': 'feliz triste alta pequeña'.split()},
-                                      'inanimate': {'m': 'barrato caro largo colorido'.split(),
-                                                    'f': 'barrata cara larga colorida'.split()}
+                                      'inanimate': {'m': 'barrato caro grande colorido'.split(),
+                                                    'f': 'barrata cara grande colorida'.split()}
                                   },
                                   'aux': {'singular': {'present': 'está', 'past': 'estaba'},
                                           'plural': {'present': 'están', 'past': 'estaban'},
@@ -318,20 +317,21 @@ class SetsGenerator:
             self.structures_en = strip_roles(self.structures_en)
             self.structures_es = strip_roles(self.structures_es)
 
-    def add_cognates_and_ff_to_lexicon(self):
+    def add_cognates_and_ff_to_lexicon(self, include_ff=True):
         self.lexicon_en['en']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
         self.lexicon_en['en']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
         self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['m']
         self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['f']
         self.lexicon_en['en']['adj']['animate'] += self.cognates['adj']
         self.lexicon_en['en']['adj']['inanimate'] += self.cognates['adj']
-        self.lexicon_en['en']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
-        self.lexicon_en['en']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
-        self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['m']
-        self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['f']
-        self.lexicon_en['en']['adj']['animate'] += self.false_friends['adj']
-        self.lexicon_en['en']['adj']['inanimate'] += self.false_friends['adj']
-        # TODO: self.lexicon_en['en']['verb'] += self.false_friends['verb']
+        if include_ff:
+            self.lexicon_en['en']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
+            self.lexicon_en['en']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
+            self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['m']
+            self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['f']
+            self.lexicon_en['en']['adj']['animate'] += self.false_friends['adj']
+            self.lexicon_en['en']['adj']['inanimate'] += self.false_friends['adj']
+            # TODO: self.lexicon_en['en']['verb'] += self.false_friends['verb']
         # same for ES
         self.lexicon_es['es']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
         self.lexicon_es['es']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
@@ -341,30 +341,36 @@ class SetsGenerator:
         self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
         self.lexicon_es['es']['adj']['animate']['m'] += self.cognates['adj']
         self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
-        self.lexicon_es['es']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
-        self.lexicon_es['es']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
-        self.lexicon_es['es']['noun']['inanimate']['m'] += self.false_friends['noun']['inanimate']['m']
-        self.lexicon_es['es']['noun']['inanimate']['f'] += self.false_friends['noun']['inanimate']['f']
-        self.lexicon_es['es']['adj']['animate']['m'] += self.false_friends['adj']
-        self.lexicon_es['es']['adj']['animate']['f'] += self.false_friends['adj']
-        self.lexicon_es['es']['adj']['inanimate']['m'] += self.false_friends['adj']
-        self.lexicon_es['es']['adj']['inanimate']['f'] += self.false_friends['adj']
-        # TODO: self.lexicon_es['es']['verb'] += self.false_friends['verb']
+        if include_ff:
+            self.lexicon_es['es']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
+            self.lexicon_es['es']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
+            self.lexicon_es['es']['noun']['inanimate']['m'] += self.false_friends['noun']['inanimate']['m']
+            self.lexicon_es['es']['noun']['inanimate']['f'] += self.false_friends['noun']['inanimate']['f']
+            self.lexicon_es['es']['adj']['animate']['m'] += self.false_friends['adj']
+            self.lexicon_es['es']['adj']['animate']['f'] += self.false_friends['adj']
+            self.lexicon_es['es']['adj']['inanimate']['m'] += self.false_friends['adj']
+            self.lexicon_es['es']['adj']['inanimate']['f'] += self.false_friends['adj']
+            # TODO: self.lexicon_es['es']['verb'] += self.false_friends['verb']
+            #self.lexicon_es['es']['verb'] += self.false_friends['verb']
 
-    def generate_sets_for_cognate_experiment(self, num_sentences, lang, save_lexicon=False):
+    def generate_sets_for_cognate_experiment(self, num_sentences, lang, save_lexicon=False, include_ff=True):
         # first select cognate-free sentences
-        original_sets = self.generate_sets(num_sentences/3, lang, include_bilingual_lexicon=True,
-                                           save_lexicon=save_lexicon, return_full_sets=True)
+        num_sets = 3 if include_ff else 2
+        original_sets = self.generate_sets(num_sentences/num_sets, lang, include_bilingual_lexicon=True,
+                                           save_lexicon=save_lexicon, return_full_sets=True, use_cognates_and_ff=True)
         # replace one sentence per word with a cognate
         cognate_sets = self.generate_replacement_sets(original_sets)
-        # replace one sentence per word with a false friend
-        false_friend_sets = self.generate_replacement_sets(original_sets, cognates=False)
-        all = [original_sets[0] + cognate_sets[0] + false_friend_sets[0],
-               original_sets[1] + cognate_sets[1] + false_friend_sets[1]]
+        if include_ff:
+            # replace one sentence per word with a false friend
+            false_friend_sets = self.generate_replacement_sets(original_sets, cognates=False)
+            all = [original_sets[0] + cognate_sets[0] + false_friend_sets[0],
+                   original_sets[1] + cognate_sets[1] + false_friend_sets[1]]
+        else:
+            all = [original_sets[0] + cognate_sets[0],
+                   original_sets[1] + cognate_sets[1]]
         random.shuffle(all)
         sets_fname = ['test', 'train']
         for i, set_type in enumerate(all):
-            #for m in set_type:
                 random.shuffle(set_type)
                 for sentence, message in set_type:
                     with codecs.open('%s/%s' % (self.results_dir, "%s.in" % sets_fname[i]), 'a', "utf-8") as f:
@@ -400,7 +406,7 @@ class SetsGenerator:
                     message = message.replace(role_to_replace, '='.join(new_role))
                     old_role = role_to_replace.split('=')[1]  # take arguments, not role
                     if lang == 'en':
-                        sentence = sentence.replace(old_role.lower(), new_adj)
+                        sentence = sentence.replace(" %s " % old_role.lower(), " %s " % new_adj)
                     else:  # need to look up concept -> word before replacing
                         if old_role in self.concept_to_es_words:
                             word_to_replace = self.concept_to_es_words[old_role]
@@ -432,7 +438,7 @@ class SetsGenerator:
                             print list_word_to_replace, '@@@', sentence, '@@@', role_to_replace, concept_idx
                             sys.exit()
 
-                    if len(role_to_replace) == 3:  # it means that it has M, F info and that it's animate
+                    if 'M' in role_to_replace or 'F' in role_to_replace:  # it means that it has M, F info and that it's animate
                         gender = [i.lower() for i in role_to_replace if i == 'F' or i == 'M'][0]
                         new_word = random.choice(replacement_dict['noun']['animate'][gender])
                     else:
@@ -460,7 +466,7 @@ class SetsGenerator:
             replacement_sets.append(replacement_set_type)
         return replacement_sets
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon,
+    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, use_cognates_and_ff,
                       debug=False, save_lexicon=False, return_full_sets=False):
         """
         :param num_sentences: number of train AND test sentences to be generated
@@ -468,6 +474,7 @@ class SetsGenerator:
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
         :param debug: whether to print results on screen
         :param save_lexicon: whether to save lexicon/concepts etc or just training/test sets
+        :param return_full_sets: whether to return sets of message/sentence pairs
         """
         num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
         self.set_structures_and_lexicon(lang)
@@ -496,8 +503,7 @@ class SetsGenerator:
                     self.lexicon.update(self.lexicon_es)
                     self.target_lang.append('ES')
                     self.concepts.update(self.concepts_es)
-            #self.add_cognates_and_ff_to_lexicon()
-            self.print_lexicon()
+            self.print_lexicon(use_cognates_and_ff)
 
             with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
                 f.write("%s" % "\n".join(self.identifiability))
@@ -734,11 +740,10 @@ class SetsGenerator:
 
     def get_concept(self, word, lang):
         if word in self.concepts:
-            #if word in self.cognate_values:
-            #    return "%s,COG" % self.concepts[word]
+            if word in self.cognate_values:
+                return "%s,COG" % self.concepts[word]
             if word in self.false_friends_values:
-                return "%s%s" % (self.concepts[word], "_ES" if lang == 'es' else '')
-                #return "%s%s,FF" % (self.concepts[word], "_ES" if lang == 'es' else '')
+                return "%s%s,FF" % (self.concepts[word], "_ES" if lang == 'es' else '')
             return self.concepts[word]
 
         # in case we haven't updated the concept of the word
@@ -758,7 +763,7 @@ class SetsGenerator:
         if len(keylist) > 1:
             return keylist[1]
 
-    def print_lexicon(self):
+    def print_lexicon(self, use_cognates_and_ff):
         all_structures = set([pos[0] for pos in self.structures])
         all_pos = set(chain.from_iterable([pos.split() for pos in all_structures]))
         main_pos = set([p.split('::')[0] if '::' in p else p for p in all_pos])  # get rid of animate/inanimate info etc
@@ -767,13 +772,16 @@ class SetsGenerator:
         if 'with' not in main_pos:
             main_pos.add('with')
 
+        if use_cognates_and_ff:
+            self.add_cognates_and_ff_to_lexicon()
+
         unique_dict = []
         for lang in self.target_lang:  # keep separate for now because of code-switching
             for pos in main_pos:
                 lex = list(get_dict_items(pos, self.lexicon[lang.lower()]))
                 if any(isinstance(i, list) for i in lex):
                     lex = list(chain.from_iterable(lex))
-                if self.use_cognates_and_ff:
+                if use_cognates_and_ff:
                     lex = set([v for v in lex if v not in unique_dict])  # avoid duplicate words
                     unique_dict.extend(lex)
                 with codecs.open('%s/lexicon.in' % self.results_dir, 'a', "utf-8") as f:
@@ -864,5 +872,5 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False, use_adjectives=True)
-    sets.generate_sets_for_cognate_experiment(num_sentences=3000, lang='esen')
+    sets.generate_sets_for_cognate_experiment(num_sentences=7500, lang='esen', save_lexicon=True)
     #sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_lexicon=True)
