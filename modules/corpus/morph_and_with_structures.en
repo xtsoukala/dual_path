@@ -1,0 +1,18 @@
+det adj::animate noun::animate aux::singular verb::intrans ing
+AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG,AGT
+det adj::animate noun::animate with det noun::inanimate aux::singular verb::intrans ing
+AGENT=;AGENT-MOD=;ACTION=;E=EN,PROG,AGT
+det adj::animate noun::animate verb::intrans verb_suffix
+AGENT=;AGENT-MOD=;ACTION=;E=EN,SIMPLE,AGT
+det adj::animate noun::animate aux::singular verb::trans ing det noun
+AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,PROG,AGT,PAT
+det adj::animate noun::animate verb::trans verb_suffix det noun
+AGENT=;AGENT-MOD=;ACTION=;PATIENT=;E=EN,SIMPLE,AGT,PAT
+det adj::animate noun::animate aux::singular verb::double ing det noun::inanimate to det noun::animate
+AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,PROG,AGT,PAT,REC
+det adj::animate noun::animate aux::singular verb::double ing det noun::animate det noun::inanimate
+AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,PROG,AGT,-1,PAT,REC
+det adj::animate noun::animate verb::double verb_suffix det noun::inanimate to det noun::animate
+AGENT=;AGENT-MOD=;ACTION=;PATIENT=;RECIPIENT=;E=EN,SIMPLE,AGT,PAT,REC
+det adj::animate noun::animate verb::double verb_suffix det noun::animate det noun::inanimate
+AGENT=;AGENT-MOD=;ACTION=;RECIPIENT=;PATIENT=;E=EN,SIMPLE,AGT,-1,PAT,REC
