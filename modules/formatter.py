@@ -44,10 +44,12 @@ class InputFormatter:
         self.cognate_values = ['actor', 'animal', 'conductor', 'criminal', 'director', 'doctor', 'inspector',
                                'chocolate', 'melon', 'piano', 'radio', 'popular', 'social', 'simple', 'superficial',
                                'terrible', 'vulnerable']
+        self.cognate_idx = self.sentence_indeces(self.cognate_values)
         self.false_friend_values = ['bombero', 'embarazada', 'pariente', 'rapista', 'ropa',
                                      'carpeta', 'sopa', 'tuna', 'vaso', 'bizcocho', 'sano', 'bizarro', 'largo',
                                      'preocupado', 'chocar', 'contestar', 'enviar', 'pretender', 'realizar',
                                      'recordar', 'soportar']
+        self.false_friend_idx = self.sentence_indeces(self.false_friend_values)
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations

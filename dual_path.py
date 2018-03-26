@@ -8,7 +8,7 @@ from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
 from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
 
-np.random.seed(18)
+# np.random.seed(18)
 
 
 class DualPath:
@@ -270,7 +270,7 @@ class DualPath:
     def is_code_switched(self, sentence_indeces):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
-        skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_values + self.inputs.false_friend_values
+        skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_idx + self.inputs.false_friend_idx
         # skip indeces that are common in all lang
         sentence_no_period_cognate_ff = [x for x in sentence_indeces if x not in skipped_idx]
         if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff) or
@@ -312,8 +312,7 @@ class DualPath:
         return [trans]
 
     def _idx_is_cognate_or_ff(self, idx):
-        w = self.inputs.lexicon[idx]
-        if w in self.inputs.cognate_values or w in self.inputs.false_friend_values:
+        if idx in (self.inputs.cognate_idx or self.inputs.false_friend_idx):
             return True
         return False
 
@@ -464,7 +463,7 @@ class DualPath:
                           else "in" if not correct_meaning else "")
                 with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
                     f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Definiteness:%s "
-                            "Sentence:%scorrect %s\n%s\n" %
+                            "Meaning:%scorrect %s\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
                              self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")

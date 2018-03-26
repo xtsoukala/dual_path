@@ -12,7 +12,7 @@ from itertools import chain, izip_longest
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
-#random.seed(18)
+# random.seed(18)
 
 
 class SetsGenerator:
@@ -331,7 +331,7 @@ class SetsGenerator:
             self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['f']
             self.lexicon_en['en']['adj']['animate'] += self.false_friends['adj']
             self.lexicon_en['en']['adj']['inanimate'] += self.false_friends['adj']
-            # TODO: self.lexicon_en['en']['verb'] += self.false_friends['verb']
+            # TODO self.lexicon_en['en']['verb'] += self.false_friends['verb']
         # same for ES
         self.lexicon_es['es']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
         self.lexicon_es['es']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
@@ -351,34 +351,36 @@ class SetsGenerator:
             self.lexicon_es['es']['adj']['inanimate']['m'] += self.false_friends['adj']
             self.lexicon_es['es']['adj']['inanimate']['f'] += self.false_friends['adj']
             # TODO: self.lexicon_es['es']['verb'] += self.false_friends['verb']
-            #self.lexicon_es['es']['verb'] += self.false_friends['verb']
 
     def generate_sets_for_cognate_experiment(self, num_sentences, lang, save_lexicon=False, include_ff=True):
         # first select cognate-free sentences
         num_sets = 3 if include_ff else 2
-        original_sets = self.generate_sets(num_sentences/num_sets, lang, include_bilingual_lexicon=True,
-                                           save_lexicon=save_lexicon, return_full_sets=True, use_cognates_and_ff=True)
+        original_training_set, original_test_set = self.generate_sets(num_sentences, lang,
+                                                                      include_bilingual_lexicon=True,
+                                                                      save_lexicon=save_lexicon,
+                                                                      return_full_sets=True, use_cognates_and_ff=True,
+                                                                      sets_for_cognate_experiment=num_sets)
         # replace one sentence per word with a cognate
-        cognate_sets = self.generate_replacement_sets(original_sets)
+        cognate_sets = self.generate_replacement_test_sets(original_test_set)
         if include_ff:
             # replace one sentence per word with a false friend
-            false_friend_sets = self.generate_replacement_sets(original_sets, cognates=False)
-            all = [original_sets[0] + cognate_sets[0] + false_friend_sets[0],
-                   original_sets[1] + cognate_sets[1] + false_friend_sets[1]]
+            false_friend_sets = self.generate_replacement_test_sets(original_test_set, cognates=False)
+            all_sets = [original_training_set,
+                        original_test_set + cognate_sets[1] + false_friend_sets[1]]
         else:
-            all = [original_sets[0] + cognate_sets[0],
+            all_sets = [original_sets[0] + cognate_sets[0],
                    original_sets[1] + cognate_sets[1]]
-        random.shuffle(all)
+        random.shuffle(all_sets)
         sets_fname = ['test', 'train']
-        for i, set_type in enumerate(all):
+        for i, set_type in enumerate(all_sets):
                 random.shuffle(set_type)
                 for sentence, message in set_type:
                     with codecs.open('%s/%s' % (self.results_dir, "%s.in" % sets_fname[i]), 'a', "utf-8") as f:
                         f.write(u"%s## %s\n" % (sentence, message))
 
-    def generate_replacement_sets(self, orig_sets, cognates=True):
+    def generate_replacement_test_sets(self, orig_sets, cognates=True):
         """
-        :param original_sets: the sentence/message pairs that need to be modified to include cognates or false friends
+        :param orig_sets: the sentence/message pairs that need to be modified to include cognates or false friends
         :param cognates: if False, insert false friends instead (default: True)
         :return:
         """
@@ -388,96 +390,103 @@ class SetsGenerator:
         else:
             replacement_dict = self.false_friends
         replacement_sets = []
-        for set_type in original_sets:  # test, training
-            replacement_set_type = []
-            for sentence, message in set_type:  # test, training
-                # choose between noun and adjective
-                lang = re.search(r";E=(\S.),", message).group(1).lower()
-                rep_pos = random.choice(['noun', 'adj'])
-                if rep_pos == 'adj':
-                    new_adj = random.choice(replacement_dict['adj'])
-                    candidate_roles = [r for r in message.split(';') if '-MOD' in r]
-                    role_to_replace = random.choice(candidate_roles)
-                    new_role = role_to_replace.split('=')
-                    new_role[1] = new_adj.upper()  # replace concept, not thematic role
-                    # in case of false friends
-                    if not cognates and lang != 'en':
-                        new_role[1] += "_ES"
-                    message = message.replace(role_to_replace, '='.join(new_role))
-                    old_role = role_to_replace.split('=')[1]  # take arguments, not role
-                    if lang == 'en':
-                        sentence = sentence.replace(" %s " % old_role.lower(), " %s " % new_adj)
-                    else:  # need to look up concept -> word before replacing
-                        if old_role in self.concept_to_es_words:
-                            word_to_replace = self.concept_to_es_words[old_role]
-                        else:
-                            word_to_replace = old_role.lower()
-                        for word in word_to_replace:
-                            sentence = sentence.replace(" %s " % word, " %s " % new_adj)
-                else:  # noun
-                    ignore = ['-MOD=', 'E=', 'ACTION=']
-                    candidate_roles = [r for r in message.split(';') if not any(x in r for x in ignore)]
-                    role_to_replace = random.choice(candidate_roles).split('=')[1].split(',')
-                    concept_idx = int([i for i, j in enumerate(role_to_replace)
-                                       if j not in ['F', 'M', 'DEF', 'INDEF']][0])
-                    word_to_replace = ''
-                    if lang == 'en':
-                        word_to_replace = role_to_replace[concept_idx].lower()
+        #for set_type in original_sets:  # test, training
+            #replacement_set_type = []
+        for sentence, message in original_sets:  # test, training
+            # choose between noun and adjective
+            lang = re.search(r";E=(\S.),", message).group(1).lower()
+            rep_pos = random.choice(['noun', 'adj'])
+            if rep_pos == 'adj':
+                new_adj = random.choice(replacement_dict['adj'])
+                candidate_roles = [r for r in message.split(';') if '-MOD' in r]
+                role_to_replace = random.choice(candidate_roles)
+                new_role = role_to_replace.split('=')
+                new_role[1] = new_adj.upper()  # replace concept, not thematic role
+                # in case of false friends
+                if not cognates and lang != 'en':
+                    new_role[1] += "_ES"
+                message = message.replace(role_to_replace, '='.join(new_role))
+                old_role = role_to_replace.split('=')[1]  # take arguments, not role
+                if lang == 'en':
+                    sentence = sentence.replace(" %s " % old_role.lower(), " %s " % new_adj)
+                else:  # need to look up concept -> word before replacing
+                    if old_role in self.concept_to_es_words:
+                        word_to_replace = self.concept_to_es_words[old_role]
                     else:
-                        if role_to_replace[concept_idx] in self.concept_to_es_words:
-                            list_word_to_replace = self.concept_to_es_words[role_to_replace[concept_idx]]
-                        else:
-                            list_word_to_replace = [role_to_replace[concept_idx].lower()]
-                        # remove "_ES" FIXME
-                        list_word_to_replace = [i.replace("_ES", "") for i in list_word_to_replace]
-                        for w in list_word_to_replace:
-                            if " %s " % w in sentence:
-                                word_to_replace = w
-                                break
-                        if not word_to_replace:
-                            print list_word_to_replace, '@@@', sentence, '@@@', role_to_replace, concept_idx
-                            sys.exit()
-
-                    if 'M' in role_to_replace or 'F' in role_to_replace:  # it means that it has M, F info and that it's animate
-                        gender = [i.lower() for i in role_to_replace if i == 'F' or i == 'M'][0]
-                        new_word = random.choice(replacement_dict['noun']['animate'][gender])
-                    else:
-                        # find gender of word
-                        if lang == 'es':
-                            gender = 'm'
-                            if word_to_replace in self.lexicon[lang]['noun']['inanimate']['f']:
-                                gender = 'f'
-                        else:
-                            gender = random.choice(['m', 'f'])
-                        new_word = random.choice(replacement_dict['noun']['inanimate'][gender])
-                    new_role = deepcopy(role_to_replace)
-                    new_role[concept_idx] = new_word.upper()
-                    if not cognates and lang != 'en':  # Spansish FF
-                        new_role[concept_idx] += "_ES"
-                    message = message.replace(','.join(role_to_replace) + ',', ','.join(new_role) + ',')
-                    message = message.replace(','.join(role_to_replace) + ';', ','.join(new_role) + ';')
-                    if sentence.split().count(word_to_replace) > 1:   # if more than once change all roles
-                        message = message.replace(role_to_replace[concept_idx] + ',', new_word.upper() + ',')
-                    sentence = sentence.replace(" %s " % word_to_replace, " %s " % new_word)
-                if cognates:
-                    message += ',COG'
+                        word_to_replace = old_role.lower()
+                    for word in word_to_replace:
+                        sentence = sentence.replace(" %s " % word, " %s " % new_adj)
+            else:  # noun
+                ignore = ['-MOD=', 'E=', 'ACTION=']
+                candidate_roles = [r for r in message.split(';') if not any(x in r for x in ignore)]
+                role_to_replace = random.choice(candidate_roles).split('=')[1].split(',')
+                concept_idx = int([i for i, j in enumerate(role_to_replace)
+                                   if j not in ['F', 'M', 'DEF', 'INDEF']][0])
+                word_to_replace = ''
+                if lang == 'en':
+                    word_to_replace = role_to_replace[concept_idx].lower()
                 else:
-                    message += ',FF'
-                replacement_set_type.append((sentence, message))
-            replacement_sets.append(replacement_set_type)
+                    if role_to_replace[concept_idx] in self.concept_to_es_words:
+                        list_word_to_replace = self.concept_to_es_words[role_to_replace[concept_idx]]
+                    else:
+                        list_word_to_replace = [role_to_replace[concept_idx].lower()]
+                    # remove "_ES" FIXME
+                    list_word_to_replace = [i.replace("_ES", "") for i in list_word_to_replace]
+                    for w in list_word_to_replace:
+                        if " %s " % w in sentence:
+                            word_to_replace = w
+                            break
+                    if not word_to_replace:
+                        print list_word_to_replace, '@@@', sentence, '@@@', role_to_replace, concept_idx
+                        sys.exit()
+
+                if 'M' in role_to_replace or 'F' in role_to_replace:  # it means that it's animate
+                    gender = [i.lower() for i in role_to_replace if i == 'F' or i == 'M'][0]
+                    new_word = random.choice(replacement_dict['noun']['animate'][gender])
+                else:
+                    # find gender of word
+                    if lang == 'es':
+                        gender = 'm'
+                        if word_to_replace in self.lexicon[lang]['noun']['inanimate']['f']:
+                            gender = 'f'
+                    else:
+                        gender = random.choice(['m', 'f'])
+                    new_word = random.choice(replacement_dict['noun']['inanimate'][gender])
+                new_role = deepcopy(role_to_replace)
+                new_role[concept_idx] = new_word.upper()
+                if not cognates and lang != 'en':  # Spanish FF
+                    new_role[concept_idx] += "_ES"
+                message = message.replace(','.join(role_to_replace) + ',', ','.join(new_role) + ',')
+                message = message.replace(','.join(role_to_replace) + ';', ','.join(new_role) + ';')
+                if sentence.split().count(word_to_replace) > 1:   # if more than once change all roles
+                    message = message.replace(role_to_replace[concept_idx] + ',', new_word.upper() + ',')
+                sentence = sentence.replace(" %s " % word_to_replace, " %s " % new_word)
+            if cognates:
+                message += ',COG'
+            else:
+                message += ',FF'
+            replacement_sets.append((sentence, message))
+        #replacement_sets.append(replacement_set_type)
         return replacement_sets
 
     def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, use_cognates_and_ff,
-                      debug=False, save_lexicon=False, return_full_sets=False):
+                      debug=False, save_lexicon=False, return_full_sets=False, sets_for_cognate_experiment=None):
         """
-        :param num_sentences: number of train AND test sentences to be generated
+        :param num_sentences: number of training AND test sentences to be generated
         :param lang: language code
         :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
+        :param use_cognates_and_ff: whether to include cognates and false friends in the sentences
         :param debug: whether to print results on screen
         :param save_lexicon: whether to save lexicon/concepts etc or just training/test sets
         :param return_full_sets: whether to return sets of message/sentence pairs
+        :param sets_for_cognate_experiment: in case we run a cognate experiment we want to know whether the test set
+                will be divided into 2 or 3 parts. Default: None (no cognate experiment)
         """
-        num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
+        if sets_for_cognate_experiment:
+            num_test, a = calculate_number_of_sentences_per_set(num_sentences/sets_for_cognate_experiment)
+            a, num_train = calculate_number_of_sentences_per_set(num_sentences)  # training set isn't controlled
+        else:
+            num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
         self.set_structures_and_lexicon(lang)
 
         sentence_structures_train = self.generate_sentence_structures(num_train)
@@ -680,7 +689,7 @@ class SetsGenerator:
                         elif not np[sen_idx] and msg_idx > 0:
                             sentence.append(random_word)
                         if (self.use_adjectives and ((lang == 'es' and 'adj' in pos and 'with' not in pos_full) or
-                                (lang == 'en' and 'noun' in pos and 'with' not in pos_full and msg_idx < 1))):
+                           (lang == 'en' and 'noun' in pos and 'with' not in pos_full and msg_idx < 1))):
                             msg_idx += 2
                         elif not self.use_adjectives or 'verb' in pos or (msg_idx > 1 and lang == 'es') or \
                                 (lang == 'en' and 'noun' in pos) or (lang == 'es' and 'adj' in pos):
@@ -709,20 +718,12 @@ class SetsGenerator:
                     sentence.append(syn)
 
             sentence = u"%s ." % " ".join(sentence)
-            #print message
-            #indiv = [i.split(',') for i in message]
-            #flat_list = [item for sublist in indiv for item in sublist if item.upper() not in ['M', 'F', 'DEF', 'INDEF']]
-            #print flat_list
-            #if len(flat_list) != len(set(flat_list)):
-            #    print message
             unique_roles = [w for w in sentence.split() if w not in ['a', 'the', 'un', 'una', 'la', 'el']]
-            #if len(unique_roles) != len(set(unique_roles)):
-            #    print sentence
             message = ";".join(message).upper()
             message = re.sub(r",,", ",", message)
             message = re.sub(r"=,", "=", message)
-            if ((message in (exclude_test_sentences or generated_sentences)) or
-                            len(unique_roles) != len(set(unique_roles))):
+            if message in (exclude_test_sentences or generated_sentences) or \
+               len(unique_roles) != len(set(unique_roles)):
                 sentence_structures.append((pos_full, msg))  # find unique sentence, don't add it to the training set
             else:
                 generated_sentences.append(message)
@@ -862,7 +863,7 @@ def flatten_list(nested_list):
 
 
 def calculate_number_of_sentences_per_set(num_sentences):
-    num_test = int(20 * num_sentences / 100)  # Test set = 20% of whole set, train 80%
+    num_test = int(20 * num_sentences / 100)  # Test set = 20% of whole set, training 80%
     num_train = num_sentences - num_test
     return num_test, num_train
 
