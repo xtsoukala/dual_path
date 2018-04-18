@@ -55,7 +55,7 @@ class Plotter:
                      linestyle='--', color='deepskyblue', label="Code-switches (training)")
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches')
-            plt.ylim([0, 80])
+            plt.ylim([0, 60])
             plt.xlim(min(epochs), max(epochs))
             plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
             if summary_sim:
@@ -71,12 +71,15 @@ class Plotter:
             # plot each code-switch type individually
 
             # first get all keywords (all CS types)
-            all_cs_types = set([re.sub("ES-|EN-|-COG|-FF", "", x)
+            all_cs_types = set([re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
                                 for x in results['type_code_switches']['test'].keys()
                                 if '-COG' not in x and '-FF' not in x] +
-                               [re.sub("ES-|EN-|-COG|-FF", "", x)
+                               [re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
                                 for x in results['type_code_switches']['training'].keys()
                                 if '-COG' not in x and '-FF' not in x])
+
+            print all_cs_types
+            print '----------'
 
             for dataset_type in ['training', 'test']:
                 type_test_EN = []
@@ -137,20 +140,19 @@ class Plotter:
 
         # NOW THE SAME FOR THE COG EXPERIMENT
         # first get all keywords (all CS types)
-        all_cs_types = set([re.sub("ES-|EN-|-COG|-FF", "", x)
+        all_cs_types = set([re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
                             for x in results['type_code_switches']['test'].keys()] +
-                           [re.sub("ES-|EN-|-COG|-FF", "", x)
+                           [re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
                             for x in results['type_code_switches']['training'].keys()])
-
-        for dataset_type in ['training', 'test']:
-            type_test = []
+        print "CS TYPES 2 ------"
+        for dataset_type in ['test']: #['training', 'test']:
+            type_test_ENES = []
             type_test_COG = []
             type_test_FF = []
             for cs_type in all_cs_types:
-                es_type = "ES-%s" % cs_type
+                """es_type = "ES-%s" % cs_type
                 en_type = "EN-%s" % cs_type
                 v = []
-                all_switches = []
                 if es_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
                     v.append(results['type_code_switches'][dataset_type][es_type][2:])
                 if en_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
@@ -162,7 +164,7 @@ class Plotter:
                     type_test.append((np.mean(values_percentage_testset),
                                       np.std(values_percentage_testset)))
                 else:
-                    type_test.append((0, 0))
+                    type_test.append((0, 0))"""
 
                 # same for COG
                 cog_type = "%s-COG" % cs_type
@@ -184,26 +186,36 @@ class Plotter:
                                          np.std(values_percentage_testset)))
                 else:
                     type_test_FF.append((0, 0))
+                # same for non cognates-false friends
+                ff_type = "%s-ENES" % cs_type
+                if ff_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    # take the percentage of sum in test set
+                    values_percentage_testset = [percentage(x, num_test)
+                                                 for x in results['type_code_switches'][dataset_type][ff_type][2:]]
+                    type_test_ENES.append((np.mean(values_percentage_testset),
+                                           np.std(values_percentage_testset)))
+                else:
+                    type_test_ENES.append((0, 0))
 
         # make sure there is still something to be plotted after the manipulations
-        if type_test or type_test_FF or type_test_COG:
+        if type_test_ENES or type_test_FF or type_test_COG:
             ind = np.arange(len(all_cs_types))  # the x locations for the groups
             width = 0.3  # the width of the bars
 
             fig, ax = plt.subplots()
-            rects = ax.bar(ind, [x[0] for x in type_test], width, color='r',
-                           yerr=[x[1] for x in type_test])
-            rects_FF = ax.bar(ind + width, [x[0] for x in type_test_FF], width, color='y',
-                              yerr=[x[1] for x in type_test_FF])
+            rects = ax.bar(ind, [x[0] for x in type_test_ENES], width, color='yellowgreen',
+                           yerr=[x[1] for x in type_test_ENES])
             rects_COG = ax.bar(ind + width * 2, [x[0] for x in type_test_COG], width, color='g',
                               yerr=[x[1] for x in type_test_COG])
+            rects_FF = ax.bar(ind + width, [x[0] for x in type_test_FF], width, color='greenyellow',
+                              yerr=[x[1] for x in type_test_FF])
 
             # add some text for labels, title and axes ticks
             label = 'Types of code-switches (%% of %s set)' % dataset_type
             ax.set_ylabel(label)
             # ax.set_title('Early bilingual group')
             ax.set_xticks(ind + (width * 2) / 2)
-            ax.legend((rects[0], rects_FF[0], rects_COG[0]), ('ESEN', 'FF', 'COG'))
+            ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
             ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
             plt.tight_layout()  # make room for labels
 
@@ -214,7 +226,7 @@ class Plotter:
             with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
                 f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
                         "\nType code-switch COG (test set): %s" %
-                        (type_test, type_test_FF, type_test_COG))
+                        (type_test_ENES, type_test_FF, type_test_COG))
 
         else:
             fname = '%s/type_code_switches_COG_FF_%s.pdf' % (self.results_dir, dataset_type)
@@ -263,6 +275,22 @@ class Plotter:
         ax.bar(layers, means, color='r', yerr=std)
         ax.set_xticklabels(labels)
         plt.savefig('%s/weights/summary_weights.pdf' % self.results_dir)
+        plt.close()
+
+    def plot_connection_weights(self, incoming_weights, incoming_labels, layer_labels, layer_name):
+        """
+        :return: plots incoming connection weights of a layer
+        """
+        fig, ax1 = plt.subplots(1, 1)
+        data = np.random.randint(0, 100, size=(10, 10))
+        ax1.imshow(incoming_weights, cmap='jet', interpolation='nearest')
+        ax1.set_xticklabels(layer_labels)
+        ax1.set_yticklabels(incoming_labels)
+        #plt.imshow(incoming_weights)
+        #plt.colorbar(orientation='vertical', interpolation='nearest')
+        ax1.grid(True)
+        fname = '%s/%s_connection_weights.pdf' % (self.results_dir, layer_name)
+        plt.savefig(fname)
         plt.close()
 
 

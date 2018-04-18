@@ -47,8 +47,7 @@ class InputFormatter:
         self.cognate_idx = self.sentence_indeces(self.cognate_values)
         self.false_friend_values = ['bombero', 'embarazada', 'pariente', 'rapista', 'ropa',
                                      'carpeta', 'sopa', 'tuna', 'vaso', 'bizcocho', 'sano', 'bizarro', 'largo',
-                                     'preocupado', 'chocar', 'contestar', 'enviar', 'pretender', 'realizar',
-                                     'recordar', 'soportar']
+                                     'preocupado']
         self.false_friend_idx = self.sentence_indeces(self.false_friend_values)
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
@@ -65,6 +64,9 @@ class InputFormatter:
         self.determiners = [self._get_lexicon_index('a'), self._get_lexicon_index('the'),
                             self._get_lexicon_index('un'), self._get_lexicon_index('una'),
                             self._get_lexicon_index('la'), self._get_lexicon_index('el')]
+        self.tense_markers = [self.lexicon.index('-ed'), self.lexicon.index('-s'), self.lexicon.index('está'),
+                              self.lexicon.index('estaba'), self.lexicon.index('-a'), self.lexicon.index('-ó'),
+                              self.lexicon.index('was'), self.lexicon.index('is')]
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -86,7 +88,9 @@ class InputFormatter:
     def _get_lexicon_index(self, word):
         if word in self.lexicon:
             return self.lexicon.index(word)
-        return []
+        print "%s is not found in the lexicon" % word
+        # import sys; sys.exit("%s is not found in the lexicon" % word)  # it's not a crucial step
+        return None
 
     def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
@@ -136,7 +140,7 @@ class InputFormatter:
         all_pos.sort()
         return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
 
-    def _read_lexicon_and_pos(self, fname):
+    def _read_lexicon_and_pos(self, fname, save_raw_lexicon=True):
         """
         :param fname: the name of the file that contains a list of categories (eg. noun, verb) and the lexicon
         :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
@@ -162,6 +166,10 @@ class InputFormatter:
             pos[prev_pos] += range(pos_start, pos_end)
         else:
             pos[prev_pos] = range(pos_start, pos_end)  # this adds the last syntactic category
+        if save_raw_lexicon:
+            with open(os.path.join(self.input_dir, "raw_%s" % fname), 'a') as f:
+                for w in lexicon:
+                    f.write("%s\n" % w)
         return pos, lexicon
 
     def _read_file_to_list(self, fname):
@@ -198,7 +206,8 @@ class InputFormatter:
             if word_idx in idx:
                 return pos
         import sys  # in case the word index is not available
-        sys.exit("No POS found for word %s (%s)" % (word_idx, self.lexicon[word_idx]))
+        sys.exit("No POS found for word %s (%s)" % (word_idx, self.lexicon[word_idx]
+                                                              if word_idx in self.lexicon else 'list'))
 
     def sentence_from_indeces(self, sentence_idx):
         """

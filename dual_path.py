@@ -8,8 +8,6 @@ from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
 from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
 
-# np.random.seed(18)
-
 
 class DualPath:
     """
@@ -150,7 +148,11 @@ class DualPath:
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
-                    self.srn.reset_target_lang()
+                    if False:
+                        lang_act = [0.7, 0.3] if self.inputs.languages.index(lang) == 0 else [0.3, 0.7]
+                        self.srn.reset_target_lang(target_lang_act=lang_act)  # activate the target language slightly more
+                    else:
+                        self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
@@ -285,7 +287,6 @@ class DualPath:
                 - inter-sentential (full switch at sentence boundaries)
                 - extra-sentential (insertion of tag)
                 - noun borrowing? (if no determiners were switched)
-
             Note: Returns FALSE if the message conveyed was not correct.
         """
         # First "translate" message into the target language and compare with target sentence
@@ -396,7 +397,7 @@ class DualPath:
 
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
-            has_correct_pos, has_wrong_det, correct_meaning, cs_type = False, False, False, None  # initialize
+            has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
             is_grammatical, flexible_order = self.get_sentence_grammaticality_and_flex_order(produced_sentence_idx,
                                                                                              target_sentence_idx)
             code_switched = self.is_code_switched(produced_sentence_idx)
@@ -422,15 +423,15 @@ class DualPath:
                         # check for cognates vs FFs vs regular (no lang)
                         # COG and FF in message
                         if ',COG' in message:
-                            cs_type_with_lang = "%s-COG" % cs_type
+                            cs_type_with_cognate_status = "%s-COG" % cs_type
                         elif ',FF' in message:
-                            cs_type_with_lang = "%s-FF" % cs_type
+                            cs_type_with_cognate_status = "%s-FF" % cs_type
                         else:  # no cognates or false friends
-                            cs_type_with_lang = "%s" % cs_type
-                        if cs_type_with_lang in type_all_code_switches:
-                            type_all_code_switches[cs_type_with_lang] += 1
+                            cs_type_with_cognate_status = "%s-ENES" % cs_type
+                        if cs_type_with_cognate_status in type_all_code_switches:
+                            type_all_code_switches[cs_type_with_cognate_status] += 1
                         else:
-                            type_all_code_switches.update({cs_type_with_lang: 1})
+                            type_all_code_switches.update({cs_type_with_cognate_status: 1})
 
                 else:
                     correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx,
@@ -439,8 +440,11 @@ class DualPath:
                 if correct_meaning:
                     num_correct_meaning += 1
                 else:
-                    has_wrong_det = self.test_for_wrong_determiner(produced_sentence_idx, target_sentence_idx)
-                    if has_wrong_det:
+                    has_wrong_det = self.test_without_feature(produced_sentence_idx, target_sentence_idx,
+                                                              feature="determiners")
+                    has_wrong_tense = self.test_without_feature(produced_sentence_idx, target_sentence_idx,
+                                                                feature="tense")
+                    if has_wrong_det or has_wrong_tense:
                         num_correct_meaning += 1  # if the only mistake was the determiner, count it as correct
 
                 if check_pron:  # only check the grammatical sentences
@@ -459,13 +463,14 @@ class DualPath:
                                      self.inputs.sentence_from_indeces(produced_sentence_idx),
                                      self.inputs.sentence_from_indeces(target_sentence_idx), message))
             if epoch > 0:
-                suffix = ("flex-" if flexible_order or has_wrong_det
+                suffix = ("flex-" if flexible_order or has_wrong_det or has_wrong_tense
                           else "in" if not correct_meaning else "")
                 with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Definiteness:%s "
+                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s "
                             "Meaning:%scorrect %s\n%s\n" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
-                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos, not has_wrong_det,
+                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
+                             not has_wrong_tense, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""), message))
 
@@ -502,9 +507,13 @@ class DualPath:
             flexible_order = True
         return flexible_order
 
-    def test_for_wrong_determiner(self, out_sentence_idx, trg_sentence_idx):
-        out = [x for x in out_sentence_idx if x not in self.inputs.determiners]
-        trg = [x for x in trg_sentence_idx if x not in self.inputs.determiners]
+    def test_without_feature(self, out_sentence_idx, trg_sentence_idx, feature):
+        if feature == "tense":
+            feature_markers = self.inputs.tense_markers
+        elif feature == "determiners":
+            feature_markers = self.inputs.determiners
+        out = [x for x in out_sentence_idx if x not in feature_markers]
+        trg = [x for x in trg_sentence_idx if x not in feature_markers]
         return self.test_for_flexible_order(out, trg, allow_identical=True)
 
     def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx):
@@ -522,6 +531,8 @@ class DualPath:
         out_pos = self.inputs.sentence_indeces_pos(out_sentence_idx)
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
+            return is_grammatical, not has_flex_order
+        if out_pos in self.inputs.allowed_structures: # if sentence in list of existing POS
             return is_grammatical, not has_flex_order
         if len(out_pos) > 2 and out_pos[-1] == 'TO':
             # make sure that output sentence is grammatical and that "to" isn't the last word in the sentence
@@ -592,7 +603,7 @@ if __name__ == "__main__":
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any combination [enes, esen] for bilingual)', default='esen')
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.2)
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.15)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.02)
@@ -642,7 +653,7 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
-    parser.add_argument('--gender', dest='gender', action='store_true', help='Exclude semantic gender for nouns')
+    parser.add_argument('--gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
     parser.set_defaults(gender=False)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
                         help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
@@ -672,9 +683,9 @@ if __name__ == "__main__":
     parser.add_argument('--emb', dest='word_embeddings', action='store_true',
                         help='Represent semantics using word embeddings instead of one-hot vectors.')
     parser.set_defaults(word_embeddings=False)
-    parser.add_argument('--cognates', dest='use_cognates', action='store_true',
+    parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment')
-    parser.set_defaults(use_cognates=False)
+    parser.set_defaults(cognate_experiment=False)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -704,12 +715,12 @@ if __name__ == "__main__":
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
                              ignore_past=args.ignore_past, use_adjectives=args.use_adjectives)
-        if args.use_cognates:  # if cognate_experiment
+        if args.cognate_experiment:
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
-                                                      save_lexicon=True)
+                                                      save_input_files=True)
         else:
-            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, use_cognates_and_ff=True,
-                               include_bilingual_lexicon=False if args.word_embeddings else True, save_lexicon=True)
+            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
+                               include_bilingual_lexicon=False if args.word_embeddings else True, save_input_files=True)
 
     if not args.title:
         args.title = generate_title_from_lang(args.lang)
@@ -741,6 +752,7 @@ if __name__ == "__main__":
     simulations_with_pron_err = 0
     failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
+        np.random.seed(18)
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
@@ -750,17 +762,18 @@ if __name__ == "__main__":
     else:  # start batch training to take the average of results
         processes = []
         for sim in range(args.sim):
+            np.random.seed(sim)  # set number of simulation as the seed
             rdir = "%s/%s" % (results_dir, sim)
             os.makedirs(rdir)
             inputs.results_dir = rdir
             if sets:  # generate new test/training sets
                 sets.results_dir = rdir
-                if args.use_cognates:  # cognate_experiment
+                sets.seed = sim  # set new seed for language generator
+                if args.cognate_experiment:
                     sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
-                                                              save_lexicon=False)
+                                                              save_input_files=False)
                 else:
-                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True,
-                                       use_cognates_and_ff=True)
+                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
             elif original_input_path:
                 # use existing test/training set (copy them first)
                 copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)
@@ -774,6 +787,12 @@ if __name__ == "__main__":
             process = Process(target=dualp.train_network, args=(args.shuffle,))
             process.start()
             processes.append(process)
+
+            with open("%s/simulation.info" % results_dir, 'a') as f:
+                f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
+                        (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
+                         inputs.num_train))
+
         for p in processes:
             p.join()
 
