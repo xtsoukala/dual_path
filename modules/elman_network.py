@@ -133,6 +133,14 @@ class SimpleRecurrentNetwork:
         else:
             target_lang.activation = [0.5] * target_lang.size
 
+    def boost_non_target_lang(self, target_lang_idx):
+        target_lang = self.get_layer("target_lang")
+        target_lang.activation[target_lang_idx] -= 0.1
+        if target_lang_idx == 0:
+            target_lang.activation[1] += 0.1
+        else:
+            target_lang.activation[0] += 0.1
+
     def reset_context_delta_and_crole(self):
         recurrent_layer = self.get_layer("hidden")
         recurrent_layer.context_activation = np.array([self.context_init] * recurrent_layer.size)

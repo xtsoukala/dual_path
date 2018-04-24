@@ -9,6 +9,9 @@ from modules.plotter import Plotter
 from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
 
 
+allow_cognate_boost = False  # temp, will be moved to params
+
+
 class DualPath:
     """
     Dual-path is based on the SRN architecture and has the following layers (plus hidden & context):
@@ -149,7 +152,7 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
                     if False:
-                        lang_act = [0.7, 0.3] if self.inputs.languages.index(lang) == 0 else [0.3, 0.7]
+                        lang_act = [1, 1] if self.inputs.languages.index(lang) == 0 else [1, 1]
                         self.srn.reset_target_lang(target_lang_act=lang_act)  # activate the target language slightly more
                     else:
                         self.srn.reset_target_lang()
@@ -157,6 +160,10 @@ class DualPath:
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
                     break
+            # boost after cognate
+            if self.exclude_lang and prod_idx in self.inputs.cognate_idx and allow_cognate_boost:
+                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang))
+
         return produced_sent_ids, target_sentence_ids, message, lang
 
     def train_network(self, shuffle_set, plot_results=True, evaluate=True):
