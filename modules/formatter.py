@@ -265,6 +265,8 @@ class InputFormatter:
                     if event in self.languages:
                         target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
+                    elif event == 'ENES':
+                        target_lang_activations = [0.5, 0.5]
                     elif event not in ['FF', 'COG']:  # ignore False Friends and Cognates:  # activate
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum

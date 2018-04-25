@@ -206,7 +206,8 @@ class Plotter:
                 ax.set_ylabel(label)
                 # ax.set_title('Early bilingual group')
                 ax.set_xticks(ind + (width * 2) / 2)
-                ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
+                #ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
+                ax.legend((rects[0], rects_COG[0]), ('ESEN', 'COG'))
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
 
