@@ -151,9 +151,9 @@ class DualPath:
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
-                    if False:  # TODO: play with activations
+                    if False:  # TODO: play with activations, e.g. activate the target language slightly more
                         lang_act = [1, 1] if self.inputs.languages.index(lang) == 0 else [1, 1]
-                        self.srn.reset_target_lang(target_lang_act=lang_act)  # activate the target language slightly more
+                        self.srn.reset_target_lang(target_lang_act=lang_act)
                     else:
                         self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()

@@ -71,10 +71,10 @@ class Plotter:
             # plot each code-switch type individually
 
             # first get all keywords (all CS types)
-            all_cs_types = set([re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
+            all_cs_types = set([re.sub("ES-|EN-|-COG|-FF|-ENES|None-", "", x)
                                 for x in results['type_code_switches']['test'].keys()
                                 if '-COG' not in x and '-FF' not in x] +
-                               [re.sub("ES-|EN-|-COG|-FF|-ENES", "", x)
+                               [re.sub("ES-|EN-|-COG|-FF|-ENES|None-", "", x)
                                 for x in results['type_code_switches']['training'].keys()
                                 if '-COG' not in x and '-FF' not in x])
 
@@ -190,22 +190,23 @@ class Plotter:
 
             # make sure there is still something to be plotted after the manipulations
             if type_test_ENES or type_test_FF or type_test_COG:
-                ind = np.arange(len(all_cs_types))  # the x locations for the groups
+                ind = np.arange(len(all_cs_types))  # the x locations for the groups  # TODO: save to .info
                 width = 0.3  # the width of the bars
 
                 fig, ax = plt.subplots()
                 rects = ax.bar(ind, [x[0] for x in type_test_ENES], width, color='yellowgreen',
                                yerr=[x[1] for x in type_test_ENES])
-                rects_COG = ax.bar(ind + width * 2, [x[0] for x in type_test_COG], width, color='g',
+                rects_COG = ax.bar(ind + width, [x[0] for x in type_test_COG], width, color='g',
                                   yerr=[x[1] for x in type_test_COG])
-                rects_FF = ax.bar(ind + width, [x[0] for x in type_test_FF], width, color='greenyellow',
+                rects_FF = ax.bar(ind + width * 2, [x[0] for x in type_test_FF], width, color='greenyellow',
                                   yerr=[x[1] for x in type_test_FF])
 
                 # add some text for labels, title and axes ticks
                 label = 'Types of code-switches (%% of %s set)' % dataset_type
                 ax.set_ylabel(label)
                 # ax.set_title('Early bilingual group')
-                ax.set_xticks(ind + (width * 2) / 2)
+                #ax.set_xticks(ind + (width * 2) / 2)
+                ax.set_xticks(ind + (width) / 2)
                 #ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
                 ax.legend((rects[0], rects_COG[0]), ('ESEN', 'COG'))
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
