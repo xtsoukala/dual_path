@@ -128,8 +128,8 @@ class Plotter:
                                                                      dataset_type)
                 # also save type_test_ES and type_test_EN
                 with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s" %
-                            (type_test_ES, type_test_EN))
+                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                            "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
 
             else:
                 fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
@@ -191,7 +191,7 @@ class Plotter:
 
             # make sure there is still something to be plotted after the manipulations
             if type_test_ENES or type_test_FF or type_test_COG:
-                ind = np.arange(len(all_cs_types))  # the x locations for the groups  # TODO: save to .info
+                ind = np.arange(len(all_cs_types))  # the x locations for the groups
                 width = 0.3  # the width of the bars
 
                 fig, ax = plt.subplots()

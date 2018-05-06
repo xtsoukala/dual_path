@@ -10,6 +10,8 @@ import json
 from copy import deepcopy
 from itertools import chain, izip_longest
 
+# TODO: exclude_cognates=True set to False
+
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 
