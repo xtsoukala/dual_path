@@ -598,7 +598,7 @@ class SetsGenerator:
         return sentence_structures
 
     def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[],
-                           exclude_cognates=False):
+                           exclude_cognates=True):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename where results will be stored

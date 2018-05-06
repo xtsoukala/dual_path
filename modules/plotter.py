@@ -116,7 +116,8 @@ class Plotter:
                 # add some text for labels, title and axes ticks
                 label = 'Types of code-switches (%% of %s set)' % dataset_type
                 ax.set_ylabel(label)
-                #ax.set_title('Early bilingual group')
+                if title:
+                    ax.set_title(title)
                 ax.set_xticks(ind + width / 2)
                 ax.legend((rects_EN[0], rects_ES[0]), ('EN', 'ES'))
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
