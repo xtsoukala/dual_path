@@ -19,8 +19,15 @@ class Plotter:
         # now add test sentences
         plt.plot(epochs, [percentage(x, num_test) for x in results['correct_sentences']['test']],
                  color='darkslateblue', label='test')
+        test_mean = np.mean(results['correct_sentences']['test'])
+        test_std = np.std(results['correct_sentences']['test'])
+        plt.fill_between(epochs, test_mean + test_std, test_mean - test_std, facecolor='darkslateblue', alpha=0.5)
+
         plt.plot(epochs, [percentage(x, num_test) for x in results['correct_pos']['test']],
                  color='deepskyblue', label='test POS')
+        test_mean = np.mean(results['correct_pos']['test'])
+        test_std = np.std(results['correct_pos']['test'])
+        plt.fill_between(epochs, test_mean + test_std, test_mean - test_std, facecolor='deepskyblue', alpha=0.5)
         plt.ylim([0, 100])
         plt.xlim(min(epochs), max(epochs))
         plt.xlabel('Epochs')
