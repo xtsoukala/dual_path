@@ -339,3 +339,39 @@ def take_average_of_valid_results(valid_results):
             else:
                 results_average[key][t] = np.true_divide(val[t], len(valid_results))
     return results_average
+
+
+def take_average_of_valid_results2(valid_results):
+    """
+    :param valid_results: list of dicts (simulations)
+    :return:
+    """
+    print valid_results
+    results_average = {}
+    for key in valid_results[0].keys():
+        results_average[key] = {'training': [], 'test': []}
+        for simulation in valid_results:
+            for t in ['training', 'test']:
+                if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
+                    if type(simulation[key][t]) is dict:  # case: type_code_switches
+                        for cs_type, val in simulation[key][t].items():
+                            if cs_type in results_average[key][t]:
+                                results_average[key][t][cs_type].append(val)
+                            else:
+                                results_average[key][t][cs_type] = [val]
+                    else:
+                        results_average[key][t].append(simulation[key][t])
+                elif t in simulation[key]:
+                    results_average[key][t] = [simulation[key][t]]
+    # now average over all simulations
+    print results_average
+    print '@@@@'
+    for key, val in results_average.items():
+        for t in ['training', 'test']:
+            if type(results_average[key][t]) is dict:  # case: type_code_switches
+                results_average[key][t] = {k: np.true_divide(v, len(valid_results))
+                                           for k, v in results_average[key][t].iteritems()}
+            else:
+                results_average[key][t] = np.true_divide(val[t], len(valid_results))
+    return results_average
+

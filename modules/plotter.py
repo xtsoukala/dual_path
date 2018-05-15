@@ -51,6 +51,8 @@ class Plotter:
             plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
             plt.close()
 
+        ################### CODE-SWITCHES ###################
+
         if sum(results['code_switches']['test']) > 0:
             plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
                      label="All CS")
@@ -61,8 +63,9 @@ class Plotter:
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
                      linestyle='--', color='deepskyblue', label="Code-switches (training)")
             plt.xlabel('Epochs')
-            plt.ylabel('Percentage of code-switches')
+            plt.ylabel('Percentage of code-switches among all sentences')
             plt.ylim([0, 60])
+
             plt.xlim(min(epochs), max(epochs))
             plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
             if summary_sim:
@@ -72,6 +75,28 @@ class Plotter:
                                                                            in results['correct_code_switches']['test']])
             else:
                 fname = '%s/code_switches_percentage.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
+            # same as above but plot percentage among correctly produced sentences only
+            plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
+                              for i, value in enumerate(results['correct_code_switches']['test'])],
+                     color='darkslateblue', label="Test set")
+            plt.plot(epochs, [percentage(value, results['correct_sentences']['training'][i])
+                              for i, value in enumerate(results['correct_code_switches']['training'])],
+                     color='deepskyblue', label="Training set")
+            plt.xlabel('Epochs')
+            plt.ylabel('% code-switches among correctly produced sentences')
+            plt.ylim([0, 60])
+            plt.xlim(min(epochs), max(epochs))
+            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+            if summary_sim:
+                fname = '%s/summary_%s_code_switches_correct_percentage.pdf' % (self.results_dir, summary_sim)
+                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                    f.write("\nCode-switched percentage (test set): %s" % [percentage(x, num_test) for x
+                                                                           in results['correct_code_switches']['test']])
+            else:
+                fname = '%s/code_switches_correct_percentage.pdf' % self.results_dir
             plt.savefig(fname)
             plt.close()
 
@@ -88,26 +113,41 @@ class Plotter:
             for dataset_type in ['training', 'test']:
                 type_test_EN = []
                 type_test_ES = []
+                type_test_correct_EN = []
+                type_test_correct_ES = []
                 for cs_type in all_cs_types:
                     es_type = "ES-%s" % cs_type
-                    if es_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    if es_type in results['type_code_switches'][dataset_type]:
+                        cs_result = results['type_code_switches'][dataset_type][es_type]
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][es_type][2:]]
+                                                     for x in cs_result]
+                        values_percentage_correct_testset = [percentage(x, results['correct_sentences'][dataset_type][i])
+                                                             for i, x in enumerate(cs_result)]
+
                         type_test_ES.append((np.mean(values_percentage_testset),
                                              np.std(values_percentage_testset)))
+                        type_test_correct_ES.append((np.mean(values_percentage_correct_testset),
+                                                     np.std(values_percentage_correct_testset)))
                     else:
                         type_test_ES.append((0, 0))
+                        type_test_correct_ES.append((0, 0))
 
                     # same for EN
                     en_type = "EN-%s" % cs_type
-                    if en_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    if en_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
+                        cs_result = results['type_code_switches'][dataset_type][en_type]
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][en_type][2:]]
+                                                     for x in cs_result]
+                        values_percentage_correct_testset = [percentage(x, results['correct_sentences']['test'][i])
+                                                             for i, x in enumerate(cs_result)]
                         type_test_EN.append((np.mean(values_percentage_testset),
                                              np.std(values_percentage_testset)))
+                        type_test_correct_EN.append((np.mean(values_percentage_correct_testset),
+                                                     np.std(values_percentage_correct_testset)))
                     else:
                         type_test_EN.append((0, 0))
+                        type_test_correct_EN.append((0, 0))
 
             # make sure there is still something to be plotted after the manipulations
             if type_test_ES or type_test_EN:
@@ -126,6 +166,7 @@ class Plotter:
                 if title:
                     ax.set_title(title)
                 ax.set_xticks(ind + width / 2)
+                ax.set_ylim(bottom=0)
                 ax.legend((rects_EN[0], rects_ES[0]), ('EN', 'ES'))
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
@@ -142,9 +183,44 @@ class Plotter:
                 fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
             plt.savefig(fname)
             plt.close()
+            # same for percentage of correct sentences
+            # make sure there is still something to be plotted after the manipulations
+            if type_test_correct_ES or type_test_correct_EN:
+                ind = np.arange(len(all_cs_types))  # the x locations for the groups
+                width = 0.35  # the width of the bars
+
+                fig, ax = plt.subplots()
+                rects_EN = ax.bar(ind, [x[0] for x in type_test_correct_EN], width, color='r',
+                                  yerr=[x[1] for x in type_test_correct_EN])
+                rects_ES = ax.bar(ind + width, [x[0] for x in type_test_correct_ES], width, color='y',
+                                  yerr=[x[1] for x in type_test_correct_ES])
+
+                # add some text for labels, title and axes ticks
+                label = 'CS types (%% of correctly produced %s sentences)' % dataset_type
+                ax.set_ylabel(label)
+                ax.set_ylim(bottom=0)
+                if title:
+                    ax.set_title(title)
+                ax.set_xticks(ind + width / 2)
+                ax.legend((rects_EN[0], rects_ES[0]), ('EN', 'ES'))
+                ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
+                plt.tight_layout()  # make room for labels
+
+            if summary_sim:
+                fname = '%s/summary_%s_correct_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
+                                                                             dataset_type)
+                # also save type_test_ES and type_test_EN
+                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                            "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
+
+            else:
+                fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
+            plt.savefig(fname)
+            plt.close()
 
             # NOW THE SAME FOR THE COG EXPERIMENT
-            for dataset_type in ['test']: #['training', 'test']:
+            for dataset_type in ['test']:  # ['training', 'test']:
                 type_test_ENES = []
                 type_test_COG = []
                 type_test_FF = []
@@ -217,6 +293,7 @@ class Plotter:
                 ax.set_xticks(ind + (width) / 2)
                 #ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
                 ax.legend((rects[0], rects_COG[0]), ('ESEN', 'COG'))
+                ax.set_ylim(bottom=0)
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
 
@@ -296,6 +373,8 @@ class Plotter:
 
 
 def percentage(x, total):
+    if total == 0:
+        return 0.0  # instead of NaN
     return np.true_divide(x * 100, total)
 
 
