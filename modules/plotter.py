@@ -102,19 +102,19 @@ class Plotter:
 
             # PLOT ONLY NOUNS AND ALTERNATIONAL CS
             if 'EN-noun' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['EN-noun'][i])
+                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['EN-noun'])],
                          color='darkslateblue', label="Noun (EN)")
             if 'ES-noun' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['ES-noun'][i])
+                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['ES-noun'])],
                          color='deepskyblue', label="Noun (ES)")
             if 'ES-alternational CS' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['ES-alternational CS'][i])
+                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['ES-alternational CS'])],
                          color='olivedrab', label="Alternational CS (ES)")
             if 'EN-alternational CS' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['EN-alternational CS'][i])
+                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['EN-alternational CS'])],
                          color='yellowgreen', label="Alternational CS (EN)")
 
