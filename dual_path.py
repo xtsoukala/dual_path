@@ -264,7 +264,7 @@ class DualPath:
                     val.append(v)
                 types_dict[type] = val
             self.results['type_code_switches']['test'] = types_dict
-            print self.results['type_code_switches']['test']
+            # print self.results['type_code_switches']['test']
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
                 pickle.dump(self.results, pckl)

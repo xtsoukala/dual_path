@@ -100,6 +100,36 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
+            # PLOT ONLY NOUNS AND ALTERNATIONAL CS
+            if 'EN-noun' in results['type_code_switches']['test']:
+                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['EN-noun'][i])
+                                  for i, value in enumerate(results['type_code_switches']['test']['EN-noun'])],
+                         color='darkslateblue', label="Noun (EN)")
+            if 'ES-noun' in results['type_code_switches']['test']:
+                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['ES-noun'][i])
+                                  for i, value in enumerate(results['type_code_switches']['test']['ES-noun'])],
+                         color='deepskyblue', label="Noun (ES)")
+            if 'ES-alternational CS' in results['type_code_switches']['test']:
+                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['ES-alternational CS'][i])
+                                  for i, value in enumerate(results['type_code_switches']['test']['ES-alternational CS'])],
+                         color='olivedrab', label="Alternational CS (ES)")
+            if 'EN-alternational CS' in results['type_code_switches']['test']:
+                plt.plot(epochs, [percentage(value, results['type_code_switches']['test']['EN-alternational CS'][i])
+                                  for i, value in enumerate(results['type_code_switches']['test']['EN-alternational CS'])],
+                         color='yellowgreen', label="Alternational CS (EN)")
+
+            plt.xlabel('Epochs')
+            plt.ylabel('% noun/alternational code-switches among correctly produced sentences')
+            plt.ylim([0, 60])
+            plt.xlim(min(epochs), max(epochs))
+            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+            if summary_sim:
+                fname = '%s/summary_%s_noun_alternational_percentage.pdf' % (self.results_dir, summary_sim)
+            else:
+                fname = '%s/noun_alternational_percentage.pdf' % self.results_dir
+            plt.savefig(fname)
+            plt.close()
+
             # plot each code-switch type individually
 
             # first get all keywords (all CS types)
