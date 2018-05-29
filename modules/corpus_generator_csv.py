@@ -7,25 +7,23 @@ from datetime import datetime
 import sys
 import pickle
 import json
+import pandas
 from copy import deepcopy
 from itertools import chain, izip_longest
 
 # TODO: exclude_cognates=True set to False
+include_ff = False
 
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 
-print_on_screen = False
-include_ff = False
+print_on_screen = False  # used only to debug, no need to add it as a called parameter
 
 
 class SetsGenerator:
-    """
-    Overly complicated and ugly class to generate sentence/meaning pairs for the Dual-path model (To be refactored)
-    """
-
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 ignore_past, percentage_noun_phrase, add_filler, use_adjectives, extend_np_using_with=False, seed=0):
+                 ignore_past, percentage_noun_phrase, add_filler, use_adjectives, seed=0,
+                 lexicon_csv='corpus/lexicon.csv', structures_csv='corpus/structures.csv', lang='enes'):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -37,6 +35,7 @@ class SetsGenerator:
         :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
         :param use_adjectives: whether to use adjectives in NPs
         """
+        self.lexicon_df = get_clean_lexicon(lexicon_csv, include_false_friends=include_ff)
         self.seed = seed
         self.results_dir = results_dir
         self.path = os.path.dirname(os.path.realpath('__file__'))
@@ -49,333 +48,24 @@ class SetsGenerator:
         self.add_filler = add_filler
         self.ignore_past_tense = ignore_past
         self.use_adjectives = use_adjectives
-        self.extend_np_using_with = extend_np_using_with
-        self.genders = ["m", "f", "n", "c"]
-        self.determiners = ['a', 'the', 'un', 'una', 'la', 'el']
-        self.concept_to_es_words = {}
-        self.concepts = {'M': 'M', 'F': 'F'}  # initialize concepts with semantic gender (non language-specific)
-        self.concepts_en = {'chair': 'CHAIR', 'pen': 'PEN', 'wallet': 'WALLET', 'bag': 'BAG', 'ball': 'BALL',
-                            'kite': 'KITE', 'toy': 'TOY', 'stick': 'STICK', 'key': 'KEY', 'balloon': 'BALLOON',
-                            'long': 'LONG', 'tall': 'TALL', 'short': 'SHORT', 'cheap': 'CHEAP', 'sad': 'SAD',
-                            'happy': 'HAPPY', 'expensive': 'EXPENSIVE', 'colorful': 'COLORFUL'}
-        self.concepts_es = {'bolígrafo': 'PEN', 'silla': 'CHAIR', 'cartera': 'WALLET', 'globo': 'BALLOON',
-                            'bolso': 'BAG', 'cometa': 'KITE', 'juguete': 'TOY', 'palo': 'STICK', 'llave': 'KEY',
-                            'pelota': 'BALL', 'feliz': 'HAPPY', 'triste': 'SAD', 'alto': 'TALL', 'pequeño': 'SMALL',
-                            'alta': 'TALL', 'pequeña': 'SMALL', 'barrato': 'CHEAP', 'barrata': 'CHEAP',
-                            'caro': 'EXPENSIVE', 'cara': 'EXPENSIVE', 'larga': 'LONG',
-                            'colorido': 'COLORFUL', 'colorida': 'COLORFUL'}
+        self.genders = self.lexicon_df['semantic_gender'].dropna().unique()
+        #FIXME self.determiners = self.lexicon_df.query("pos == 'det'").morpheme.unique()
+        self.concepts = self.lexicon_df['concept'].dropna().unique() \
+            if use_simple_semantics else self.lexicon_df['compositional_semantics'].dropna().unique()
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
-        self.cognates = {'noun': {'animate': {'f': ['conductor'],  # 'conductor criminal director doctor'.split(),
-                                              'm': ['actor']},  # 'actor animal director doctor inspector'.split()},
-                                  'inanimate': {'m': ['chocolate'],  # 'chocolate melon piano'.split(),
-                                                'f': ['radio']}},
-                         'adj': 'popular social'.split(),  # simple superficial terrible vulnerable'.split(),
-                         'verb': {'intrans': 'calmar'.split(),  # considerar comunicar'.split(),
-                                  'trans': 'abandonar'.split(),  # adoptar consultar'.split(),
-                                  'double': 'demostrar'.split()  # justificar presentar'.split()
-                                  }
-                         }
-        self.cognate_values = ['actor', 'animal', 'conductor', 'criminal', 'director', 'doctor', 'inspector',
-                               'chocolate', 'melon', 'piano', 'radio', 'popular', 'social', 'simple', 'superficial',
-                               'terrible', 'vulnerable']  # \
-        # + self.cognates['verb']['intrans'] + \
-        # self.cognates['verb']['trans'] + self.cognates['verb']['double']
-        self._add_cognates_to_concepts()
-        self.include_ff = include_ff
+        self.cognate_values = self.lexicon_df.query("is_cognate == 'TRUE'").morpheme_en.unique()
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
-        # ropa (clothes) - rope / bombero (fire-fighter) - bomber / sano (healthy) - sane / carpeta (folder) - carpet /
-        # bizarro (brave) - bizarre / chocar (hit, collide) - choke / contestar (answer) - contest /
-        # embarazada (pregnant) - embarassed / enviar (send) - to envy / largo (long) - large /
-        # pariente (relative) - parent / pretender (attempt) - pretend / preocupado (worried) - preoccupied /
-        # realizar (become true) - realize / recordar (remember) - record / sopa (soup) - soap /
-        # soportar (tolerate) - support / tuna (prickly pear) - tuna / vaso (drinking glass) - vase /
-        # rapista (barber) - rapist / bizcocho (cake) - biscuit
-        self.false_friends = {'noun': {'animate': {'m': 'bombero pariente rapista'.split(),
-                                                   'f': 'embarazada pariente'.split()},
-                                       'inanimate': {'f': 'ropa carpeta sopa tuna'.split(),
-                                                     'm': 'vaso bizcocho'.split()}},
-                              'adj': 'sano bizarro largo preocupado'.split(),
-                              'verb': {'intrans': 'pretender contestar recordar'.split(),
-                                       'trans': 'soportar realizar chocar'.split(),
-                                       'double': 'enviar'.split()
-                                       }
-                              }
-        self.false_friends_values = ['bombero', 'embarazada', 'pariente', 'rapista', 'ropa',
-                                     'carpeta', 'sopa', 'tuna', 'vaso', 'bizcocho', 'sano', 'bizarro', 'largo',
-                                     'preocupado']
-        # , 'chocar', 'contestar', 'enviar', 'pretender', 'realizar', 'recordar', 'soportar']
-        self._add_false_friends_to_concepts()
-        self.lexicon = {}
-        self.lexicon_en = {'en': {'det': {'def': 'the', 'indef': 'a'},
-                                  'pron': {'m': 'he', 'f': 'she', 'n': 'it'},  # 'c': ['he', 'she']},
-                                  'noun': {
-                                      'animate': {'m': 'man boy father brother teacher grandfather husband '
-                                                       'host nephew son uncle waiter monk widower'
-                                                       ' bull dog'.split(),
-                                                  'f': 'woman girl mother sister nurse actress grandmother wife '
-                                                       'hostess niece daughter aunt waitress nun'
-                                                       ' widow cow cat'.split(),
-                                                  },
-                                      'inanimate': {'n': 'ball stick toy kite key bag balloon chair pen wallet'.split()}
-                                  },
-                                  'adj': {
-                                      'animate': 'happy sad tall short'.split(),
-                                      'inanimate': 'cheap expensive big colorful'.split()
-                                  },
-                                  'aux': {'singular': {'present': 'is', 'past': 'was'},
-                                          'plural': {'present': 'are', 'past': 'were'},
-                                          },
-                                  'by': 'by',
-                                  'with': 'with',
-                                  'to': 'to',
-                                  'filler': 'actually'
-                                  }
-                           }
-
-        self.lexicon_es = {'es': {'det': {'def': {'m': 'el', 'f': 'la'},
-                                          'indef': {'m': 'un', 'f': 'una'},
-                                          },
-                                  'pron': {'m': 'él', 'f': 'ella'},
-                                  'noun': {'animate': {'m': 'niño padre hermano perro maestro abuelo esposo '
-                                                            'sobrino investigador hijo tío camarero toro '
-                                                            'presidente hombre'.split(),
-                                                       'f': 'mujer niña madre hermana gata enfermera actríz abuela '
-                                                            'esposa sobrina investigadora hija tía camarera vaca '
-                                                            'directora presidenta'.split()},
-                                           'inanimate': {'m': 'palo juguete bolso bolígrafo globo'.split(),
-                                                         'f': 'pelota llave cometa silla cartera'.split()}
-                                           },
-                                  'adj': {
-                                      'animate': {'m': 'feliz triste alto pequeño'.split(),
-                                                  'f': 'feliz triste alta pequeña'.split()},
-                                      'inanimate': {'m': 'barrato caro grande colorido'.split(),
-                                                    'f': 'barrata cara grande colorida'.split()}
-                                  },
-                                  'aux': {'singular': {'present': 'está', 'past': 'estaba'},
-                                          'plural': {'present': 'están', 'past': 'estaban'},
-                                          },
-                                  'by': 'por',
-                                  'to': 'a_',
-                                  'with': 'con',
-                                  'filler': 'ta'}  # 'pues'}
-                           }
-
-        self.lexicon_el = {'el': {'det': {'def': {'m': 'ο', 'f': 'η', 'n': 'το'},
-                                          'indef': {'m': 'ένας', 'f': 'μία', 'n': 'ένα'},
-                                          },
-                                  'pron': {'m': 'αυτός', 'f': 'αυτή', 'n': 'αυτό'},
-                                  'noun': {'animate': {'m': 'αγόρι πατέρας αδερφός σκύλος δάσκαλος ηθοποιός παππούς '
-                                                            'άντρας ανηψιός αστυνομικός γιός θείος σερβιτόρος διεθυντής'
-                                                            'πρόεδρος '
-                                                            'ταύρος'.split(),
-                                                       'f': 'γυναίκα κορίτσι μητέρα αδερφή νοσοκόμα ηηθοποιός γιαγιά '
-                                                            'σύζυγος ανηψιά αστυνομικίνα κόρη θεία σερβιτόρα '
-                                                            'διευθύντρια ηπρόεδρος'
-                                                            'γάτα αγελάδα'.split()},
-                                           'inanimate': {'n': 'ραβδί παιχνίδι στυλό μπαλόνι κλειδί πορτοφόλι'.split(),
-                                                         'f': 'τσάντα μπάλα καρέκλα'.split(),
-                                                         'm': 'χαρταετός'}
-                                           },
-                                  'aux': {'singular': {'present': 'είναι', 'past': 'ήταν'},
-                                          'plural': {'present': 'είναι', 'past': 'ήταν'},
-                                          },
-                                  'by': 'από',
-                                  'to': 'στ',
-                                  'filler': 'επομένως'}
-                           }
-
-        if use_full_verb_form:
-            self.lexicon_en['en']['verb'] = {'intrans': {'simple': {'present': 'swims jumps walks runs arrives '
-                                                                               'sneezes dies eats'.split(),
-                                                                    'past': 'swam jumped walked ran arrived '
-                                                                            'sneezed died ate'.split()},
-                                                         'participle': 'swimming jumping walking running arriving '
-                                                                       'sneezing dying eating'.split()},
-                                             'trans': {'simple': {'present': 'pushes hits kicks carries'.split(),
-                                                                  'past': 'pushed hit kicked carried'.split()},
-                                                       'participle': 'pushing hitting kicking carrying'.split()},
-                                             'double': {'simple': {'present': 'gives throws shows presents'.split(),
-                                                                   'past': 'gave threw showed presented'.split()},
-                                                        'participle': 'giving throwing showing presenting'.split()}
-                                             }
-            self.lexicon_es['es']['verb'] = {'intrans': {'simple': {'present': 'nada salta camina corre llega '
-                                                                               'estornuda muere come'.split(),
-                                                                    'past': 'nadó saltó caminó corrió llegó '
-                                                                            'estornudó moría comía'.split()},
-                                                         'participle': 'nadando saltando camindando corriendo llegando '
-                                                                       'estornudando muriendo comiendo'.split()},
-                                             'trans': {'simple': {'present': 'empuja golpea patea lleva'.split(),
-                                                                  'past': 'empujó golpeó pateó llevó'.split()},
-                                                       'participle': 'empujando golpeando pateando llevando'.split()},
-                                             'double': {'simple': {'present': 'da tira muestra presenta'.split(),
-                                                                   'past': 'dio tiró mostró presentó'.split()},
-                                                        'participle': 'dando tirando mostrando presentando'.split()}
-                                             }
-        else:
-            self.lexicon_en['en']['verb'] = {'intrans': 'swim jump walk run arrive sneeze die eat'.split(),
-                                             'trans': 'push hit kick carry'.split(),
-                                             'double': 'give throw show'.split()}
-            self.lexicon_en['en']['ing'] = '-ing'
-            self.lexicon_en['en']['verb_suffix'] = {'present': '-s', 'past': '-ed'}
-            # ES
-            self.lexicon_es['es']['verb'] = {'intrans': 'estornud nad salt camin corr dorm'.split(),
-                                             'trans': 'empuj golpe pate llev'.split(),
-                                             'double': 'd tir mostr'.split()}
-            self.lexicon_es['es']['ing'] = '-ando'
-            self.lexicon_es['es']['verb_suffix'] = {'present': '-a', 'past': '-ó'}
-            # EL
-            self.lexicon_el['el']['verb'] = {'intrans': 'κολυμπά πηδά παρπατά τρέχ φτάν πεθαίν τρώ'.split(),
-                                             'trans': 'σπρώσχν χτυπά γλωτσά κουβαλά'.split(),
-                                             'double': 'δίν ρίχν δείχν παρουσιάζ'.split()}
-            self.lexicon_el['el']['verb_suffix'] = {'present': '-ει', 'past': '-γε'}
-
+        self.false_friends_values = self.lexicon_df.query("is_false_friend == 'Y'").morpheme_en.unique()
         self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
-        if use_simple_semantics:  # update concepts
-            self.concepts_en.update({'sister': 'SISTER', 'brother': 'BROTHER', 'boy': 'BOY', 'girl': 'GIRL',
-                                     'mother': 'MOTHER', 'father': 'FATHER', 'daughter': 'DAUGHTER',
-                                     'son': 'SON', 'policewoman': 'POLICEWOMAN', 'policeman': 'POLICEMAN',
-                                     'actress': 'ACTRESS', 'actor': 'ACTOR', 'wife': 'WIFE', 'husband': 'HUSBAND',
-                                     'hostess': 'HOSTESS', 'host': 'HOST', 'grandmother': 'GRANDMOTHER',
-                                     'grandfather': 'GRANDFATHER', 'waitress': 'WAITRESS', 'waiter': 'WAITER',
-                                     'aunt': 'AUNT', 'uncle': 'UNCLE', 'nephew': 'NEPHEW', 'niece': 'NIECE',
-                                     'woman': 'WOMAN', 'man': 'MAN', 'bull': 'BULL',
-                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW',
-                                     'widow': 'WIDOW', 'widower': 'WIDOWER', 'nun': 'NUN', 'monk': 'MONK'})
-
-            self.concepts_es.update({'hermana': 'SISTER', 'hermano': 'BROTHER', 'ni\xc3\xb1o': 'BOY',
-                                     'ni\xc3\xb1a': 'GIRL', 'madre': 'MOTHER', 'padre': 'FATHER', 'hija': 'DAUGHTER',
-                                     'hijo': 'SON', 'investigador': 'RESEARCHER', 'investigadora': 'FRESEARCHER',
-                                     'esposa': 'WIFE', 'esposo': 'HUSBAND', 'actríz': 'ACTRESS',
-                                     'abuela': 'GRANDMOTHER', 'abuelo': 'GRANDFATHER', 'camarera': 'WAITRESS',
-                                     'camarero': 'WAITER', 'tía': 'AUNT', 'tío': 'UNCLE', 'sobrino': 'NEPHEW',
-                                     'sobrina': 'NIECE', 'mujer': 'WOMAN', 'hombre': 'MAN', 'maestro': 'TEACHER',
-                                     'presidenta': 'CHAIRWOMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMISTRESS',
-                                     'vaca': 'COW', 'toro': 'BULL', 'gata': 'CAT',
-                                     'enfermera': 'NURSE', 'perro': 'DOG'})
-        else:
-            # note that sister = SIBLING + F, brother = SIBLING + M, etc
-            self.concepts_en.update({'sister': 'SIBLING', 'brother': 'SIBLING', 'boy': 'CHILD', 'girl': 'CHILD',
-                                     'mother': 'PARENT', 'father': 'PARENT', 'daughter': 'OFFSPRING',
-                                     'son': 'OFFSPRING', 'policewoman': 'POLICEMAN', 'policeman': 'POLICEMAN',
-                                     'actress': 'ACTOR', 'actor': 'ACTOR', 'wife': 'PARTNER', 'husband': 'PARTNER',
-                                     'hostess': 'HOST', 'host': 'HOST', 'grandmother': 'GRANDPARENT',
-                                     'grandfather': 'GRANDPARENT', 'waitress': 'WAITER', 'waiter': 'WAITER',
-                                     'aunt': 'UNCLES', 'uncle': 'UNCLES', 'nephew': 'NIBLING', 'niece': 'NIBLING',
-                                     'woman': 'HUMAN', 'man': 'HUMAN', 'bull': 'BULL',
-                                     'nurse': 'NURSE', 'cat': 'CAT', 'dog': 'DOG', 'teacher': 'TEACHER', 'cow': 'COW',
-                                     'widow': 'WIDOW', 'widower': 'WIDOW', 'nun': 'MONK', 'monk': 'MONK'})
-
-            self.concepts_es.update({'hermana': 'SIBLING', 'hermano': 'SIBLING', 'ni\xc3\xb1o': 'CHILD',
-                                     'ni\xc3\xb1a': 'CHILD', 'madre': 'PARENT', 'padre': 'PARENT', 'hija': 'OFFSPRING',
-                                     'hijo': 'OFFSPRING', 'investigador': 'RESEARCHER', 'investigadora': 'RESEARCHER',
-                                     'esposa': 'PARTNER', 'esposo': 'PARTNER', 'actríz': 'ACTOR',
-                                     'abuela': 'GRANDPARENT', 'abuelo': 'GRANDPARENT', 'camarera': 'WAITER',
-                                     'camarero': 'WAITER', 'tía': 'UNCLES', 'tío': 'UNCLES', 'sobrino': 'NIBLING',
-                                     'sobrina': 'NIBLING', 'mujer': 'HUMAN', 'hombre': 'HUMAN', 'maestro': 'TEACHER',
-                                     'presidenta': 'CHAIRMAN', 'presidente': 'CHAIRMAN', 'directora': 'HEADMASTER',
-                                     'vaca': 'COW', 'toro': 'COW', 'gata': 'CAT',
-                                     'enfermera': 'NURSE', 'perro': 'DOG'})
-
-        if use_full_verb_form:
-            self.concepts_en.update({'eating': 'EAT', 'throwing': 'THROW', 'arrived': 'ARRIVE', 'kicked': 'KICK',
-                                     'giving': 'GIVE', 'running': 'RUN', 'pushing': 'PUSH', 'arrives': 'ARRIVE',
-                                     'arriving': 'ARRIVE', 'died': 'DIE', 'hits': 'HIT', 'gave': 'GIVE',
-                                     'kicks': 'KICK', 'dying': 'DIE', 'presented': 'PRESENT', 'hitting': 'HIT',
-                                     'showing': 'SHOW', 'threw': 'THROW', 'carried': 'CARRY', 'sneezing': 'SNEEZE',
-                                     'dies': 'DIE', 'kicking': 'KICK', 'swimming': 'SWIM', 'walking': 'WALK',
-                                     'ate': 'EAT', 'carrying': 'CARRY', 'jumping': 'JUMP', 'presents': 'PRESENT',
-                                     'presenting': 'PRESENT', 'showed': 'SHOW', 'pushes': 'PUSH', 'walked': 'WALK',
-                                     'throws': 'THROW', 'ran': 'RUN', 'shows': 'SHOW', 'gives': 'GIVE',
-                                     'pushed': 'PUSH', 'eats': 'EAT', 'hit': 'HIT', 'sneezes': 'SNEEZE',
-                                     'swims': 'SWIM', 'jumps': 'JUMP', 'jumped': 'JUMP', 'runs': 'RUN',
-                                     'walks': 'WALK', 'carries': 'CARRY', 'sneezed': 'SNEEZE', 'swam': 'SWIM'})
-
-            self.concepts_es.update({'llegando': 'ARRIVE', 'mostrando': 'SHOW', 'golpea': 'HIT',
-                                     'golpeando': 'HIT', 'camina': 'WALK', 'empujando': 'PUSH',
-                                     'mostró': 'SHOW', 'empujó': 'PUSH', 'muere': 'DIE', 'presenta': 'PRESENT',
-                                     'presentando': 'PRESENT', 'estornudó': 'SNEEZE', 'tirando': 'THROW',
-                                     'llevó': 'CARRY', 'patea': 'KICK', 'pateando': 'KICK',
-                                     'corriendo': 'RUN', 'camindando': 'WALK', 'golpeó': 'HIT',
-                                     'lleva': 'CARRY', 'tiró': 'THROW', 'dando': 'GIVE', 'empuja': 'PUSH',
-                                     'llevando': 'CARRY', 'muestra': 'SHOW', 'estornudando': 'SNEEZE',
-                                     'nadando': 'SWIM', 'come': 'EAT', 'dio': 'GIVE', 'llegó': 'ARRIVE',
-                                     'presentó': 'PRESENT', 'saltando': 'JUMP', 'llega': 'ARRIVE', 'pateó': 'KICK',
-                                     'nada': 'SWIM', 'da': 'GIVE', 'tira': 'THROW', 'comiendo': 'EAT',
-                                     'comía': 'EAT', 'moría': 'DIE', 'salta': 'JUMP', 'nadó': 'SWIM',
-                                     'estornuda': 'SNEEZE', 'corrió': 'RUN', 'muriendo': 'DIE',
-                                     'corre': 'RUN', 'saltó': 'JUMP', 'caminó': 'WALK'})
-        else:
-            self.concepts_en.update({'give': 'GIVE', 'carry': 'CARRY', 'kick': 'KICK', 'run': 'RUN', 'throw': 'THROW',
-                                     'swim': 'SWIM', 'walk': 'WALK', 'jump': 'JUMP', 'show': 'SHOW',
-                                     'hit': 'HIT', 'push': 'PUSH', 'sneeze': 'SNEEZE',
-                                     'die': 'DIE', 'eat': 'EAT', 'arrive': 'ARRIVE'})
-            self.concepts_es.update({'d': 'GIVE', 'salt': 'JUMP', 'mostr': 'SHOW', 'nad': 'SWIM',
-                                     'pate': 'KICK', 'dorm': 'SLEEP', 'empuj': 'PUSH', 'tir': 'THROW', 'corr': 'RUN',
-                                     'camin': 'WALK', 'llev': 'CARRY', 'golpe': 'HIT', 'estornud': 'SNEEZE'})
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC']
-        self.target_lang = []
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT', 'AGENT-MOD', 'PATIENT-MOD']
+        self.target_lang = []
 
-        self.structures = []
         self.num_structures = None
-        if use_full_verb_form:
-            self.structures_en = read_structures(os.path.join(self.path, 'corpus/full_verb_structures.en'))
-            self.structures_es = read_structures(os.path.join(self.path, 'corpus/full_verb_structures.es'))
-        else:  # separate lemma from suffix
-            if self.extend_np_using_with:
-                self.structures_en = read_structures(os.path.join(self.path, 'corpus/morph_and_with_structures.en'))
-                self.structures_es = read_structures(os.path.join(self.path, 'corpus/morph_and_with_structures.es'))
-            else:
-                self.structures_en = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.en'))
-                self.structures_es = read_structures(os.path.join(self.path, 'corpus/morph_no_with_structures.es'))
-
+        self.structures = get_structures(structures_csv, use_full_verb=use_full_verb_form, lang=lang)
         if allow_free_structure_production:
             self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
-            self.structures_en = strip_roles(self.structures_en)
-            self.structures_es = strip_roles(self.structures_es)
-
-        self.add_cognates_and_ff_to_lexicon()
-
-    def add_cognates_and_ff_to_lexicon(self):
-        self.lexicon_en['en']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
-        self.lexicon_en['en']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
-        self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['m']
-        self.lexicon_en['en']['noun']['inanimate']['n'] += self.cognates['noun']['inanimate']['f']
-        self.lexicon_en['en']['adj']['animate'] += self.cognates['adj']
-        self.lexicon_en['en']['adj']['inanimate'] += self.cognates['adj']
-        # for verb_cat in self.cognates['verb'].keys():
-        #    self.lexicon_en['en']['verb'][verb_cat].extend(self.cognates['verb'][verb_cat])
-        if self.include_ff:
-            self.lexicon_en['en']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
-            self.lexicon_en['en']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
-            self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['m']
-            self.lexicon_en['en']['noun']['inanimate']['n'] += self.false_friends['noun']['inanimate']['f']
-            self.lexicon_en['en']['adj']['animate'] += self.false_friends['adj']
-            self.lexicon_en['en']['adj']['inanimate'] += self.false_friends['adj']
-            # for verb_cat in self.false_friends['verb'].keys():
-            #    self.lexicon_en['en']['verb'][verb_cat].extend(self.false_friends['verb'][verb_cat])
-        # same for ES
-        self.lexicon_es['es']['noun']['animate']['m'] += self.cognates['noun']['animate']['m']
-        self.lexicon_es['es']['noun']['animate']['f'] += self.cognates['noun']['animate']['f']
-        self.lexicon_es['es']['noun']['inanimate']['m'] += self.cognates['noun']['inanimate']['m']
-        self.lexicon_es['es']['noun']['inanimate']['f'] += self.cognates['noun']['inanimate']['f']
-        self.lexicon_es['es']['adj']['animate']['m'] += self.cognates['adj']
-        self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
-        self.lexicon_es['es']['adj']['animate']['m'] += self.cognates['adj']
-        self.lexicon_es['es']['adj']['inanimate']['f'] += self.cognates['adj']
-        # for verb_cat in self.cognates['verb'].keys():
-        #    self.lexicon_es['es']['verb'][verb_cat].extend(self.cognates['verb'][verb_cat])
-        if self.include_ff:
-            self.lexicon_es['es']['noun']['animate']['m'] += self.false_friends['noun']['animate']['m']
-            self.lexicon_es['es']['noun']['animate']['f'] += self.false_friends['noun']['animate']['f']
-            self.lexicon_es['es']['noun']['inanimate']['m'] += self.false_friends['noun']['inanimate']['m']
-            self.lexicon_es['es']['noun']['inanimate']['f'] += self.false_friends['noun']['inanimate']['f']
-            self.lexicon_es['es']['adj']['animate']['m'] += self.false_friends['adj']
-            self.lexicon_es['es']['adj']['animate']['f'] += self.false_friends['adj']
-            self.lexicon_es['es']['adj']['inanimate']['m'] += self.false_friends['adj']
-            self.lexicon_es['es']['adj']['inanimate']['f'] += self.false_friends['adj']
-            # for verb_cat in self.false_friends['verb'].keys():
-            #    self.lexicon_es['es']['verb'][verb_cat].extend(self.false_friends['verb'][verb_cat])
+            self.structures = strip_roles(self.structures)
 
     def generate_sets_for_cognate_experiment(self, num_sentences, lang, save_input_files=False):
         random.seed(self.seed)  # we might want to change the seed each time we run a new simulation
@@ -818,8 +508,6 @@ class SetsGenerator:
         if 'with' not in main_pos:
             main_pos.add('with')
 
-        #####self.add_cognates_and_ff_to_lexicon()
-
         unique_dict = []
         for lang in self.target_lang:  # keep separate for now because of code-switching
             for pos in main_pos:
@@ -850,6 +538,23 @@ class SetsGenerator:
                 else:
                     concept_to_es_words[revvalue] = [revkey]
         return concept_to_es_words
+
+
+def get_clean_lexicon(lexicon_csv, include_false_friends):
+    print lexicon_csv
+    df = pandas.read_csv(lexicon_csv, sep=';', header=0)  # first line is the header
+    # remove inactive words:
+    query = "inactive != 'Y'"
+    if not include_false_friends:
+        query = "%s and is_false_friend != 'Y'" % query
+    return df.query(query)
+
+
+def get_structures(structures_csv, sep=",", use_full_verb=False, lang='enes'):
+    print structures_csv
+    df = pandas.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
+    print df
+    return df
 
 
 def sentence_is_unique(message, exclude_test_sentences, generated_pairs, unique_roles):
@@ -885,33 +590,6 @@ def dump_to_json(fname, dictionary):
         json.dump(dictionary, f)
 
 
-def get_dict_items(key, dictionary):
-    if key in dictionary:
-        dd = dictionary[key]
-        if not isinstance(dd, dict):
-            yield dd
-        else:
-            list_words = []  # TODO: replace with recursive function, this is ugly
-            for idx, value in dd.iteritems():
-                if not isinstance(value, dict):
-                    list_words.append(value)
-                else:
-                    for r, v in value.iteritems():
-                        if not isinstance(v, dict):
-                            list_words.append(v)
-                        else:
-                            for rr, vv in v.iteritems():
-                                list_words.append(vv)
-            yield flatten_list(list_words)
-
-
-def flatten_list(nested_list):
-    if any(isinstance(i, list) for i in nested_list):
-        return flatten_list(list(chain.from_iterable(nested_list)))
-    else:
-        return nested_list
-
-
 def calculate_number_of_sentences_per_set(num_sentences):
     num_test = int(20 * num_sentences / 100)  # Test set = 20% of whole set, training 80%
     num_train = num_sentences - num_test
@@ -925,5 +603,4 @@ if __name__ == "__main__":
                          allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
                          add_filler=False, use_adjectives=True)
     sets.generate_sets_for_cognate_experiment(num_sentences=2500, lang='esen', save_input_files=True)
-    # sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True,
-    # save_input_files=True)
+    # sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_input_files=True)

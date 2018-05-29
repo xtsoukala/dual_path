@@ -374,4 +374,3 @@ def take_average_of_valid_results2(valid_results):
             else:
                 results_average[key][t] = np.true_divide(val[t], len(valid_results))
     return results_average
-

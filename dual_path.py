@@ -681,7 +681,7 @@ if __name__ == "__main__":
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
-    parser.add_argument('--check_pron', dest='check_pronouns', action='store_true',
+    parser.add_argument('--gender_error_experiment', dest='check_pronouns', action='store_true',
                         help='Evaluate pronoun production')
     parser.set_defaults(check_pronouns=False)
     parser.add_argument('--filler', dest='filler', action='store_true',
