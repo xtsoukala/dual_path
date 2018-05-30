@@ -6,7 +6,6 @@ import codecs
 from datetime import datetime
 import sys
 import pickle
-import json
 import pandas
 from copy import deepcopy
 from itertools import chain, izip_longest
@@ -22,57 +21,74 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 ignore_past, percentage_noun_phrase, add_filler, use_adjectives, seed=0,
-                 lexicon_csv='corpus/lexicon.csv', structures_csv='corpus/structures.csv', lang='enes'):
+                 seed=0, lang='enes', lexicon_csv='corpus/lexicon.csv', structures_csv='corpus/structures.csv'):
         """
         :param results_dir:
         :param use_simple_semantics:
         :param allow_free_structure_production:
         :param use_full_verb_form:
-        :param ignore_past:
-        :param percentage_noun_phrase: percentage of Noun Phrases (NPs) vs pronouns in subject position
-        :param percentage_l2: percentage of L2 (e.g., English) vs L1
-        :param add_filler: whether to add a filler word (adverb, conjunctive) at the beginning of the sentence
-        :param use_adjectives: whether to use adjectives in NPs
         """
-        self.lexicon_df = get_clean_lexicon(lexicon_csv, include_false_friends=include_ff)
+        self.lang = lang.lower()
+        self.L1 = self.lang if len(lang) == 2 else self.lang[:2]  # take first 2 letters as L1
+        self.L2 = None if len(lang) == 2 else self.lang[2:]
         self.seed = seed
+        self.lexicon_df = get_clean_lexicon(lexicon_csv, include_false_friends=include_ff)
         self.results_dir = results_dir
-        self.path = os.path.dirname(os.path.realpath('__file__'))
-        if 'modules' not in self.path:
-            self.path += '/modules/'
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
         os.makedirs(self.results_dir)
-        self.percentage_noun_phrase = percentage_noun_phrase
-        self.add_filler = add_filler
-        self.ignore_past_tense = ignore_past
-        self.use_adjectives = use_adjectives
-        self.genders = self.lexicon_df['semantic_gender'].dropna().unique()
-        #FIXME self.determiners = self.lexicon_df.query("pos == 'det'").morpheme.unique()
-        self.concepts = self.lexicon_df['concept'].dropna().unique() \
-            if use_simple_semantics else self.lexicon_df['compositional_semantics'].dropna().unique()
+        self.genders = [x for x in self.lexicon_df['semantic_gender'].dropna().unique() if '-' not in x]
+        self.determiners = self.get_determiners_from_lexicon()
+        self.concepts = self.get_concepts_from_lexicon(use_simple_semantics=use_simple_semantics)
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
-        self.cognate_values = self.lexicon_df.query("is_cognate == 'TRUE'").morpheme_en.unique()
+        self.cognate_values = self.lexicon_df.query("is_cognate == 'Y'").morpheme_en.unique()
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
-        self.false_friends_values = self.lexicon_df.query("is_false_friend == 'Y'").morpheme_en.unique()
-        self.identifiability = ['DEF', 'INDEF', 'PRON', 'EMPH']
+        self.false_friends_values = self.lexicon_df.query("is_false_friend == '1'").morpheme_en.unique()
+        self.structures_df = self.get_structures(structures_csv, use_full_verb=use_full_verb_form)
+        self.target_lang = []
+        self.num_structures = None
+        # TODO: automate
         self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC']
         self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT', 'AGENT-MOD', 'PATIENT-MOD']
-        self.target_lang = []
-
-        self.num_structures = None
-        self.structures = get_structures(structures_csv, use_full_verb=use_full_verb_form, lang=lang)
         if allow_free_structure_production:
             self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
-            self.structures = strip_roles(self.structures)
+            self.structures_df = self.strip_structure_roles()  # FIXME: alt to keep it a df
 
-    def generate_sets_for_cognate_experiment(self, num_sentences, lang, save_input_files=False):
-        random.seed(self.seed)  # we might want to change the seed each time we run a new simulation
+    def generate_sets(self, num_sentences, percentage_L2=0.5, cognates_experiment=False,
+                      save_files=False):
+        """
+        :param num_sentences: number of training AND test sentences to be generated
+        :param cognates_experiment: (if True) include cognates and ff only in training sets
+        :param percentage_L2: percentage of L2 (e.g., English) vs L1
+        :param save_files: whether to save lexicon/concepts etc or just training/test sets
+        """
+        if not cognates_experiment:
+            # (re)set the seed if it's not part of the cognate experiment (where this function is called twice)
+            random.seed(self.seed)
+
+        num_train, num_test = calculate_number_of_sentences_per_set(num_sentences)
+        sentence_structures_train = self.generate_sentence_structures(num_train, percentage_L2=percentage_L2)
+        sentence_structures_test = self.generate_sentence_structures(num_test, percentage_L2=percentage_L2)
+
+        """if cognates_experiment:
+            test_set = self.generate_sentences(sentence_structures_test, fname=None,
+                                               exclude_cognates=True)
+            training_set = self.generate_sentences(sentence_structures_train, fname=None,
+                                                   exclude_test_sentences=test_set)
+
+        else:"""
+        test_set = self.generate_sentences(sentence_structures_test, fname="test.in")
+        self.generate_sentences(sentence_structures_train, fname="train.in", exclude_test_sentences=test_set)
+
+        assert num_test == len(test_set)
+        # TODO: Save files here?
+        if cognates_experiment:  # return sets of message/sentence pairs
+            return test_set, training_set
+
+    def generate_sets_for_cognate_experiment(self, num_sentences, save_input_files=False, seed=0):
+        random.seed(seed)  # we might want to change the seed each time we run a new simulation
         # first select cognate-free sentences
-        original_test_set, original_training_set = self.generate_sets(num_sentences, lang,
-                                                                      include_bilingual_lexicon=True,
-                                                                      save_input_files=save_input_files,
+        original_test_set, original_training_set = self.generate_sets(num_sentences,
                                                                       cognates_experiment=True)
         random.shuffle(original_training_set)
         for sentence, message in original_training_set:  # save training set into file
@@ -190,102 +206,26 @@ class SetsGenerator:
             replacement_sets.append((sentence, message))
         return replacement_sets
 
-    def generate_sets(self, num_sentences, lang, include_bilingual_lexicon, cognates_experiment=False,
-                      save_input_files=False):
+    def generate_sentence_structures(self, num_sentences, percentage_L2):
         """
-        :param num_sentences: number of training AND test sentences to be generated
-        :param lang: language code
-        :param include_bilingual_lexicon: whether lexicon should be bilingual even if generated sentences are in L1
-        :param cognates_experiment: (if True) include cognates and ff only in training sets
-        :param save_input_files: whether to save lexicon/concepts etc or just training/test sets
+        :param num_sentences: number of message/sentence pairs that need to be generated
+        :param percentage_L2: percentage of L2 structures
+        :return:
         """
-        if not cognates_experiment:
-            # (re)set the seed if it's not part of the cognate experiment (where this function is called twice)
-            random.seed(self.seed)
-
-        num_test, num_train = calculate_number_of_sentences_per_set(num_sentences)
-        self.set_structures_and_lexicon(lang)
-
-        sentence_structures_train = self.generate_sentence_structures(num_train)
-        sentence_structures_test = self.generate_sentence_structures(num_test)
-        if cognates_experiment:
-            test_set = self.generate_sentences(sentence_structures_test, fname=None,
-                                               exclude_cognates=True)
-            training_set = self.generate_sentences(sentence_structures_train, fname=None,
-                                                   exclude_test_sentences=test_set)
-
-        else:
-            test_set = self.generate_sentences(sentence_structures_test, fname="test.in")
-            self.generate_sentences(sentence_structures_train, fname="train.in", exclude_test_sentences=test_set)
-
-        assert num_test == len(test_set)
-        if save_input_files:
-            self.save_input_files(include_bilingual_lexicon)
-
-        if cognates_experiment:  # return sets of message/sentence pairs
-            return test_set, training_set
-
-    def save_input_files(self, include_bilingual_lexicon=False):
-        if include_bilingual_lexicon:
-            if 'EN' not in self.target_lang:
-                self.lexicon.update(self.lexicon_en)
-                self.target_lang.append('EN')
-                self.concepts.update(self.concepts_en)
-            elif 'ES' not in self.target_lang:
-                self.lexicon.update(self.lexicon_es)
-                self.target_lang.append('ES')
-                self.concepts.update(self.concepts_es)
-        self.save_lexicon()
-
-        with codecs.open('%s/identifiability.in' % self.results_dir, 'w', "utf-8") as f:
-            f.write("%s" % "\n".join(self.identifiability))
-
-        with codecs.open('%s/concepts.in' % self.results_dir, 'w', "utf-8") as f:
-            f.write("%s" % "\n".join(set(self.concepts.values())).encode("utf-8"))
-
-        with open('%s/event_sem.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.event_sem))
-
-        with open('%s/target_lang.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.target_lang))
-
-        with open('%s/roles.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.roles))
-
-        with codecs.open('%s/lexicon_to_concept.pickled' % self.results_dir, 'w', "utf-8") as pckl:
-            pickle.dump(self.concepts, pckl)
-
-    def set_structures_and_lexicon(self, lang):
-        lang = lang.lower()
-        if lang == 'es':
-            structures = self.structures_es
-            self.lexicon = self.lexicon_es
-            self.target_lang = ['ES']
-            self.concepts.update(self.concepts_es)
-        elif lang == 'en':
-            structures = self.structures_en
-            self.lexicon = self.lexicon_en
-            self.target_lang = ['EN']
-            self.concepts.update(self.concepts_en)
-        else:  # the default mode is the Bilingual English-Spanish model
-            structures = self.structures_en + self.structures_es
-            self.lexicon = self.lexicon_en.copy()
-            self.lexicon.update(self.lexicon_es)
-            self.target_lang.extend(['ES', 'EN'])
-            self.concepts.update(self.concepts_es)
-            self.concepts.update(self.concepts_en)
-        random.shuffle(structures)
-        self.structures = structures
-        self.num_structures = len(self.structures)
-        self.concept_to_es_words = self._reverse_lexicon_to_concept()  # concept to Spanish word
-
-    def generate_sentence_structures(self, num_sentences):
+        print self.structures_df
+        # if percentages are not set, distribute equally
         sentence_structures = []
+
+        # calculate percentage L2
+        # (1 - percentage_L2) *  - num_sentences / self.num_structures
+
         for i in range(num_sentences / self.num_structures):
             sentence_structures += deepcopy(self.structures)
         # runs if sentence_structures < num_sentences (missing num_sentences % self.num_structures sentences)
         for m in range(num_sentences % self.num_structures):
             sentence_structures.append(deepcopy(self.structures[random.randint(0, self.num_structures - 1)]))
+
+
         random.shuffle(sentence_structures)
         return sentence_structures
 
@@ -419,11 +359,11 @@ class SetsGenerator:
                             sentence.append(random_word)
                         elif not use_noun_phrase[sentence_idx] and msg_idx > 0:
                             sentence.append(random_word)
-                        if (self.use_adjectives and ((lang == 'es' and 'adj' in pos and 'with' not in pos_full) or
+                        if (((lang == 'es' and 'adj' in pos and 'with' not in pos_full) or
                                                          (
                                                                                  lang == 'en' and 'noun' in pos and 'with' not in pos_full and msg_idx < 1))):
                             msg_idx += 2
-                        elif not self.use_adjectives or 'verb' in pos or (msg_idx > 1 and lang == 'es') or \
+                        elif 'verb' in pos or (msg_idx > 1 and lang == 'es') or \
                                 (lang == 'en' and 'noun' in pos) or (lang == 'es' and 'adj' in pos):
                             msg_idx += 1
                     else:  # elif type == str
@@ -474,31 +414,6 @@ class SetsGenerator:
             return self.random_choice(options, exclude_cognates)
         return choice
 
-    def get_concept(self, word, lang):
-        if word in self.concepts:
-            if word in self.cognate_values:
-                return "%s,COG" % self.concepts[word]
-            if word in self.false_friends_values:
-                return "%s%s,FF" % (self.concepts[word], "_ES" if lang == 'es' else '')
-            return self.concepts[word]
-
-        # in case we haven't updated the concept of the word
-        self.concepts[word] = word.upper()
-        print "'%s': '%s'," % (word, word.upper())  # so that we can add it manually
-        return word
-
-    def get_layered_key(self, keylist):
-        lex = self.lexicon
-        for num, it in enumerate(keylist):
-            if it in lex:
-                lex = lex[it]
-            else:
-                del keylist[num - 1]
-                self.get_layered_key(keylist)
-
-        if len(keylist) > 1:
-            return keylist[1]
-
     def save_lexicon(self):
         all_structures = set([pos[0] for pos in self.structures])
         all_pos = set(chain.from_iterable([pos.split() for pos in all_structures]))
@@ -539,22 +454,49 @@ class SetsGenerator:
                     concept_to_es_words[revvalue] = [revkey]
         return concept_to_es_words
 
+    def get_determiners_from_lexicon(self):
+        return pandas.unique(self.lexicon_df.query("pos == 'det'")[['morpheme_en', 'morpheme_es']].values.ravel('K'))
+
+    def get_concepts_from_lexicon(self, use_simple_semantics):
+        if use_simple_semantics:
+            return self.lexicon_df['concept'].dropna().unique()
+        return self.lexicon_df['compositional_semantics'].dropna().unique()
+
+    def strip_structure_roles(self):
+        return [(re.sub(r'|'.join(map(re.escape, [',AGT', ',PAT', ',-1', ',REC'])), '', row[0]),
+                row[1], row[2], row[3]) for idx, row in self.structures_df.iterrows()]
+        #print structures
+        #print re.sub(r'|'.join(map(re.escape, [',AGT', ',PAT', ',-1', ',REC'])), '', structures_df['message'])
+
+    def get_structures(self, structures_csv, sep=",", use_full_verb=False):
+        if not os.path.isfile(structures_csv):
+            structures_csv = "modules/%s" % structures_csv
+        df = pandas.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
+        query = "inactive != 'Y'"
+        structures = df.query(query)
+        keys = ['message', 'percentage']
+        if use_full_verb:
+            if 'es' in self.lang:
+                keys.append('full_verb_es')
+            if 'en' in self.lang:
+                keys.append('full_verb_en')
+        else:  # return structures that split morpheme-suffix
+            if 'es' in self.lang:
+                keys.append('pos_es')
+            if 'en' in self.lang:
+                keys.append('pos_en')
+        return structures[keys]
+
 
 def get_clean_lexicon(lexicon_csv, include_false_friends):
-    print lexicon_csv
-    df = pandas.read_csv(lexicon_csv, sep=';', header=0)  # first line is the header
+    if not os.path.isfile(lexicon_csv):
+        lexicon_csv = "modules/%s" % lexicon_csv
+    df = pandas.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
     # remove inactive words:
     query = "inactive != 'Y'"
     if not include_false_friends:
         query = "%s and is_false_friend != 'Y'" % query
     return df.query(query)
-
-
-def get_structures(structures_csv, sep=",", use_full_verb=False, lang='enes'):
-    print structures_csv
-    df = pandas.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
-    print df
-    return df
 
 
 def sentence_is_unique(message, exclude_test_sentences, generated_pairs, unique_roles):
@@ -578,29 +520,16 @@ def write_structures(fname, structures):
             f.write("%s\n%s\n" % (i[0], i[1]))
 
 
-def strip_roles(structures):
-    structures = [(pos, re.sub(r'|'.join(map(re.escape, [',AGT', ',PAT', ',-1', ',REC'])), '', msg))
-                  for pos, msg in structures]
-    return structures
-
-
-def dump_to_json(fname, dictionary):
-    # d = json.dumps(dictionary, indent=4)
-    with open(fname, 'w') as f:
-        json.dump(dictionary, f)
-
-
 def calculate_number_of_sentences_per_set(num_sentences):
     num_test = int(20 * num_sentences / 100)  # Test set = 20% of whole set, training 80%
     num_train = num_sentences - num_test
-    return num_test, num_train
+    return num_train, num_test
 
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
-                         allow_free_structure_production=False, ignore_past=True, percentage_noun_phrase=100,
-                         add_filler=False, use_adjectives=True)
-    sets.generate_sets_for_cognate_experiment(num_sentences=2500, lang='esen', save_input_files=True)
-    # sets.generate_sets(num_sentences=2500, lang='esen', include_bilingual_lexicon=True, debug=True, save_input_files=True)
+                         allow_free_structure_production=False, lang='en')
+    #sets.generate_sets_for_cognate_experiment(num_sentences=2500, lang='en', save_input_files=True)
+    sets.generate_sets(num_sentences=2500)

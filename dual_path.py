@@ -715,13 +715,13 @@ if __name__ == "__main__":
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir
     else:
-        from modules.corpus_generator import SetsGenerator
+        from modules.corpus_generator_csv import SetsGenerator
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
                              use_simple_semantics=args.simple_semantics, add_filler=args.filler,
                              percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
-                             ignore_past=args.ignore_past, use_adjectives=args.use_adjectives)
+                             ignore_past=args.ignore_past)
         if args.cognate_experiment:
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
                                                       save_input_files=True)
