@@ -7,7 +7,6 @@ from datetime import datetime
 import sys
 import pandas
 from copy import deepcopy
-from itertools import chain, izip_longest
 
 # TODO: exclude_cognates=True set to False
 
@@ -274,137 +273,24 @@ class SetsGenerator:
             msg_idx = 0
             for pos in pos_full.split():
                 print pos
-                morpheme = self.select_random_morpheme_for_lang(pos=pos, lang=lang)
-                print morpheme
-                print morpheme['concept']
-                # FIXME: here 
-                concept = morpheme['concept'] if not is_nan(morpheme['concept']) else morpheme['type']
-                message[msg_idx] += concept
-                sentence.append(morpheme)
+                morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang)
+                concept = get_df_concept(morpheme_df)
+                message[msg_idx] = "%s,%s" % (message[msg_idx], concept) \
+                                   if message[msg_idx][-1] != '=' else "%s%s" % (message[msg_idx], concept)
+                print morpheme_df.iloc[0][0]
+                sentence.append(morpheme_df.iloc[0][0])
+                print '!@@@'
                 print message
                 print sentence
+                print '@@@'
             print '---'
 
-            add_det = False
-            gender = None
-            for pos in pos_full.split():
-                if '::' in pos:
-                    if len(pos.split('::')) == 2:
-                        part, level = pos.split("::")
-                        syn = self.lexicon[lang][part][level]
-                    else:
-                        part, level, sublevel = pos.split("::")
-                        syn = self.lexicon[lang][part][level][sublevel]
-                else:
-                    level = ''
-                    syn = self.lexicon[lang][pos]
-
-                if type(syn) is dict:
-                    random_key = self.random_choice(syn.keys())
-                    if not level and 'animate' in random_key:  # this also includes INanimate
-                        level = random_key
-                    if pos == 'det':
-                        message[msg_idx] += "," + random_key  # def/indef info
-                        determiners = syn[random_key]
-                    elif random_key in ['past', 'present']:
-                        if self.ignore_past_tense:
-                            random_key = 'present'
-                        message[-1] += "," + random_key
-                    elif random_key in self.genders:
-                        random_key = gender  # gender = random_key
-
-                    if len(syn) == 1 and syn.keys()[0] in self.genders:
-                        gender = syn.keys()[0]
-                        random_key = gender
-
-                    if random_key not in syn:
-                        random_key = self.random_choice(syn.keys(), exclude_cognates=exclude_cognates)
-                        gender = random_key
-                    w = syn[random_key]
-
-                    if type(w) is dict:
-                        random_key = self.random_choice(w.keys(), exclude_cognates=exclude_cognates)
-                        if random_key in self.genders:
-                            gender = random_key
-                        if type(w[random_key]) is list:
-                            wd = self.random_choice(w[gender], exclude_cognates=exclude_cognates)
-                            if level == 'animate':  # include semantic gender, we can decide later whether to use it
-                                message[msg_idx] += "," + gender.upper()
-                            if not use_noun_phrase[sentence_idx] and msg_idx == 0:  # go for pronoun (instead of NP)
-                                message[0] = re.sub(r"def|indef", "", message[0]) + "PRON"  # remove def/indef info
-                                # add pronoun
-                                sentence.append(self.lexicon[lang]['pron'][gender])
-                            elif add_det or use_noun_phrase[sentence_idx] or msg_idx > 0:
-                                if type(determiners) is dict:
-                                    sentence.append(determiners[gender])
-                                add_det = False  # reset
-                                sentence.append(wd)
-                            message[msg_idx] += "," + self.get_concept(wd, lang)
-                            msg_idx += 1
-                        else:
-                            add_det = True
-                    elif type(w) is list:
-                        random_word = self.random_choice(w, exclude_cognates=exclude_cognates)
-                        if "AGENT-MOD=" in message and part == "adj":
-                            message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word, lang)
-                        else:
-                            message[msg_idx] += "," + self.get_concept(random_word, lang)  # nouns
-                        if level == 'animate' and 'noun' in pos:  # include semantic gender, we can discard it later
-                            message[msg_idx] += "," + gender.upper()
-                        if not use_noun_phrase[
-                            sentence_idx] and msg_idx == 0 and 'noun' in pos:  # go for pronoun (instead of NP)
-                            message[0] = re.sub(r"def|indef", "", message[0]) + ",PRON"
-                            add_det = False
-                            # add pronoun
-                            sentence.append(self.lexicon[lang]['pron'][gender])
-                        elif add_det:
-                            sentence.append(determiners[gender])
-                            add_det = False  # reset
-                            sentence.append(random_word)
-                        elif use_noun_phrase[sentence_idx]:
-                            if add_det:
-                                sentence.append(determiners[gender])
-                                add_det = False  # reset
-                            sentence.append(random_word)
-                        elif not use_noun_phrase[sentence_idx] and msg_idx > 0:
-                            sentence.append(random_word)
-                        if (((lang == 'es' and 'adj' in pos and 'with' not in pos_full) or
-                                                         (
-                                                                                 lang == 'en' and 'noun' in pos and 'with' not in pos_full and msg_idx < 1))):
-                            msg_idx += 2
-                        elif 'verb' in pos or (msg_idx > 1 and lang == 'es') or \
-                                (lang == 'en' and 'noun' in pos) or (lang == 'es' and 'adj' in pos):
-                            msg_idx += 1
-                    else:  # elif type == str
-                        if not use_noun_phrase[sentence_idx] and w == determiners and msg_idx < 1:
-                            continue
-                        sentence.append(w)
-                elif type(syn) is list:
-                    if add_det:
-                        det = determiners if gender not in determiners else determiners[gender]
-                        sentence.append(det)
-                        add_det = False
-
-                    random_word = self.random_choice(syn, exclude_cognates=exclude_cognates)
-                    if "AGENT-MOD=" in message and part == "adj":
-                        message[message.index("AGENT-MOD=")] += ",%s" % self.get_concept(random_word, lang)
-                    else:
-                        message[msg_idx] += self.get_concept(random_word,
-                                                             lang)  # '%s%s' % ("," if part == "adj" else "", self.get_concept(random_word))  # verb
-
-                    if 'verb' in pos:
-                        msg_idx += 1
-                    if part != 'adj' or (part == 'adj' and not (not use_noun_phrase[sentence_idx] and msg_idx == 0)):
-                        sentence.append(random_word)
-                else:
-                    sentence.append(syn)
-
             sentence = u"%s ." % " ".join(sentence)
-            unique_roles = [w for w in sentence.split() if w not in self.determiners]
+            #unique_roles = [w for w in sentence.split() if w not in self.determiners]
             message = ";".join(message).upper()
-            message = re.sub(r",,", ",", message)
-            message = re.sub(r"=,", "=", message)
-            if sentence_is_unique(message, exclude_test_sentences, generated_pairs, unique_roles):
+            print sentence
+            print message
+            if sentence_is_unique(message, exclude_test_sentences, generated_pairs):
                 generated_pairs.append((sentence, message))
                 sentence_idx += 1
                 if print_on_screen:
@@ -414,18 +300,28 @@ class SetsGenerator:
                         f.write(u"%s## %s\n" % (sentence, message))
             else:  # find unique sentence, don't add it to the training set
                 remaining_structures.append((pos_full, msg))
-
         return remaining_structures, generated_pairs
 
-    def select_random_morpheme_for_lang(self, pos, lang, type=None, gender=None):
+    def select_random_morpheme_for_lang(self, pos, lang, pos_type=None, gender=None):
+        if '::' in pos:
+            if pos_type:
+                print pos_type
+                sys.exit()
+            pos, pos_type = pos.split('::')
         query = "pos == '%s'" % pos
-        if type:
-            query = "%s and type = '%s'" % (query, type)
+        if pos_type == 'animate':
+            query = "%s and semantic_gender == semantic_gender" % query
+        elif pos_type == 'inanimate':  # checks for NaN
+            query = "%s and semantic_gender != semantic_gender" % query
+        elif pos_type:
+            query = "%s and type == '%s'" % (query, pos_type)
         if gender:
-            query = "%s and syntactic_gender_es = '%s'" % (query, gender)
+            query = "%s and syntactic_gender_es == '%s'" % (query, gender)
+        print '-----', query, '-----'
         w = self.lexicon_df.query(query)
-
-        # print w[['morpheme_%s' % lang, 'type', 'syntactic_gender_es', 'concept']]
+        print w
+        # print w[['morpheme_%s' % lang, 'pos_type', 'syntactic_gender_es', 'concept']]
+        print w[['morpheme_%s' % lang, 'type', 'syntactic_gender_es', 'concept']]
         return w[['morpheme_%s' % lang, 'type', 'syntactic_gender_es', 'concept']].sample()
 
     def random_choice(self, options, exclude_cognates=False):
@@ -499,9 +395,8 @@ def get_clean_lexicon(lexicon_csv, include_false_friends, include_cognates):
     return df.query(query)
 
 
-def sentence_is_unique(message, exclude_test_sentences, generated_pairs, unique_roles):
-    if message in ([x[1] for x in exclude_test_sentences+generated_pairs]) or \
-                    len(unique_roles) != len(set(unique_roles)):
+def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
+    if message in ([x[1] for x in exclude_test_sentences+generated_pairs]):
         return False
     return True
 
@@ -517,8 +412,10 @@ def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2
     return num_train, num_test
 
 
-def is_nan(num):
-    return num != num
+def get_df_concept(morpheme):
+    if not morpheme['concept'].isnull().values.any():
+        return morpheme['concept'].values[0]
+    return morpheme['type'].values[0]
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
