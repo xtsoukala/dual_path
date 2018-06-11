@@ -271,25 +271,24 @@ class SetsGenerator:
             lang = message[-1].split(',')[-1].lower()
             sentence = []
             msg_idx = 0
-            for pos in pos_full.split():
-                print pos
-                morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang)
+            gender = None
+            for i, pos in enumerate(pos_full.split()):
+                morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender)
+                gender = get_df_gender(morpheme_df, prev_gender=gender)
+                # print gender, morpheme_df.iloc[0][0]
                 concept = get_df_concept(morpheme_df)
-                message[msg_idx] = "%s,%s" % (message[msg_idx], concept) \
-                                   if message[msg_idx][-1] != '=' else "%s%s" % (message[msg_idx], concept)
-                print morpheme_df.iloc[0][0]
+                if concept:
+                    message[msg_idx] = add_concept_and_gender_info(message[msg_idx], concept, gender, pos)
+                    msg_idx = alter_msg_idx(msg_idx, pos, lang)
+                if pos == 'det' and lang == 'en' and 'adj' in pos_full[i + 1]:
+                    msg_idx += 1
                 sentence.append(morpheme_df.iloc[0][0])
-                print '!@@@'
-                print message
-                print sentence
-                print '@@@'
-            print '---'
-
             sentence = u"%s ." % " ".join(sentence)
-            #unique_roles = [w for w in sentence.split() if w not in self.determiners]
+            # unique_roles = [w for w in sentence.split() if w not in self.determiners]
             message = ";".join(message).upper()
             print sentence
             print message
+            print '---'
             if sentence_is_unique(message, exclude_test_sentences, generated_pairs):
                 generated_pairs.append((sentence, message))
                 sentence_idx += 1
@@ -299,14 +298,14 @@ class SetsGenerator:
                     with codecs.open('%s/%s' % (self.results_dir, fname), 'a', "utf-8") as f:
                         f.write(u"%s## %s\n" % (sentence, message))
             else:  # find unique sentence, don't add it to the training set
-                remaining_structures.append((pos_full, msg))
+                remaining_structures.append((msg, pos_full))
         return remaining_structures, generated_pairs
 
-    def select_random_morpheme_for_lang(self, pos, lang, pos_type=None, gender=None):
+    def select_random_morpheme_for_lang(self, pos, lang, gender=None):
+        if gender and not any([x in pos for x in ['noun', 'adj']]):
+            gender = None
+        pos_type = None
         if '::' in pos:
-            if pos_type:
-                print pos_type
-                sys.exit()
             pos, pos_type = pos.split('::')
         query = "pos == '%s'" % pos
         if pos_type == 'animate':
@@ -316,13 +315,16 @@ class SetsGenerator:
         elif pos_type:
             query = "%s and type == '%s'" % (query, pos_type)
         if gender:
-            query = "%s and syntactic_gender_es == '%s'" % (query, gender)
-        print '-----', query, '-----'
+                query = "%s and (syntactic_gender_es == '%s' or syntactic_gender_es == 'M-F')" % (query, gender)
         w = self.lexicon_df.query(query)
-        print w
-        # print w[['morpheme_%s' % lang, 'pos_type', 'syntactic_gender_es', 'concept']]
-        print w[['morpheme_%s' % lang, 'type', 'syntactic_gender_es', 'concept']]
-        return w[['morpheme_%s' % lang, 'type', 'syntactic_gender_es', 'concept']].sample()
+        if pos == 'adj' and gender == 'F' and lang == 'es' and not value_is_nan(w['adj_es_female'].iloc[0]):
+            res = w[['adj_es_female', 'pos', 'type', 'syntactic_gender_es', 'concept',
+                     'is_cognate', 'is_false_friend']].sample()
+            res.columns = ['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'concept',
+                           'is_cognate', 'is_false_friend']
+            return res
+        return w[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'concept',
+                  'is_cognate', 'is_false_friend']].sample()
 
     def random_choice(self, options, exclude_cognates=False):
         choice = random.choice(options)
@@ -382,6 +384,14 @@ class SetsGenerator:
         return l1, l2
 
 
+def alter_msg_idx(msg_idx, pos, lang):
+    if pos != 'det':
+        msg_idx += 1
+    elif lang == 'en' and 'adj' in pos:
+        msg_idx -= 1
+    return msg_idx
+
+
 def get_clean_lexicon(lexicon_csv, include_false_friends, include_cognates):
     if not os.path.isfile(lexicon_csv):
         lexicon_csv = "modules/%s" % lexicon_csv
@@ -401,6 +411,14 @@ def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
     return True
 
 
+def add_concept_and_gender_info(message, concept, gender, pos):
+    if message[-1] != '=':
+        msg = "%s,%s" % (message, concept) if 'noun' not in pos else "%s,%s,%s" % (message, concept, gender)
+    else:
+        msg = "%s%s" % (message, concept) if 'noun' not in pos else "%s%s,%s" % (message, concept, gender)
+    return msg
+
+
 def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
     """
     :param num_sentences: Number of sentences that need to be generated
@@ -414,8 +432,27 @@ def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2
 
 def get_df_concept(morpheme):
     if not morpheme['concept'].isnull().values.any():
+        if morpheme['is_cognate'].values.any() == 'Y':
+            return "%s,COG" % morpheme['concept'].values[0]
+        if morpheme['is_false_friend'].values.any() == '1':
+            return "%s,FF" % morpheme['concept'].values[0]
         return morpheme['concept'].values[0]
-    return morpheme['type'].values[0]
+    if morpheme['pos'].values.any() == 'det':
+        return morpheme['type'].values[0]
+    return False
+
+
+def get_df_gender(morpheme_df, prev_gender):
+    if morpheme_df['syntactic_gender_es'].iloc[0] and not value_is_nan(morpheme_df['syntactic_gender_es'].iloc[0]) \
+            and morpheme_df['syntactic_gender_es'].iloc[0] != 'M-F':
+            return morpheme_df['syntactic_gender_es'].iloc[0]
+    return prev_gender
+
+
+def value_is_nan(x):
+    if x != x:
+        return True
+    return False
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
