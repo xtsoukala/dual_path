@@ -307,14 +307,17 @@ class DualPath:
         return False  # no CS type found
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
+        lang = 'es'
         if trg_lang_word_idx < self.inputs.code_switched_idx:
-            trans = [self.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
+            lang = 'en'
+        trans = [self.inputs.find_equivalent_translation_idx(idx, lang) for idx in out_sentence_idx]
+        """    trans = [self.inputs.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
                      if (idx >= self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx))
                      else [idx] for idx in out_sentence_idx]
         else:
             trans = [self.find_equivalent_translation_idx(idx)
                      if (idx < self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx)) else [idx]
-                     for idx in out_sentence_idx]
+                     for idx in out_sentence_idx]"""
         if any(len(i) > 1 for i in trans):
             return [list([x] for x in tup) for tup in list(itertools.product(*trans))]
         return [trans]
@@ -347,40 +350,17 @@ class DualPath:
                 cs_type = "inter-word switch"
         return cs_type
 
-    def find_equivalent_translation_idx(self, idx, remove_candidates_less_than_cs_point=False):
-        word = self.inputs.lexicon[idx]
-        if word in self.inputs.translation_dict:
-            translation = self.inputs.translation_dict[word]
-        elif word in self.inputs.reverse_translation_dict:
-            translation = self.inputs.reverse_translation_dict[word]
-        else:
-            concept = self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
-            all_translations = [w for w in self.inputs.concept_to_words[concept] if w != word]
-            if not all_translations:
-                # print word, idx, concept
-                return [idx]  # this is the case where a word exists in one language but not the other
-            elif len(all_translations) > 1:
-                if remove_candidates_less_than_cs_point:
-                    return [self.inputs.lexicon.index(translation) for translation in all_translations
-                            if self.inputs.lexicon.index(translation) < self.inputs.code_switched_idx]
-                else:
-                    return [self.inputs.lexicon.index(translation) for translation in all_translations
-                            if self.inputs.lexicon.index(translation) >= self.inputs.code_switched_idx]
-            else:
-                translation = all_translations[0]
-        return [self.inputs.lexicon.index(translation)]
-
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
-        out_pronouns = [idx for idx in out_sentence_idx if idx in self.inputs.idx_en_pronoun]
-        trg_pronouns = [idx for idx in trg_sentence_idx if idx in self.inputs.idx_en_pronoun]
+        out_pronouns = [idx for idx in out_sentence_idx if idx in self.inputs.idx_pronoun]
+        trg_pronouns = [idx for idx in trg_sentence_idx if idx in self.inputs.idx_pronoun]
         if out_pronouns != trg_pronouns:
             return True
         return False
 
     def test_meaning_without_pronouns(self, out_sentence_idx, trg_sentence_idx):
         # remove subject pronouns and check the rest of the sentence
-        out = [idx for idx in out_sentence_idx if idx not in self.inputs.idx_en_pronoun]
-        trg = [idx for idx in trg_sentence_idx if idx not in self.inputs.idx_en_pronoun]
+        out = [idx for idx in out_sentence_idx if idx not in self.inputs.idx_pronoun]
+        trg = [idx for idx in trg_sentence_idx if idx not in self.inputs.idx_pronoun]
         return self.test_for_flexible_order(out, trg, allow_identical=True)
 
     def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, check_pron, is_test_set=True):
@@ -535,6 +515,10 @@ class DualPath:
         has_flex_order = True
         if out_sentence_idx == trg_sentence_idx:  # if sentences are identical no need to check further
             return is_grammatical, not has_flex_order
+        if ('95' or 95) in out_sentence_idx:
+            print out_sentence_idx
+            print trg_sentence_idx
+            print '-----'
         out_pos = self.inputs.sentence_indeces_pos(out_sentence_idx)
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
@@ -605,6 +589,7 @@ if __name__ == "__main__":
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
+    parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
@@ -638,6 +623,7 @@ if __name__ == "__main__":
                         type=int, default=20)
     """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
+    parser.add_argument('-lexicon_csv', help='CSV file that contains the lexicon and concepts', default='lexicon.csv')
     parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
     parser.add_argument('-role', help='File name that contains the roles', default='roles.in')
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
@@ -668,12 +654,6 @@ if __name__ == "__main__":
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
-    parser.add_argument('--nopast', dest='ignore_past', action='store_true',
-                        help='Include past tense')
-    parser.set_defaults(ignore_past=False)
-    parser.add_argument('--noadj', dest='use_adjectives', action='store_false',
-                        help='Do not use adjectives')
-    parser.set_defaults(use_adjectives=True)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
     parser.set_defaults(full_verb=False)
@@ -719,15 +699,12 @@ if __name__ == "__main__":
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_simple_semantics=args.simple_semantics, add_filler=args.filler,
-                             percentage_noun_phrase=args.np, allow_free_structure_production=args.free_pos,
-                             ignore_past=args.ignore_past)
+                             use_simple_semantics=args.simple_semantics,
+                             allow_free_structure_production=args.free_pos)
         if args.cognate_experiment:
-            sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
-                                                      save_input_files=True)
+            sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
         else:
-            sets.generate_sets(num_sentences=args.generate_num, lang=args.lang,
-                               include_bilingual_lexicon=False if args.word_embeddings else True, save_input_files=True)
+            sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
 
     if not args.title:
         args.title = generate_title_from_lang(args.lang)
@@ -748,8 +725,8 @@ if __name__ == "__main__":
                  args.compress, args.crole, args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw,
                  args.fwi, args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
-    inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lex_fname=args.lexicon,
-                            concept_fname=args.concepts, role_fname=args.role, evsem_fname=args.eventsem,
+    inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
+                            role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
@@ -777,10 +754,12 @@ if __name__ == "__main__":
                 sets.results_dir = rdir
                 sets.seed = sim  # set new seed for language generator
                 if args.cognate_experiment:
-                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, lang=args.lang,
-                                                              save_input_files=False)
+                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num,
+                                                              percentage_L2=args.l2_percentage,
+                                                              save_files=False)
                 else:
-                    sets.generate_sets(num_sentences=args.generate_num, lang=args.lang, include_bilingual_lexicon=True)
+                    sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage,
+                                       save_files=False)
             elif original_input_path:
                 # use existing test/training set (copy them first)
                 copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)
