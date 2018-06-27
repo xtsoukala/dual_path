@@ -52,7 +52,6 @@ class Plotter:
             plt.close()
 
         ################### CODE-SWITCHES ###################
-
         if sum(results['code_switches']['test']) > 0:
             plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
                      label="All CS")
@@ -78,7 +77,7 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
-            # same as above but plot percentage among correctly produced sentences only
+            # same as above but plot PERCENTAGE among correctly produced sentences only
             plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                               for i, value in enumerate(results['correct_code_switches']['test'])],
                      color='darkslateblue', label="Test set")
@@ -101,34 +100,40 @@ class Plotter:
             plt.close()
 
             # PLOT ONLY NOUNS AND ALTERNATIONAL CS
+            plot_individual = False
             if 'EN-noun' in results['type_code_switches']['test']:
                 plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['EN-noun'])],
                          color='darkslateblue', label="Noun (EN)")
+                plot_individual = True
             if 'ES-noun' in results['type_code_switches']['test']:
                 plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['ES-noun'])],
                          color='deepskyblue', label="Noun (ES)")
+                plot_individual = True
             if 'ES-alternational CS' in results['type_code_switches']['test']:
                 plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['ES-alternational CS'])],
                          color='olivedrab', label="Alternational CS (ES)")
+                plot_individual = True
             if 'EN-alternational CS' in results['type_code_switches']['test']:
                 plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
                                   for i, value in enumerate(results['type_code_switches']['test']['EN-alternational CS'])],
                          color='yellowgreen', label="Alternational CS (EN)")
+                plot_individual = True
 
-            plt.xlabel('Epochs')
-            plt.ylabel('% noun/alternational code-switches among correctly produced sentences')
-            plt.ylim([0, 30])
-            plt.xlim(min(epochs), max(epochs))
-            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
-            if summary_sim:
-                fname = '%s/summary_%s_noun_alternational_percentage.pdf' % (self.results_dir, summary_sim)
-            else:
-                fname = '%s/noun_alternational_percentage.pdf' % self.results_dir
-            plt.savefig(fname)
-            plt.close()
+            if plot_individual:
+                plt.xlabel('Epochs')
+                plt.ylabel('% noun/alternational code-switches among correctly produced sentences')
+                plt.ylim([0, 30])
+                plt.xlim(min(epochs), max(epochs))
+                plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
+                if summary_sim:
+                    fname = '%s/summary_%s_noun_alternational_percentage.pdf' % (self.results_dir, summary_sim)
+                else:
+                    fname = '%s/noun_alternational_percentage.pdf' % self.results_dir
+                plt.savefig(fname)
+                plt.close()
 
             # plot each code-switch type individually
 
@@ -201,21 +206,22 @@ class Plotter:
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
 
-            if summary_sim:
-                fname = '%s/summary_%s_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
-                                                                     dataset_type)
-                # also save type_test_ES and type_test_EN
-                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
-                            "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
+                if summary_sim:
+                    fname = '%s/summary_%s_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
+                                                                         dataset_type)
+                    # also save type_test_ES and type_test_EN
+                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                        f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                                "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
 
-            else:
-                fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
-            plt.savefig(fname)
-            plt.close()
+                else:
+                    fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
+                plt.savefig(fname)
+                plt.close()
+
             # same for percentage of correct sentences
             # make sure there is still something to be plotted after the manipulations
-            if type_test_correct_ES or type_test_correct_EN:
+            if is_not_empty(type_test_correct_ES) or is_not_empty(type_test_correct_EN):
                 ind = np.arange(len(all_cs_types))  # the x locations for the groups
                 width = 0.35  # the width of the bars
 
@@ -236,18 +242,18 @@ class Plotter:
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
 
-            if summary_sim:
-                fname = '%s/summary_%s_correct_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
-                                                                             dataset_type)
-                # also save type_test_ES and type_test_EN
-                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
-                            "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
+                if summary_sim:
+                    fname = '%s/summary_%s_correct_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
+                                                                                 dataset_type)
+                    # also save type_test_ES and type_test_EN
+                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                        f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                                "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
 
-            else:
-                fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
-            plt.savefig(fname)
-            plt.close()
+                else:
+                    fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
+                plt.savefig(fname)
+                plt.close()
 
             # NOW THE SAME FOR THE COG EXPERIMENT
             for dataset_type in ['test']:  # ['training', 'test']:
@@ -273,30 +279,30 @@ class Plotter:
 
                     # same for COG
                     cog_type = "%s-COG" % cs_type
-                    if cog_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    if cog_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][cog_type][2:]]
+                                                     for x in results['type_code_switches'][dataset_type][cog_type]]
                         type_test_COG.append((np.mean(values_percentage_testset),
                                               np.std(values_percentage_testset)))
                     else:
                         type_test_COG.append((0, 0))
                     # same for FF
                     ff_type = "%s-FF" % cs_type
-                    if ff_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    if ff_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][ff_type][2:]]
+                                                     for x in results['type_code_switches'][dataset_type][ff_type]]
                         type_test_FF.append((np.mean(values_percentage_testset),
                                              np.std(values_percentage_testset)))
                     else:
                         type_test_FF.append((0, 0))
                     # same for non cognates-false friends
                     ff_type = "%s-ENES" % cs_type
-                    if ff_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
+                    if ff_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][ff_type][2:]]
+                                                     for x in results['type_code_switches'][dataset_type][ff_type]]
                         type_test_ENES.append((np.mean(values_percentage_testset),
                                                np.std(values_percentage_testset)))
                     else:
@@ -327,25 +333,25 @@ class Plotter:
                 ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
                 plt.tight_layout()  # make room for labels
 
-            if summary_sim:
-                fname = '%s/summary_%s_type_code_switches_COG_FF_%s.pdf' % (self.results_dir, summary_sim,
-                                                                            dataset_type)
-                # also save type_test_ES and type_test_EN
-                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
-                            "\nType code-switch COG (test set): %s" %
-                            (type_test_ENES, type_test_FF, type_test_COG))
+                if summary_sim:
+                    fname = '%s/summary_%s_type_code_switches_COG_FF_%s.pdf' % (self.results_dir, summary_sim,
+                                                                                dataset_type)
+                    # also save type_test_ES and type_test_EN
+                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                        f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
+                                "\nType code-switch COG (test set): %s" %
+                                (type_test_ENES, type_test_FF, type_test_COG))
 
-            else:
-                fname = '%s/type_code_switches_COG_FF_%s.pdf' % (self.results_dir, dataset_type)
-            plt.savefig(fname)
-            plt.close()
+                else:
+                    fname = '%s/type_code_switches_COG_FF_%s.pdf' % (self.results_dir, dataset_type)
+                plt.savefig(fname)
+                plt.close()
 
         # Pronoun errors - only plot if there's something to be plotted!
         if sum(results['pronoun_errors_flex']['test']) > 0 or sum(results['pronoun_errors']['test']) > 0:
-            plt.plot(epochs[1:], results['pronoun_errors']['test'][1:], label='Subject pronoun errors')
-            plt.plot(epochs[1:], results['pronoun_errors_flex']['test'][1:], linestyle='--')
-            plt.xlim(min(epochs[1:]), max(epochs))
+            plt.plot(epochs, results['pronoun_errors']['test'], label='Subject pronoun errors')
+            plt.plot(epochs, results['pronoun_errors_flex']['test'], linestyle='--')
+            plt.xlim(min(epochs), max(epochs))
             plt.xlabel('Epochs')
             plt.ylabel('Sum of subject pronoun errors')
             if summary_sim:
@@ -364,9 +370,9 @@ class Plotter:
             else:
                 percentage_pronoun_errors = results['pronoun_errors']['test']
                 percentage_pronoun_errors_flex = results['pronoun_errors_flex']['test']
-            plt.plot(epochs[1:], percentage_pronoun_errors[1:])
-            plt.plot(epochs[1:], percentage_pronoun_errors_flex[1:], linestyle='--')
-            plt.xlim(min(epochs[1:]), max(epochs))
+            plt.plot(epochs, percentage_pronoun_errors)
+            plt.plot(epochs, percentage_pronoun_errors_flex, linestyle='--')
+            plt.xlim(min(epochs), max(epochs))
             plt.xlabel('Epochs')
             plt.ylabel('Percentage (%) of subject pronoun errors in test set')
             plt.ylim([0, 15])
@@ -400,6 +406,12 @@ class Plotter:
         fname = '%s/%s_connection_weights.pdf' % (self.results_dir, layer_name)
         plt.savefig(fname)
         plt.close()
+
+
+def is_not_empty(x):
+    if x and sum([pair[0]+pair[1] for pair in x]):
+        return True
+    return False
 
 
 def percentage(x, total):

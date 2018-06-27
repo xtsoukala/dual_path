@@ -22,6 +22,7 @@ class InputFormatter:
         self.use_word_embeddings = use_word_embeddings
         self.concepts = list(self.lexicon_df.concept.dropna().unique()) if not use_word_embeddings \
             else word2vec.load('word2vec/text8.bin')
+        self.semantic_gender = semantic_gender
         self.identif = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list(role_fname)
@@ -29,7 +30,6 @@ class InputFormatter:
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis_percentage = emphasis
-        self.semantic_gender = semantic_gender
         self.testset = testset
         self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
@@ -88,9 +88,8 @@ class InputFormatter:
         return self.lexicon.index(word)
 
     def morpheme_to_concept(self, morpheme, lang):
-        print morpheme
-        print lang
-        sys.exit()
+        c = self.lexicon_df.loc[(self.lexicon_df['morpheme_es'] == morpheme) | (self.lexicon_df['morpheme_en'] == morpheme)]
+        return c['concept']
 
     def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
@@ -205,7 +204,7 @@ class InputFormatter:
         if word_idx >= self.code_switched_idx:  # adjust for Spanish words
             word_idx -= self.code_switched_idx
         try:
-            return self.lexicon_df['pos'].iloc[word_idx]
+            return self.lexicon_df['pos'].values[word_idx]
         except:
             print word_idx
             sys.exit()

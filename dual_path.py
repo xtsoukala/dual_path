@@ -281,9 +281,9 @@ class DualPath:
         It doesn't verify the validity of the expressed message """
         skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_idx + self.inputs.false_friend_idx
         # skip indeces that are common in all lang
-        sentence_no_period_cognate_ff = [x for x in sentence_indeces if x not in skipped_idx]
-        if (all(i >= self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff) or
-                all(i < self.inputs.code_switched_idx for i in sentence_no_period_cognate_ff)):
+        clean_sentence = [x for x in sentence_indeces if x not in skipped_idx]
+        if (all(i > self.inputs.code_switched_idx for i in clean_sentence) or
+                all(i <= self.inputs.code_switched_idx for i in clean_sentence)):
             return False
         else:
             return True
@@ -453,10 +453,10 @@ class DualPath:
                 suffix = ("flex-" if flexible_order or has_wrong_det or has_wrong_tense
                           else "in" if not correct_meaning else "")
                 with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s "
+                    f.write("--------%s--------\nOUT:%s %s\nTRG:%s %s\nGrammatical:%s Tense:%s Definiteness:%s "
                             "Meaning:%scorrect %s\n%s\n" %
-                            (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
-                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
+                            (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx), produced_sentence_idx,
+                             self.inputs.sentence_from_indeces(target_sentence_idx), target_sentence_idx, has_correct_pos,
                              not has_wrong_tense, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""), message))
@@ -515,10 +515,6 @@ class DualPath:
         has_flex_order = True
         if out_sentence_idx == trg_sentence_idx:  # if sentences are identical no need to check further
             return is_grammatical, not has_flex_order
-        if ('95' or 95) in out_sentence_idx:
-            print out_sentence_idx
-            print trg_sentence_idx
-            print '-----'
         out_pos = self.inputs.sentence_indeces_pos(out_sentence_idx)
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
@@ -646,8 +642,8 @@ if __name__ == "__main__":
     parser.set_defaults(nolang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
-    parser.add_argument('--gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
-    parser.set_defaults(gender=False)
+    parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
+    parser.set_defaults(gender=True)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
                         help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
     parser.set_defaults(simple_semantics=True)
