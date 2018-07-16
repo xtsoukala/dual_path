@@ -131,7 +131,7 @@ class SimpleRecurrentNetwork:
         if target_lang_act is not None:
             target_lang.activation = target_lang_act
         else:
-            target_lang.activation = [0.5] * target_lang.size
+            target_lang.activation = [1] * target_lang.size
 
     def boost_non_target_lang(self, target_lang_idx):
         target_lang = self.get_layer("target_lang")
@@ -315,7 +315,7 @@ class SimpleRecurrentNetwork:
 
     def get_max_output_activation(self):
         output = self.get_layer("output")
-        return output.activation.argmax()
+        return int(output.activation.argmax())  # convert output to integer
 
     def get_layer_activation(self, layer_name):
         layer = self.get_layer(layer_name)

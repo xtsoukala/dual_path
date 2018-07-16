@@ -14,9 +14,11 @@ class InputFormatter:
                  fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis,
                  prodrop, plot_title, use_word_embeddings):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
+        self.lang = language.lower()
+        self.L1, self.L2 = self.get_l1_and_l2()
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, lexicon_csv), sep=',', header=0)  # 1st line: header
-        self.lexicon, self.code_switched_idx = self.get_lexicon_and_code_switched_idx()
+        self.lexicon, self.pos, self.code_switched_idx = self.get_lexicon_pos_and_code_switched_idx()
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -55,6 +57,7 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang='en')
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == '1'", lang='en')
+        self.shared_idx = [self.period_idx] + self.cognate_idx + self.false_friend_idx
         self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
@@ -63,7 +66,15 @@ class InputFormatter:
         self.roles_size = len(self.roles)
 
         self.plot_title = plot_title
-        self.lang = language
+
+    def get_l1_and_l2(self):
+        if len(self.lang) == 4:
+            L1 = self.lang[:2]
+            L2 = self.lang[2:]
+        else:
+            L1 = self.lang
+            L2 = None
+        return L1, L2
 
     def update_sets(self, new_input_dir):
         self.input_dir = new_input_dir
@@ -73,12 +84,24 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
-    def get_lexicon_and_code_switched_idx(self):
-        x = ['']
-        x.extend(list(self.lexicon_df['morpheme_en']))
-        code_switched_idx = len(x) - 1
-        x.extend(list(self.lexicon_df['morpheme_es']))
-        return x, code_switched_idx
+    def get_lexicon_pos_and_code_switched_idx(self):
+        """
+        :return: lexicon in list format and code-switched id (the first entry of the second language)
+        """
+        x = ['', '.']
+        pos = ['', 'period']
+        l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos']].dropna()
+        x.extend(list(l1_column['morpheme_%s' % self.L1]))
+        pos.extend(list(l1_column['pos']))
+
+        code_switched_idx = len(x)
+        l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos']].dropna()
+        l2_pos_list = list(l2_column['pos'])
+        for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2])):
+            if item not in x:  # only get unique items. set() would change the order, do this instead
+                x.append(item)
+                pos.append(l2_pos_list[i])
+        return x, pos, code_switched_idx
 
     def get_lexicon_index(self, word):
         """
@@ -200,14 +223,7 @@ class InputFormatter:
         :param word_idx: the index of the word in the lexicon
         :return: the category of the word (noun, verb etc)
         """
-        word_idx -= 1  # need to reduce by 1 because of the added space in position 0
-        if word_idx >= self.code_switched_idx:  # adjust for Spanish words
-            word_idx -= self.code_switched_idx
-        try:
-            return self.lexicon_df['pos'].values[word_idx]
-        except:
-            print word_idx
-            sys.exit()
+        return self.pos[word_idx]
 
     def sentence_from_indeces(self, sentence_idx):
         """
@@ -257,8 +273,7 @@ class InputFormatter:
                 for event in what.split(","):
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
                         activation = reduced_activation
-                        break
-                    if event in self.languages:
+                    elif event in self.languages:
                         target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
                     elif event == 'ENES':
@@ -292,7 +307,7 @@ class InputFormatter:
                             else:
                                 print message, '#####', concept
                                 import sys;sys.exit()
-        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
+        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language.lower()
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec"""
@@ -310,16 +325,16 @@ class InputFormatter:
             languages = ['morpheme_%s' % lang]
         else:
             languages = ['morpheme_en', 'morpheme_es']
-        q = list(self.lexicon_df.query(query)[languages].values.ravel())
+        q = list(self.lexicon_df.query(query)[languages].dropna().values.ravel())
         return self.sentence_indeces(q)
 
-    def find_equivalent_translation_idx(self, idx, lang, ignore_cognates=True):
+    def find_equivalent_translation_idx(self, idx, lang):
         # FIXME: Lookup concept and find all morphemes in other lang
-        if idx in self.cognate_idx and ignore_cognates:
+        if idx in (self.cognate_idx or self.period_idx):  # ignore shared idx
             return [idx]
-        if idx > self.code_switched_idx and lang == 'en':
+        if idx > self.code_switched_idx and lang == self.L1:
             idx -= self.code_switched_idx
-        elif lang == 'es' and idx <= self.code_switched_idx:
+        elif lang == self.L2 and idx <= self.code_switched_idx:
             idx += self.code_switched_idx
         return [idx]
         """word = self.inputs.lexicon[idx]

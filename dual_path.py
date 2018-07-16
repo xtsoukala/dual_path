@@ -9,9 +9,6 @@ from modules.plotter import Plotter
 from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
 
 
-allow_cognate_boost = False  # temp, will be moved to params
-
-
 class DualPath:
     """
     Dual-path is based on the SRN architecture and has the following layers (plus hidden & context):
@@ -28,7 +25,7 @@ class DualPath:
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
-                 input_format, check_pronouns, simulation_num=None):
+                 input_format, check_pronouns, simulation_num=None, allow_cognate_boost=False):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -45,6 +42,7 @@ class DualPath:
         :param input_format: Instance of InputFormatter Class (contains all the input for the model)
         :param check_pronouns: Whether to evaluate pronoun production
         :param simulation_num: Number of simulation (useful in case we run several simulations in parallel)
+        :param allow_cognate_boost: Whether the non-target language will be boosted after the model produces a cognate
         """
         self.inputs = input_format
         self.compress_size = compress_size
@@ -60,6 +58,7 @@ class DualPath:
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
         # |----------!PARAMS----------|
+        self.allow_cognate_boost = allow_cognate_boost
         self.exclude_lang = exclude_lang
         self.check_pronouns = check_pronouns
         self.test_every = test_every  # test every x epochs
@@ -151,17 +150,17 @@ class DualPath:
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
-                    if False:  # TODO: play with activations, e.g. activate the target language slightly more
-                        lang_act = [1, 1] if self.inputs.languages.index(lang) == 0 else [1, 1]
+                    #if False:  # TODO: play with activations, e.g. activate the target language slightly more
+                        lang_act = [1, 1] #if self.inputs.languages.index(lang) == 0 else [1, 1]
                         self.srn.reset_target_lang(target_lang_act=lang_act)
-                    else:
-                        self.srn.reset_target_lang()
+                    #else:
+                    #    self.srn.reset_target_lang()
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
                     break
             # boost after cognate
-            if self.exclude_lang and prod_idx in self.inputs.cognate_idx and allow_cognate_boost:
+            if self.exclude_lang and prod_idx in self.inputs.cognate_idx and self.allow_cognate_boost:
                 self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang))
 
         return produced_sent_ids, target_sentence_ids, message, lang
@@ -276,17 +275,28 @@ class DualPath:
                                  title=self.inputs.plot_title,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
-    def is_code_switched(self, sentence_indeces):
+    def is_code_switched(self, sentence_indeces, target_lang):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
-        skipped_idx = [self.inputs.period_idx] + self.inputs.cognate_idx + self.inputs.false_friend_idx
         # skip indeces that are common in all lang
-        clean_sentence = [x for x in sentence_indeces if x not in skipped_idx]
-        if (all(i > self.inputs.code_switched_idx for i in clean_sentence) or
-                all(i <= self.inputs.code_switched_idx for i in clean_sentence)):
-            return False
-        else:
+        clean_sentence = [x for x in sentence_indeces if x not in self.inputs.shared_idx]
+        if not clean_sentence:
+            return False  # empty sentence
+        min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
+        if ((all(min_and_max_idx) >= self.inputs.code_switched_idx or
+            all(min_and_max_idx) < self.inputs.code_switched_idx) and
+                self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
+                return False
+        return True
+
+    def morpheme_is_from_target_lang(self, morpheme_idx, target_lang):
+        """
+        Assumption: this doesn't check for shared indeces (period/congates) because they have already been stripped
+        """
+        if ((target_lang == self.inputs.L1 and morpheme_idx < self.inputs.code_switched_idx) or
+                (target_lang == self.inputs.L2 and morpheme_idx >= self.inputs.code_switched_idx)):
             return True
+        return False
 
     def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx):
         """ Types of code-switches:
@@ -294,7 +304,7 @@ class DualPath:
                 - inter-sentential (full switch at sentence boundaries)
                 - extra-sentential (insertion of tag)
                 - noun borrowing? (if no determiners were switched)
-            Note: Returns FALSE if the message conveyed was not correct.
+            Note: Returns FALSE if the message conveyed was not correct
         """
         # First "translate" message into the target language and compare with target sentence
         translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
@@ -307,9 +317,10 @@ class DualPath:
         return False  # no CS type found
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
-        lang = 'es'
         if trg_lang_word_idx < self.inputs.code_switched_idx:
-            lang = 'en'
+            lang = self.inputs.L1
+        else:
+            lang = self.inputs.L2
         trans = [self.inputs.find_equivalent_translation_idx(idx, lang) for idx in out_sentence_idx]
         """    trans = [self.inputs.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
                      if (idx >= self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx))
@@ -323,7 +334,7 @@ class DualPath:
         return [trans]
 
     def _idx_is_cognate_or_ff(self, idx):
-        if idx in (self.inputs.cognate_idx or self.inputs.false_friend_idx):
+        if idx in self.inputs.shared_idx:
             return True
         return False
 
@@ -386,8 +397,8 @@ class DualPath:
             produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
             has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
             is_grammatical, flexible_order = self.get_sentence_grammaticality_and_flex_order(produced_sentence_idx,
-                                                                                             target_sentence_idx)
-            code_switched = self.is_code_switched(produced_sentence_idx)
+                                                                                             target_sentence_idx, epoch, line)
+            code_switched = self.is_code_switched(produced_sentence_idx, target_lang=lang)
             if code_switched:
                 num_all_code_switches += 1
 
@@ -408,13 +419,13 @@ class DualPath:
                             type_all_code_switches.update({cs_type_with_lang: 1})
 
                         # check for cognates vs FFs vs regular (no lang)
-                        # COG and FF in message
                         if ',COG' in message:
                             cs_type_with_cognate_status = "%s-COG" % cs_type
                         elif ',FF' in message:
                             cs_type_with_cognate_status = "%s-FF" % cs_type
                         else:  # no cognates or false friends
                             cs_type_with_cognate_status = "%s-ENES" % cs_type
+
                         if cs_type_with_cognate_status in type_all_code_switches:
                             type_all_code_switches[cs_type_with_cognate_status] += 1
                         else:
@@ -503,7 +514,7 @@ class DualPath:
         trg = [x for x in trg_sentence_idx if x not in feature_markers]
         return self.test_for_flexible_order(out, trg, allow_identical=True)
 
-    def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx):
+    def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx, epoch, line):
         """
         Check a sentence's grammaticality. If the target and output sentences don't have identical POS but differ only
         on the double object expression (e.g., gives the book to him/gives him the book) then return flex_order = True
@@ -517,13 +528,21 @@ class DualPath:
             return is_grammatical, not has_flex_order
         out_pos = self.inputs.sentence_indeces_pos(out_sentence_idx)
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
+        """if epoch == 1:
+            print line
+            print out_pos
+            print trg_pos
+            print out_pos == trg_pos
+            print out_pos in self.inputs.allowed_structures
+            print out_pos[-1] == 'TO'
+            os._exit()"""
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
             return is_grammatical, not has_flex_order
-        if out_pos in self.inputs.allowed_structures: # if sentence in list of existing POS
+        if out_pos in self.inputs.allowed_structures:  # if sentence in list of existing POS
             return is_grammatical, not has_flex_order
-        if len(out_pos) > 2 and out_pos[-1] == 'TO':
+        """if len(out_pos) > 2 and out_pos[-1] == 'TO':
             # make sure that output sentence is grammatical and that "to" isn't the last word in the sentence
-            return not is_grammatical, not has_flex_order
+            return not is_grammatical, not has_flex_order"""
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
         if len(out_pos) > len(trg_pos):
             trg_pos.append('TO')
@@ -576,6 +595,9 @@ def generate_title_from_lang(lang_code):
     return title
 
 
+def get_minimum_and_maximum_idx(clean_sentence):
+    return (min(clean_sentence), max(clean_sentence))  # set with 2 indeces, min and max
+
 if __name__ == "__main__":
     import argparse
 
@@ -586,7 +608,7 @@ if __name__ == "__main__":
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
-    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    parser.add_argument('-input', default='simulations/2018-07-16t13.58.10_esen_h80_c40/input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -609,7 +631,7 @@ if __name__ == "__main__":
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=2, help='training several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)

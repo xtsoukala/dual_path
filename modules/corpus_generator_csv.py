@@ -107,7 +107,7 @@ class SetsGenerator:
         """
         :param original_sets: the sentence/message pairs that need to be modified to include cognates or false friends
         :param replacement_idx: index (position) of thematic role that needs to be replaced
-        :param cognates: if False, insert false friends instead (default: True)
+        :param replace_with_cognates: if False, insert false friends instead (default: True)
         :return:
         """
         replacement_sets = []
@@ -121,12 +121,12 @@ class SetsGenerator:
                 role_idx_to_replace = random.choice(range(len(all_roles) - 2))  # avoid switches at last point
                 new_idx.append(role_idx_to_replace)
             concept_to_replace = self.extract_concept_from_role(all_roles[role_idx_to_replace])
-            word_to_replace = self.get_word_from_concept(concept_to_replace, lang)
-            pos_to_replace = "%s::%sanimate" % (word_to_replace['pos'],
-                                                "" if word_to_replace['semantic_gender'] and
-                                                word_to_replace['pos'] != 'verb' else "in")
-            gender = get_df_gender(word_to_replace)
-            replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang, gender=gender,
+            word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w = \
+                self.get_word_from_concept(concept_to_replace, lang)
+            pos_to_replace = "%s::%sanimate" % (pos_w,
+                                                "" if semantic_gender_w and pos_w != 'verb' else "in")
+            replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
+                                                                     gender=syntactic_gender_w,
                                                                      only_select_false_friend=not replace_with_cognates,
                                                                      only_select_cognate=replace_with_cognates)
             all_roles[role_idx_to_replace] = all_roles[role_idx_to_replace].replace(concept_to_replace,
@@ -135,7 +135,7 @@ class SetsGenerator:
                 all_roles[role_idx_to_replace] += ',COG'
             else:
                 all_roles[role_idx_to_replace] += ',FF'
-            sentence = sentence.replace(" %s " % word_to_replace['morpheme_%s' % lang],
+            sentence = sentence.replace(" %s " % word_to_replace,
                                         " %s " % replace_with_word['morpheme_%s' % lang])
             message = ';'.join(all_roles)
             replacement_sets.append((sentence, message))
@@ -220,7 +220,8 @@ class SetsGenerator:
                 gender = get_df_gender(morpheme_df, prev_gender=gender)
                 concept = get_df_concept(morpheme_df)
                 if concept:
-                    message[msg_idx] = add_concept_and_gender_info(message[msg_idx], concept, gender, pos)
+                    semantic_gender = get_df_semantic_gender(morpheme_df)
+                    message[msg_idx] = add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i+1] if i < len(pos_list) - 1 else 'NaN'
                     msg_idx, boost_next = alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
                 sentence.append(morpheme_df.values[0])
@@ -251,7 +252,7 @@ class SetsGenerator:
             pos_type = None
             if '::' in pos:
                 pos, pos_type = pos.split('::')
-            query = "pos == '%s'" % pos
+            query = "pos == '%s' and morpheme_%s == morpheme_%s" % (pos, lang, lang)  # avoid NaN values
             if pos_type == 'animate':
                 query += " and semantic_gender == semantic_gender"
             elif pos_type == 'inanimate':  # checks for NaN
@@ -271,8 +272,8 @@ class SetsGenerator:
 
             cache = self.lexicon_df.query(query)
             self.df_cache[params] = cache
-        selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'concept', 'is_cognate',
-                          'is_false_friend', 'adj_es_female']].iloc[random.randint(0, cache.shape[0] - 1)]
+        selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
+                          'is_cognate', 'is_false_friend', 'adj_es_female']].iloc[random.randint(0, cache.shape[0] - 1)]
         if pos == 'adj' and gender == 'F' and lang == 'es' and not pd.isnull(selected['adj_es_female']):
             selected = selected.columns.rename({'morpheme_%s' % lang: 'null',
                                                 'adj_es_female': 'morpheme_%s' % lang})
@@ -337,7 +338,7 @@ class SetsGenerator:
 
     def get_word_from_concept(self, concept, lang):
         w = self.lexicon_df.query("concept == '%s'" % concept)
-        return w[['morpheme_%s' % lang, 'syntactic_gender_es', 'pos', 'semantic_gender']].values[0]
+        return w[['morpheme_%s' % lang, 'pos', 'syntactic_gender_es', 'semantic_gender']].values[0]
 
 
 def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
@@ -389,11 +390,11 @@ def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
     return True
 
 
-def add_concept_and_gender_info(message, concept, gender, pos):
+def add_concept_and_gender_info(message, concept, semantic_gender):
     if message[-1] != '=':
-        msg = "%s,%s" % (message, concept) if pos != 'noun::animate' else "%s,%s,%s" % (message, concept, gender)
+        msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message, concept, semantic_gender)
     else:
-        msg = "%s%s" % (message, concept) if pos != 'noun::animate' else "%s%s,%s" % (message, concept, gender)
+        msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message, concept, semantic_gender)
     return msg
 
 
@@ -425,6 +426,12 @@ def get_df_gender(morpheme_df, prev_gender=None):
     if not pd.isnull(morpheme_df['syntactic_gender_es']) and morpheme_df['syntactic_gender_es'] != 'M-F':
             return morpheme_df['syntactic_gender_es']
     return prev_gender
+
+
+def get_df_semantic_gender(morpheme_df):
+    if not pd.isnull(morpheme_df['semantic_gender']):
+        return morpheme_df['semantic_gender']
+    return None
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
