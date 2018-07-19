@@ -138,10 +138,10 @@ class Plotter:
             # plot each code-switch type individually
 
             # first get all keywords (all CS types)
-            all_cs_types = set([re.sub("ES-|EN-|-COG|-FF|-ENES|None-", "", x)
+            all_cs_types = set([re.sub("es-|en-|-COG|-FF|-ENES|None-", "", x)
                                 for x in results['type_code_switches']['test'].keys()
                                 if '-COG' not in x and '-FF' not in x] +
-                               [re.sub("ES-|EN-|-COG|-FF|-ENES|None-", "", x)
+                               [re.sub("es-|en-|-COG|-FF|-ENES|None-", "", x)
                                 for x in results['type_code_switches']['training'].keys()
                                 if '-COG' not in x and '-FF' not in x])
 
@@ -151,7 +151,7 @@ class Plotter:
                 type_test_correct_EN = []
                 type_test_correct_ES = []
                 for cs_type in all_cs_types:
-                    es_type = "ES-%s" % cs_type
+                    es_type = "es-%s" % cs_type
                     if es_type in results['type_code_switches'][dataset_type]:
                         cs_result = results['type_code_switches'][dataset_type][es_type]
                         values_percentage_testset = [percentage(x, num_test)
@@ -298,7 +298,7 @@ class Plotter:
                     else:
                         type_test_FF.append((0, 0))
                     # same for non cognates-false friends
-                    ff_type = "%s-ENES" % cs_type
+                    ff_type = "%s-enes" % cs_type
                     if ff_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         values_percentage_testset = [percentage(x, num_test)

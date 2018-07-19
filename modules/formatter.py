@@ -18,7 +18,7 @@ class InputFormatter:
         self.L1, self.L2 = self.get_l1_and_l2()
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, lexicon_csv), sep=',', header=0)  # 1st line: header
-        self.lexicon, self.pos, self.code_switched_idx = self.get_lexicon_pos_and_code_switched_idx()
+        self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -84,24 +84,41 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
-    def get_lexicon_pos_and_code_switched_idx(self):
+    def get_lex_info_and_code_switched_idx(self):
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
-        x = ['', '.']
-        pos = ['', 'period']
-        l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos']].dropna()
-        x.extend(list(l1_column['morpheme_%s' % self.L1]))
-        pos.extend(list(l1_column['pos']))
+        concept = ['', '.']
+        l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos',
+                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1])
+        lex = ['', '.'] + list(l1_column['morpheme_%s' % self.L1])
+        pos = list(l1_column['pos'])
+        l1_type = list(l1_column['type'])
+        for i, c in enumerate(list(l1_column['concept'])):
+            if is_not_nan(c):
+                concept.append(c)
+            else:
+                concept.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
+        # add space and period before the POS list
+        pos = ['', '.'] + pos
 
-        code_switched_idx = len(x)
-        l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos']].dropna()
+        code_switched_idx = len(lex)
+
+        l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
+                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2])
         l2_pos_list = list(l2_column['pos'])
+        l2_concept_list = list(l2_column['concept'])
+        l2_type_list = list(l2_column['type'])
         for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2])):
-            if item not in x:  # only get unique items. set() would change the order, do this instead
-                x.append(item)
+            if item not in lex:  # only get unique items. set() would change the order, do this instead
+                lex.append(item)
                 pos.append(l2_pos_list[i])
-        return x, pos, code_switched_idx
+                # add concept info
+                if is_not_nan(l2_concept_list[i]):
+                    concept.append(l2_concept_list[i])
+                else:
+                    concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i]) else pos[-1])
+        return lex, pos, np.array(concept), code_switched_idx
 
     def get_lexicon_index(self, word):
         """
@@ -110,18 +127,21 @@ class InputFormatter:
         """
         return self.lexicon.index(word)
 
-    def morpheme_to_concept(self, morpheme, lang):
-        c = self.lexicon_df.loc[(self.lexicon_df['morpheme_es'] == morpheme) | (self.lexicon_df['morpheme_en'] == morpheme)]
-        return c['concept']
+    def concept_to_morphemes(self, concept, target_lang):
+        morpheme_idx = np.where(self.idx_to_concept == concept)[0]
+        if target_lang == self.L1:
+            return morpheme_idx[morpheme_idx < self.code_switched_idx]
+        # else L2
+        return morpheme_idx[morpheme_idx < self.code_switched_idx]
 
-    def _reverse_lexicon_to_concept(self):
+    """"def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
         for revkey, revvalue in self.lexicon_to_concept.iteritems():
             if revvalue in concept_to_words:
                 concept_to_words[revvalue].append(revkey)
             else:
                 concept_to_words[revvalue] = [revkey]
-        return concept_to_words
+        return concept_to_words"""""
 
     def _number_of_test_pronouns(self):
         regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
@@ -332,10 +352,8 @@ class InputFormatter:
         # FIXME: Lookup concept and find all morphemes in other lang
         if idx in (self.cognate_idx or self.period_idx):  # ignore shared idx
             return [idx]
-        if idx > self.code_switched_idx and lang == self.L1:
-            idx -= self.code_switched_idx
-        elif lang == self.L2 and idx <= self.code_switched_idx:
-            idx += self.code_switched_idx
+        if (idx > self.code_switched_idx and lang == self.L1) or (lang == self.L2 and idx <= self.code_switched_idx):
+            return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
         return [idx]
         """word = self.inputs.lexicon[idx]
         if word in self.inputs.translation_dict:
@@ -358,6 +376,12 @@ class InputFormatter:
             else:
                 translation = all_translations[0]
         return [self.inputs.lexicon.index(translation)]"""
+
+
+def is_not_nan(x):
+    if x == x:
+        return True
+    return False
 
 
 def take_average_of_valid_results(valid_results):

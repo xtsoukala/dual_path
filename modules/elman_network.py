@@ -266,8 +266,12 @@ class SimpleRecurrentNetwork:
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
-        self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
-                                          np.atleast_2d(self.current_layer.gradient))
+        try:
+            self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
+                                              np.atleast_2d(self.current_layer.gradient))
+        except:
+            print self.current_layer.name
+            print self.current_layer.gradient
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
         len_delta = np.sqrt(np.sum(self.current_layer.delta ** 2))
         if len_delta > 1:

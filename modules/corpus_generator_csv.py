@@ -46,7 +46,7 @@ class SetsGenerator:
         self.target_lang = ['EN', 'ES'] if not monolingual_only else [self.lang.upper()]
         if allow_free_structure_production:
             self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
-            self.structures_df = self.strip_structure_roles()
+            self.strip_structure_roles()
         self.df_cache = {}
 
     def generate_sets(self, num_sentences, percentage_L2, cognates_experiment=False, save_files=True):
@@ -220,7 +220,7 @@ class SetsGenerator:
                 gender = get_df_gender(morpheme_df, prev_gender=gender)
                 concept = get_df_concept(morpheme_df)
                 if concept:
-                    semantic_gender = get_df_semantic_gender(morpheme_df)
+                    semantic_gender = get_df_semantic_gender(morpheme_df, syntactic_gender=gender)
                     message[msg_idx] = add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i+1] if i < len(pos_list) - 1 else 'NaN'
                     msg_idx, boost_next = alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
@@ -295,10 +295,7 @@ class SetsGenerator:
         return pd.unique(self.lexicon_df.query("pos == 'det'")[['morpheme_en', 'morpheme_es']].values.ravel())
 
     def strip_structure_roles(self):
-        # FIXME: keep it a df  (des an ginetai na allaksei mono to structures_df['message'])
-        print self.structures_df
-        return [(re.sub(r'|'.join(map(re.escape, [',AGT', ',PAT', ',-1', ',REC'])), '', row[0]),
-                row[1], row[2], row[3]) for idx, row in self.structures_df.iterrows()]
+        self.structures_df.message = self.structures_df.message.str.replace(',-1|,AGT|,PAT|,REC', '')
 
     def get_structures(self, structures_csv, sep=",", use_full_verb=False):
         if not os.path.isfile(structures_csv):
@@ -428,8 +425,10 @@ def get_df_gender(morpheme_df, prev_gender=None):
     return prev_gender
 
 
-def get_df_semantic_gender(morpheme_df):
+def get_df_semantic_gender(morpheme_df, syntactic_gender):
     if not pd.isnull(morpheme_df['semantic_gender']):
+        if morpheme_df['semantic_gender'] == 'M-F' and syntactic_gender:
+            return syntactic_gender
         return morpheme_df['semantic_gender']
     return None
 

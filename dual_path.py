@@ -151,7 +151,7 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
                     #if False:  # TODO: play with activations, e.g. activate the target language slightly more
-                        lang_act = [1, 1] #if self.inputs.languages.index(lang) == 0 else [1, 1]
+                        lang_act = [0.8, 0.8] #if self.inputs.languages.index(lang) == 0 else [1, 1]
                         self.srn.reset_target_lang(target_lang_act=lang_act)
                     #else:
                     #    self.srn.reset_target_lang()
@@ -283,8 +283,8 @@ class DualPath:
         if not clean_sentence:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
-        if ((all(min_and_max_idx) >= self.inputs.code_switched_idx or
-            all(min_and_max_idx) < self.inputs.code_switched_idx) and
+        if ((all(x >= self.inputs.code_switched_idx for x in min_and_max_idx) or
+            all(x < self.inputs.code_switched_idx for x in min_and_max_idx)) and
                 self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
                 return False
         return True
@@ -432,8 +432,7 @@ class DualPath:
                             type_all_code_switches.update({cs_type_with_cognate_status: 1})
 
                 else:
-                    correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx,
-                                                               flexible_order)
+                    correct_meaning = self.has_correct_meaning(produced_sentence_idx, target_sentence_idx)
 
                 if correct_meaning:
                     num_correct_meaning += 1
@@ -461,13 +460,13 @@ class DualPath:
                                      self.inputs.sentence_from_indeces(produced_sentence_idx),
                                      self.inputs.sentence_from_indeces(target_sentence_idx), message))
             if epoch > 0:
-                suffix = ("flex-" if flexible_order or has_wrong_det or has_wrong_tense
+                suffix = ("flex-" if (flexible_order and correct_meaning) or has_wrong_det or has_wrong_tense
                           else "in" if not correct_meaning else "")
                 with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s %s\nTRG:%s %s\nGrammatical:%s Tense:%s Definiteness:%s "
+                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s "
                             "Meaning:%scorrect %s\n%s\n" %
-                            (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx), produced_sentence_idx,
-                             self.inputs.sentence_from_indeces(target_sentence_idx), target_sentence_idx, has_correct_pos,
+                            (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
+                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
                              not has_wrong_tense, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""), message))
@@ -512,7 +511,7 @@ class DualPath:
             feature_markers = self.inputs.determiners
         out = [x for x in out_sentence_idx if x not in feature_markers]
         trg = [x for x in trg_sentence_idx if x not in feature_markers]
-        return self.test_for_flexible_order(out, trg, allow_identical=True)
+        return self.test_for_flexible_order(out, trg, allow_identical=True, ignore_det=False)
 
     def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx, epoch, line):
         """
@@ -528,39 +527,27 @@ class DualPath:
             return is_grammatical, not has_flex_order
         out_pos = self.inputs.sentence_indeces_pos(out_sentence_idx)
         trg_pos = self.inputs.sentence_indeces_pos(trg_sentence_idx)
-        """if epoch == 1:
-            print line
-            print out_pos
-            print trg_pos
-            print out_pos == trg_pos
-            print out_pos in self.inputs.allowed_structures
-            print out_pos[-1] == 'TO'
-            os._exit()"""
         if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
             return is_grammatical, not has_flex_order
         if out_pos in self.inputs.allowed_structures:  # if sentence in list of existing POS
-            return is_grammatical, not has_flex_order
-        """if len(out_pos) > 2 and out_pos[-1] == 'TO':
-            # make sure that output sentence is grammatical and that "to" isn't the last word in the sentence
-            return not is_grammatical, not has_flex_order"""
+            return is_grammatical, has_flex_order
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
         if len(out_pos) > len(trg_pos):
-            trg_pos.append('TO')
+            trg_pos.append('prep')
         elif len(out_pos) < len(trg_pos):  # if they are equal don't append
-            out_pos.append('TO')
-        if self.same_unordered_lists(out_pos, trg_pos):
+            out_pos.append('prep')
+        if self.same_unordered_lists(out_pos, trg_pos) and out_pos[-1] != 'prep':  # make sure it doesn't end with 'to'
             return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
-    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx, flexible_order):
+    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
-        if flexible_order:
-            # flexible_order in the monolingual case means that the only difference is the preposition "to"
-            out_sentence_idx = [x for x in out_sentence_idx if x not in self.inputs.to_prepositions_idx]
-            trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.inputs.to_prepositions_idx]
-            if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
-                return True
+        # flexible_order in the monolingual case means that the only difference is the preposition "to"
+        out_sentence_idx = [x for x in out_sentence_idx if x not in self.inputs.to_prepositions_idx]
+        trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.inputs.to_prepositions_idx]
+        if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
+            return True
         return False
 
 
@@ -596,7 +583,7 @@ def generate_title_from_lang(lang_code):
 
 
 def get_minimum_and_maximum_idx(clean_sentence):
-    return (min(clean_sentence), max(clean_sentence))  # set with 2 indeces, min and max
+    return min(clean_sentence), max(clean_sentence)  # set with 2 indeces, min and max
 
 if __name__ == "__main__":
     import argparse
@@ -608,7 +595,7 @@ if __name__ == "__main__":
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
-    parser.add_argument('-input', default='simulations/2018-07-16t13.58.10_esen_h80_c40/input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    parser.add_argument('-input', default='simulations/2018-07-19t12.06.19_esen_h80_c40/input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -631,7 +618,7 @@ if __name__ == "__main__":
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=1, help='training several simulations (sim) at once to take the '
+    parser.add_argument('-sim', type=int, default=2, help='training several simulations (sim) at once to take the '
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
