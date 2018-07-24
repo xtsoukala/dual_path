@@ -130,9 +130,10 @@ class InputFormatter:
     def concept_to_morphemes(self, concept, target_lang):
         morpheme_idx = np.where(self.idx_to_concept == concept)[0]
         if target_lang == self.L1:
-            return morpheme_idx[morpheme_idx < self.code_switched_idx]
-        # else L2
-        return morpheme_idx[morpheme_idx < self.code_switched_idx]
+            morph = list(morpheme_idx[morpheme_idx < self.code_switched_idx])
+        else:  # L2
+            morph = list(morpheme_idx[morpheme_idx >= self.code_switched_idx])
+        return morph
 
     """"def _reverse_lexicon_to_concept(self):
         concept_to_words = {}  # use
@@ -349,10 +350,9 @@ class InputFormatter:
         return self.sentence_indeces(q)
 
     def find_equivalent_translation_idx(self, idx, lang):
-        # FIXME: Lookup concept and find all morphemes in other lang
-        if idx in (self.cognate_idx or self.period_idx):  # ignore shared idx
-            return [idx]
-        if (idx > self.code_switched_idx and lang == self.L1) or (lang == self.L2 and idx <= self.code_switched_idx):
+        # ignore shared indeces (cognates/period)
+        if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
+             (lang == self.L2 and idx <= self.code_switched_idx))):
             return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
         return [idx]
         """word = self.inputs.lexicon[idx]
@@ -416,36 +416,56 @@ def take_average_of_valid_results(valid_results):
     return results_average
 
 
-def take_average_of_valid_results2(valid_results):
+def get_numpy_mean_and_std(x):
+    if x.sum() > 0:
+        return x.mean(axis=0), x.std(axis=0)
+    return [[0] * len(x)] * 2
+
+
+def compute_mean_and_std(valid_results, epochs):
     """
-    :param valid_results: list of dicts (simulations)
+    :param valid_results: list of dicts (simulations).
     :return:
     """
-    print valid_results
-    results_average = {}
-    for key in valid_results[0].keys():
-        results_average[key] = {'training': [], 'test': []}
-        for simulation in valid_results:
+    results_sum = {}
+    all_keys = valid_results[0].keys()
+
+    all_cs_types = []
+    for sim in valid_results:
+        for t in ['test', 'training']:
+            all_cs_types.extend(sim['type_code_switches'][t].keys())
+    all_cs_types = set(all_cs_types)
+
+    for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
+        if key == 'type_code_switches':
+            results_sum[key] = {'training': {}, 'test': {}}
+        else:
+            results_sum[key] = {'training': [], 'test': []}
+        for simulation in valid_results:  # go through all simulations
             for t in ['training', 'test']:
-                if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
+                if t in simulation[key]:
                     if type(simulation[key][t]) is dict:  # case: type_code_switches
-                        for cs_type, val in simulation[key][t].items():
-                            if cs_type in results_average[key][t]:
-                                results_average[key][t][cs_type].append(val)
-                            else:
-                                results_average[key][t][cs_type] = [val]
+                        for cs_type in all_cs_types:
+                            if cs_type not in results_sum[key][t]:
+                                results_sum[key][t][cs_type] = []
+                            if cs_type in simulation[key][t]:
+                                results_sum[key][t][cs_type].append(simulation[key][t][cs_type])
+                            else:  # fill with 0
+                                results_sum[key][t][cs_type].append([0] * epochs)
                     else:
-                        results_average[key][t].append(simulation[key][t])
-                elif t in simulation[key]:
-                    results_average[key][t] = [simulation[key][t]]
-    # now average over all simulations
-    print results_average
-    print '@@@@'
-    for key, val in results_average.items():
+                        results_sum[key][t].append(simulation[key][t])
+    # now AVERAGE over all simulations.
+    for key in all_keys:
         for t in ['training', 'test']:
-            if type(results_average[key][t]) is dict:  # case: type_code_switches
-                results_average[key][t] = {k: np.true_divide(v, len(valid_results))
-                                           for k, v in results_average[key][t].iteritems()}
+            if type(results_sum[key][t]) is dict:
+                for cs_type in all_cs_types:
+                    np_array = np.array(results_sum[key][t][cs_type])
+                    np_mean, np_std = get_numpy_mean_and_std(np_array)
+                    # results_sum[key][t]["%s-std" % cs_type] = np_std
+                    results_sum[key][t][cs_type] = np_mean
             else:
-                results_average[key][t] = np.true_divide(val[t], len(valid_results))
-    return results_average
+                np_array = np.array(results_sum[key][t])
+                np_mean, np_std = get_numpy_mean_and_std(np_array)
+                results_sum[key]["%s-std" % t] = np_std
+                results_sum[key][t] = np_mean
+    return results_sum

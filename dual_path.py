@@ -6,7 +6,7 @@ from multiprocessing import Process, Manager
 from datetime import datetime
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
-from modules.formatter import InputFormatter, take_average_of_valid_results, os, pickle
+from modules.formatter import InputFormatter, compute_mean_and_std,take_average_of_valid_results, os, pickle
 
 
 class DualPath:
@@ -309,11 +309,14 @@ class DualPath:
         # First "translate" message into the target language and compare with target sentence
         translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
                                                                                         trg_sentence_idx[0])
+        #print 'candidates:'
         for translated_sentence_idx in translated_sentence_candidates:
-            translated_sentences = list(itertools.chain.from_iterable(translated_sentence_idx))
-            cs_type = self.examine_sentences_for_cs_type(translated_sentences, out_sentence_idx, trg_sentence_idx)
+            #print self.inputs.sentence_from_indeces(translated_sentence_idx)
+            cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
+                #print '--------'
                 return cs_type
+        #print '--------'
         return False  # no CS type found
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
@@ -322,16 +325,7 @@ class DualPath:
         else:
             lang = self.inputs.L2
         trans = [self.inputs.find_equivalent_translation_idx(idx, lang) for idx in out_sentence_idx]
-        """    trans = [self.inputs.find_equivalent_translation_idx(idx, remove_candidates_less_than_cs_point=True)
-                     if (idx >= self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx))
-                     else [idx] for idx in out_sentence_idx]
-        else:
-            trans = [self.find_equivalent_translation_idx(idx)
-                     if (idx < self.inputs.code_switched_idx and not self._idx_is_cognate_or_ff(idx)) else [idx]
-                     for idx in out_sentence_idx]"""
-        if any(len(i) > 1 for i in trans):
-            return [list([x] for x in tup) for tup in list(itertools.product(*trans))]
-        return [trans]
+        return [list(x for x in tup) for tup in list(itertools.product(*trans))]
 
     def _idx_is_cognate_or_ff(self, idx):
         if idx in self.inputs.shared_idx:
@@ -349,7 +343,7 @@ class DualPath:
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
             # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
-            cs_type = "alternational CS"
+            cs_type = "alternational"
         else:
             check_idx_pos = [self.inputs.pos_lookup(w) for w in check_idx]
             if len(set(check_idx_pos)) == 1:
@@ -424,7 +418,7 @@ class DualPath:
                         elif ',FF' in message:
                             cs_type_with_cognate_status = "%s-FF" % cs_type
                         else:  # no cognates or false friends
-                            cs_type_with_cognate_status = "%s-ENES" % cs_type
+                            cs_type_with_cognate_status = cs_type
 
                         if cs_type_with_cognate_status in type_all_code_switches:
                             type_all_code_switches[cs_type_with_cognate_status] += 1
@@ -595,7 +589,7 @@ if __name__ == "__main__":
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
-    parser.add_argument('-input', default='simulations/2018-07-19t12.06.19_esen_h80_c40/input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')#, default='simulations/2018-07-19t12.06.19_esen_h80_c40/input')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -813,7 +807,7 @@ if __name__ == "__main__":
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 plot = Plotter(results_dir=results_dir)
-                plot.plot_results(take_average_of_valid_results(valid_results), title=inputs.plot_title,
+                plot.plot_results(compute_mean_and_std(valid_results, epochs=args.epochs), title=inputs.plot_title,
                                   num_train=inputs.num_train, num_test=inputs.num_test,
                                   summary_sim=num_valid_simulations,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)

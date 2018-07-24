@@ -11,23 +11,29 @@ class Plotter:
         self.results_dir = results_dir
 
     def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, summary_sim=None):
-        epochs = range(len(results['correct_sentences']['training']))
-        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_sentences']['training']], linestyle='--',
+        correct_training_sentences = results['correct_sentences']['training']
+        correct_training_pos = results['correct_pos']['training']
+        correct_test_sentences = results['correct_sentences']['test']
+        correct_test_pos = results['correct_pos']['test']
+        epochs = range(len(correct_training_sentences))
+        plt.plot(epochs, [percentage(x, num_train) for x in correct_training_sentences], linestyle='--',
                  color='olivedrab', label='training')
-        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_pos']['training']], linestyle='--',
+        plt.plot(epochs, [percentage(x, num_train) for x in correct_training_pos], linestyle='--',
                  color='yellowgreen', label='training POS')
         # now add test sentences
-        plt.plot(epochs, [percentage(x, num_test) for x in results['correct_sentences']['test']],
+        plt.plot(epochs, [percentage(x, num_test) for x in correct_test_sentences],
                  color='darkslateblue', label='test')
-        test_mean = np.mean(results['correct_sentences']['test'])
-        test_std = np.std(results['correct_sentences']['test'])
-        plt.fill_between(epochs, test_mean + test_std, test_mean - test_std, facecolor='darkslateblue', alpha=0.5)
-
-        plt.plot(epochs, [percentage(x, num_test) for x in results['correct_pos']['test']],
+        plt.plot(epochs, [percentage(x, num_test) for x in correct_test_pos],
                  color='deepskyblue', label='test POS')
-        test_mean = np.mean(results['correct_pos']['test'])
-        test_std = np.std(results['correct_pos']['test'])
-        plt.fill_between(epochs, test_mean + test_std, test_mean - test_std, facecolor='deepskyblue', alpha=0.5)
+        if 'test-std' in results['correct_sentences']:
+            correct_test_std = results['correct_sentences']['test-std']
+            lower_bound = [percentage(x, num_test) for x in correct_test_sentences - correct_test_std]
+            upper_bound = [percentage(x, num_test) for x in correct_test_sentences + correct_test_std]
+            plt.fill_between(epochs, lower_bound, upper_bound, facecolor='darkslateblue', alpha=0.1)
+            correct_test_pos_std = results['correct_pos']['test-std']
+            lower_bound = [percentage(x, num_test) for x in correct_test_pos - correct_test_pos_std]
+            upper_bound = [percentage(x, num_test) for x in correct_test_pos + correct_test_pos_std]
+            plt.fill_between(epochs, lower_bound, upper_bound, facecolor='deepskyblue', alpha=0.1)
         plt.ylim([0, 100])
         plt.xlim(min(epochs), max(epochs))
         plt.xlabel('Epochs')
@@ -52,15 +58,26 @@ class Plotter:
             plt.close()
 
         ################### CODE-SWITCHES ###################
-        if sum(results['code_switches']['test']) > 0:
-            plt.plot(epochs, [percentage(x, num_test) for x in results['code_switches']['test']], color='olivedrab',
+        correct_code_switches = results['correct_code_switches']['test']
+        if sum(correct_code_switches) > 0:
+            code_switches = results['code_switches']['test']
+            plt.plot(epochs, [percentage(x, num_test) for x in code_switches], color='olivedrab',
                      label="All CS")
             plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']], linestyle='--',
                      color='yellowgreen', label="All CS (training)")
-            plt.plot(epochs, [percentage(x, num_test) for x in results['correct_code_switches']['test']],
+            plt.plot(epochs, [percentage(x, num_test) for x in correct_code_switches],
                      color='darkslateblue', label="Code-switches")
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
                      linestyle='--', color='deepskyblue', label="Code-switches (training)")
+            if 'test-std' in results['correct_code_switches']:
+                correct_code_switches_std = results['correct_code_switches']['test-std']
+                lower_bound = [percentage(x, num_test) for x in correct_code_switches - correct_code_switches_std]
+                upper_bound = [percentage(x, num_test) for x in correct_code_switches + correct_code_switches_std]
+                plt.fill_between(epochs, lower_bound, upper_bound, facecolor='darkslateblue', alpha=0.1)
+                code_switches_std = results['code_switches']['test-std']
+                lower_bound = [percentage(x, num_test) for x in code_switches - code_switches_std]
+                upper_bound = [percentage(x, num_test) for x in code_switches + code_switches_std]
+                plt.fill_between(epochs, lower_bound, upper_bound, facecolor='olivedrab', alpha=0.1)
             plt.xlabel('Epochs')
             plt.ylabel('Percentage of code-switches among all sentences')
             plt.ylim([0, 60])
@@ -78,10 +95,10 @@ class Plotter:
             plt.close()
 
             # same as above but plot PERCENTAGE among correctly produced sentences only
-            plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
+            plt.plot(epochs, [percentage(value, correct_test_sentences[i])
                               for i, value in enumerate(results['correct_code_switches']['test'])],
                      color='darkslateblue', label="Test set")
-            plt.plot(epochs, [percentage(value, results['correct_sentences']['training'][i])
+            plt.plot(epochs, [percentage(value, correct_training_sentences[i])
                               for i, value in enumerate(results['correct_code_switches']['training'])],
                      color='deepskyblue', label="Training set")
             plt.xlabel('Epochs')
@@ -100,25 +117,26 @@ class Plotter:
             plt.close()
 
             # PLOT ONLY NOUNS AND ALTERNATIONAL CS
+            type_code_switches_test = results['type_code_switches']['test']
             plot_individual = False
-            if 'EN-noun' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
-                                  for i, value in enumerate(results['type_code_switches']['test']['EN-noun'])],
+            if 'en-noun' in type_code_switches_test:
+                plt.plot(epochs, [percentage(value, correct_test_sentences[i])
+                                  for i, value in enumerate(type_code_switches_test['en-noun'])],
                          color='darkslateblue', label="Noun (EN)")
                 plot_individual = True
-            if 'ES-noun' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
-                                  for i, value in enumerate(results['type_code_switches']['test']['ES-noun'])],
+            if 'es-noun' in type_code_switches_test:
+                plt.plot(epochs, [percentage(value, correct_test_sentences[i])
+                                  for i, value in enumerate(type_code_switches_test['es-noun'])],
                          color='deepskyblue', label="Noun (ES)")
                 plot_individual = True
-            if 'ES-alternational CS' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
-                                  for i, value in enumerate(results['type_code_switches']['test']['ES-alternational CS'])],
+            if 'es-alternational' in type_code_switches_test:
+                plt.plot(epochs, [percentage(value, correct_test_sentences[i])
+                                  for i, value in enumerate(type_code_switches_test['es-alternational'])],
                          color='olivedrab', label="Alternational CS (ES)")
                 plot_individual = True
-            if 'EN-alternational CS' in results['type_code_switches']['test']:
-                plt.plot(epochs, [percentage(value, results['correct_sentences']['test'][i])
-                                  for i, value in enumerate(results['type_code_switches']['test']['EN-alternational CS'])],
+            if 'en-alternational' in type_code_switches_test:
+                plt.plot(epochs, [percentage(value, correct_test_sentences[i])
+                                  for i, value in enumerate(type_code_switches_test['en-alternational'])],
                          color='yellowgreen', label="Alternational CS (EN)")
                 plot_individual = True
 
@@ -138,10 +156,10 @@ class Plotter:
             # plot each code-switch type individually
 
             # first get all keywords (all CS types)
-            all_cs_types = set([re.sub("es-|en-|-COG|-FF|-ENES|None-", "", x)
-                                for x in results['type_code_switches']['test'].keys()
+            all_cs_types = set([re.sub("es-|en-|-COG|-FF|-ENES", "", x)
+                                for x in type_code_switches_test.keys()
                                 if '-COG' not in x and '-FF' not in x] +
-                               [re.sub("es-|en-|-COG|-FF|-ENES|None-", "", x)
+                               [re.sub("es-|en-|-COG|-FF|-ENES", "", x)
                                 for x in results['type_code_switches']['training'].keys()
                                 if '-COG' not in x and '-FF' not in x])
 
@@ -168,13 +186,13 @@ class Plotter:
                         type_test_correct_ES.append((0, 0))
 
                     # same for EN
-                    en_type = "EN-%s" % cs_type
+                    en_type = "en-%s" % cs_type
                     if en_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         cs_result = results['type_code_switches'][dataset_type][en_type]
                         values_percentage_testset = [percentage(x, num_test)
                                                      for x in cs_result]
-                        values_percentage_correct_testset = [percentage(x, results['correct_sentences']['test'][i])
+                        values_percentage_correct_testset = [percentage(x, correct_test_sentences[i])
                                                              for i, x in enumerate(cs_result)]
                         type_test_EN.append((np.mean(values_percentage_testset),
                                              np.std(values_percentage_testset)))
@@ -261,8 +279,8 @@ class Plotter:
                 type_test_COG = []
                 type_test_FF = []
                 for cs_type in all_cs_types:  # cs types calculated above
-                    """es_type = "ES-%s" % cs_type
-                    en_type = "EN-%s" % cs_type
+                    """es_type = "es-%s" % cs_type
+                    en_type = "en-%s" % cs_type
                     v = []
                     if es_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
                         v.append(results['type_code_switches'][dataset_type][es_type][2:])
@@ -298,11 +316,10 @@ class Plotter:
                     else:
                         type_test_FF.append((0, 0))
                     # same for non cognates-false friends
-                    ff_type = "%s-enes" % cs_type
-                    if ff_type in results['type_code_switches'][dataset_type]:
+                    if cs_type in results['type_code_switches'][dataset_type]:
                         # take the percentage of sum in test set
                         values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][ff_type]]
+                                                     for x in results['type_code_switches'][dataset_type][cs_type]]
                         type_test_ENES.append((np.mean(values_percentage_testset),
                                                np.std(values_percentage_testset)))
                     else:
