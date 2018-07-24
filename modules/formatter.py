@@ -39,12 +39,10 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
-        """self.lexicon_to_concept = self._read_pickled_file('lexicon_to_concept.pickled')
-        self.translation_dict = {'-a': '-s', '-ó': '-ed', 'a_': 'to', '.': '.', 'está': 'is', 'estaba': 'was',
+        """self.translation_dict = {'-a': '-s', '-ó': '-ed', 'a_': 'to', '.': '.', 'está': 'is', 'estaba': 'was',
                                  'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
                                  '-ando': '-ing', 'ella': 'she', 'él': 'he'}
-        self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}
-        self.concept_to_words = self._reverse_lexicon_to_concept()"""
+        self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}"""
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -67,6 +65,8 @@ class InputFormatter:
 
         self.plot_title = plot_title
 
+        del self.lexicon_df  # remove it after the processing
+
     def get_l1_and_l2(self):
         if len(self.lang) == 4:
             L1 = self.lang[:2]
@@ -76,8 +76,8 @@ class InputFormatter:
             L2 = None
         return L1, L2
 
-    def update_sets(self, new_input_dir):
-        self.input_dir = new_input_dir
+    def update_sets(self, new_results_dir):
+        self.results_dir = new_results_dir
         self.trainlines = self.read_set()  # re-read files
         self.num_train = len(self.trainlines)
         self.testlines = self.read_set(test=True)

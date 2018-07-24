@@ -6,7 +6,7 @@ from multiprocessing import Process, Manager
 from datetime import datetime
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
-from modules.formatter import InputFormatter, compute_mean_and_std,take_average_of_valid_results, os, pickle
+from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
 
 
 class DualPath:
@@ -150,11 +150,9 @@ class DualPath:
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
-                    #if False:  # TODO: play with activations, e.g. activate the target language slightly more
-                        lang_act = [0.8, 0.8] #if self.inputs.languages.index(lang) == 0 else [1, 1]
-                        self.srn.reset_target_lang(target_lang_act=lang_act)
-                    #else:
-                    #    self.srn.reset_target_lang()
+                    # TODO: play with activations, e.g. activate the target language slightly more
+                    lang_act = [0.8, 0.8] #if self.inputs.languages.index(lang) == 0 else [1, 1]
+                    self.srn.reset_target_lang(target_lang_act=lang_act)  # if left None: 50/50
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
@@ -309,14 +307,10 @@ class DualPath:
         # First "translate" message into the target language and compare with target sentence
         translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
                                                                                         trg_sentence_idx[0])
-        #print 'candidates:'
         for translated_sentence_idx in translated_sentence_candidates:
-            #print self.inputs.sentence_from_indeces(translated_sentence_idx)
             cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
-                #print '--------'
                 return cs_type
-        #print '--------'
         return False  # no CS type found
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
@@ -579,6 +573,29 @@ def generate_title_from_lang(lang_code):
 def get_minimum_and_maximum_idx(clean_sentence):
     return min(clean_sentence), max(clean_sentence)  # set with 2 indeces, min and max
 
+
+def create_all_input_files(num_simulations, results_dir, sets, original_input_path, cognate_experiment,
+                           generate_num, l2_percentage):
+    for sim in range(num_simulations):  # first create all input files
+        rdir = "%s/%s" % (results_dir, sim)
+        os.makedirs(rdir)
+        if sets:  # generate new test/training sets
+            if sim == 0:  # copy the .in files under the /input folder
+                copy_files_endwith(os.path.join("%s/input" % results_dir), rdir)
+            else:
+                sets.results_dir = rdir
+                sets.seed = sim  # set new seed for language generator
+                if cognate_experiment:
+                    sets.generate_sets_for_cognate_experiment(num_sentences=generate_num,
+                                                              percentage_L2=l2_percentage,
+                                                              save_files=False)
+                else:
+                    sets.generate_sets(num_sentences=generate_num, percentage_L2=l2_percentage,
+                                       save_files=False)
+        elif original_input_path:
+            # use existing test/training set (copy them first)
+            copy_files_endwith(os.path.join(original_input_path, str(sim)), rdir)
+
 if __name__ == "__main__":
     import argparse
 
@@ -589,7 +606,7 @@ if __name__ == "__main__":
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
-    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')#, default='simulations/2018-07-19t12.06.19_esen_h80_c40/input')
+    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -694,7 +711,7 @@ if __name__ == "__main__":
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir
     else:
-        from modules.corpus_generator_csv import SetsGenerator
+        from modules.corpus_generator import SetsGenerator
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
@@ -743,26 +760,15 @@ if __name__ == "__main__":
                          input_format=inputs, momentum=args.momentum, check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
+        create_all_input_files(args.sim, results_dir, sets, original_input_path, args.cognate_experiment,
+                               args.generate_num, args.l2_percentage)
+        del sets  # we no longer need it
+        # now run the simulations
         processes = []
         for sim in range(args.sim):
             np.random.seed(sim)  # set number of simulation as the seed
-            rdir = "%s/%s" % (results_dir, sim)
-            os.makedirs(rdir)
-            inputs.results_dir = rdir
-            if sets:  # generate new test/training sets
-                sets.results_dir = rdir
-                sets.seed = sim  # set new seed for language generator
-                if args.cognate_experiment:
-                    sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num,
-                                                              percentage_L2=args.l2_percentage,
-                                                              save_files=False)
-                else:
-                    sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage,
-                                       save_files=False)
-            elif original_input_path:
-                # use existing test/training set (copy them first)
-                copy_files_endwith(os.path.join(original_input_path, str(sim)), inputs.results_dir)
-            inputs.update_sets(new_input_dir=rdir)
+            inputs.input_dir = "%s/%s" % (results_dir, sim)
+            inputs.update_sets(new_results_dir=inputs.input_dir)
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,

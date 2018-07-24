@@ -12,13 +12,12 @@ class Plotter:
 
     def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, summary_sim=None):
         correct_training_sentences = results['correct_sentences']['training']
-        correct_training_pos = results['correct_pos']['training']
         correct_test_sentences = results['correct_sentences']['test']
         correct_test_pos = results['correct_pos']['test']
         epochs = range(len(correct_training_sentences))
         plt.plot(epochs, [percentage(x, num_train) for x in correct_training_sentences], linestyle='--',
                  color='olivedrab', label='training')
-        plt.plot(epochs, [percentage(x, num_train) for x in correct_training_pos], linestyle='--',
+        plt.plot(epochs, [percentage(x, num_train) for x in results['correct_pos']['training']], linestyle='--',
                  color='yellowgreen', label='training POS')
         # now add test sentences
         plt.plot(epochs, [percentage(x, num_test) for x in correct_test_sentences],
