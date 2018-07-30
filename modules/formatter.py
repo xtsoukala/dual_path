@@ -4,6 +4,7 @@ import os
 import itertools
 import pickle
 import pandas as pd
+import collections
 from elman_network import np
 
 np.random.seed(18)
@@ -39,6 +40,7 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+        self.same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
         """self.translation_dict = {'-a': '-s', '-ó': '-ed', 'a_': 'to', '.': '.', 'está': 'is', 'estaba': 'was',
                                  'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
                                  '-ando': '-ing', 'ella': 'she', 'él': 'he'}
@@ -83,6 +85,163 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+
+    def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
+        if out_sentence_idx == trg_sentence_idx:
+            return True
+        # flexible_order in the monolingual case means that the only difference is the preposition "to"
+        out_sentence_idx = [x for x in out_sentence_idx if x not in self.to_prepositions_idx]
+        trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.to_prepositions_idx]
+        if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
+            return True
+        return False
+
+    def is_sentence_gramatical_or_flex(self, out_sentence_idx, trg_sentence_idx):
+        """
+        Check a sentence's grammaticality. If the target and output sentences don't have identical POS but differ only
+        on the double object expression (e.g., gives the book to him/gives him the book) then return flex_order = True
+        NOTE: The grammaticality is judged by the reference (target) sentence, not by the absolute grammaticality of the
+        produced sentence. E.g., if the target sentence is "She throw -s the key to the boy ." then
+        "She throw -s the key ." will be regarded UNgrammatical, even if it's a correct sentence.
+        """
+        is_grammatical = True
+        has_flex_order = True
+        if out_sentence_idx == trg_sentence_idx:  # if sentences are identical no need to check further
+            return is_grammatical, not has_flex_order
+        out_pos = self.sentence_indeces_pos(out_sentence_idx)
+        trg_pos = self.sentence_indeces_pos(trg_sentence_idx)
+        if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
+            return is_grammatical, not has_flex_order
+        if out_pos in self.allowed_structures:  # if sentence in list of existing POS
+            return is_grammatical, has_flex_order
+        # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
+        if len(out_pos) > len(trg_pos):
+            trg_pos.append('prep')
+        elif len(out_pos) < len(trg_pos):  # if they are equal don't append
+            out_pos.append('prep')
+        if self.same_unordered_lists(out_pos, trg_pos) and out_pos[-1] != 'prep':  # it shouldn't end with 'to'
+            return is_grammatical, has_flex_order
+        return not is_grammatical, not has_flex_order
+
+    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False,
+                                ignore_det=True):
+        """
+        :param out_sentence_idx:
+        :param trg_sentence_idx:
+        :param remove_last_word:
+        :param allow_identical: Whether to return False if sentences are identical
+        :param ignore_det: Whether to count article definiteness (a/the) as a mistake
+        :return: if produced sentence was not identical to the target one, check if the meaning was correct but
+        expressed with a different syntactic structure (due to, e.g., priming)
+        """
+        if out_sentence_idx == trg_sentence_idx and not allow_identical:  # only check non identical sentences
+            return False
+        flexible_order = False
+        ignore_idx = self.to_prepositions_idx
+        if ignore_det:
+            ignore_idx.extend(self.determiners)
+
+        if self.same_unordered_lists([x for x in out_sentence_idx if x not in ignore_idx],
+                                            [x for x in trg_sentence_idx if x not in ignore_idx]):
+            flexible_order = True
+        elif remove_last_word and self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
+            flexible_order = True
+        return flexible_order
+
+    def test_meaning_without_pronouns(self, out_sentence_idx, trg_sentence_idx):
+        # remove subject pronouns and check the rest of the sentence
+        out = [idx for idx in out_sentence_idx if idx not in self.idx_pronoun]
+        trg = [idx for idx in trg_sentence_idx if idx not in self.idx_pronoun]
+        return self.test_for_flexible_order(out, trg, allow_identical=True)
+
+    def test_without_feature(self, out_sentence_idx, trg_sentence_idx, feature):
+        if feature == "tense":
+            feature_markers = self.tense_markers
+        elif feature == "determiners":
+            feature_markers = self.determiners
+        out = [x for x in out_sentence_idx if x not in feature_markers]
+        trg = [x for x in trg_sentence_idx if x not in feature_markers]
+        return self.test_for_flexible_order(out, trg, allow_identical=True, ignore_det=False)
+
+    def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
+        out_pronouns = [idx for idx in out_sentence_idx if idx in self.idx_pronoun]
+        trg_pronouns = [idx for idx in trg_sentence_idx if idx in self.idx_pronoun]
+        if out_pronouns != trg_pronouns:
+            return True
+        return False
+
+    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx):
+        """ Types of code-switches:
+                - intra-sentential (in the middle of the sentence)
+                - inter-sentential (full switch at sentence boundaries)
+                - extra-sentential (insertion of tag)
+                - noun borrowing? (if no determiners were switched)
+            Note: Returns FALSE if the message conveyed was not correct
+        """
+        # First "translate" message into the target language and compare with target sentence
+        translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
+                                                                                        trg_sentence_idx[0])
+        for translated_sentence_idx in translated_sentence_candidates:
+            cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
+            if cs_type:  # if not False no need to look further
+                return cs_type
+        return False  # no CS type found
+
+    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
+        if trg_lang_word_idx < self.code_switched_idx:
+            lang = self.L1
+        else:
+            lang = self.L2
+        trans = [self.find_equivalent_translation_idx(idx, lang) for idx in out_sentence_idx]
+        return [list(x for x in tup) for tup in list(itertools.product(*trans))]
+
+    def _idx_is_cognate_or_ff(self, idx):
+        if idx in self.shared_idx:
+            return True
+        return False
+
+    def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
+        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
+            return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
+        check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx
+                                                     and w is not self._idx_is_cognate_or_ff(w))]
+        if len(check_idx) == 0:
+            return False  # it was either a cognate or a false friend
+
+        # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
+        if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
+            # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
+            cs_type = "alternational"
+        else:
+            check_idx_pos = [self.pos_lookup(w) for w in check_idx]
+            if len(set(check_idx_pos)) == 1:
+                cs_type = "%s" % check_idx_pos[0].lower()
+            else:
+                cs_type = "inter-word switch"
+        return cs_type
+
+    def is_code_switched(self, sentence_indeces, target_lang):
+        """ This function only checks whether words from different languages were used.
+        It doesn't verify the validity of the expressed message """
+        # skip indeces that are common in all lang
+        clean_sentence = [x for x in sentence_indeces if x not in self.shared_idx]
+        if not clean_sentence:
+            return False  # empty sentence
+        min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
+        if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
+            all(x < self.code_switched_idx for x in min_and_max_idx)) and
+                self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
+                return False
+        return True
+
+    def morpheme_is_from_target_lang(self, morpheme_idx, target_lang):
+        """
+        Assumption: this doesn't check for shared indeces (period/congates) because they have already been stripped
+        """
+        if ((target_lang == self.L1 and morpheme_idx < self.code_switched_idx) or
+                (target_lang == self.L2 and morpheme_idx >= self.code_switched_idx)):
+            return True
+        return False
 
     def get_lex_info_and_code_switched_idx(self):
         """
@@ -134,15 +293,6 @@ class InputFormatter:
         else:  # L2
             morph = list(morpheme_idx[morpheme_idx >= self.code_switched_idx])
         return morph
-
-    """"def _reverse_lexicon_to_concept(self):
-        concept_to_words = {}  # use
-        for revkey, revvalue in self.lexicon_to_concept.iteritems():
-            if revvalue in concept_to_words:
-                concept_to_words[revvalue].append(revkey)
-            else:
-                concept_to_words[revvalue] = [revkey]
-        return concept_to_words"""""
 
     def _number_of_test_pronouns(self):
         regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
@@ -355,27 +505,10 @@ class InputFormatter:
              (lang == self.L2 and idx <= self.code_switched_idx))):
             return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
         return [idx]
-        """word = self.inputs.lexicon[idx]
-        if word in self.inputs.translation_dict:
-            translation = self.inputs.translation_dict[word]
-        elif word in self.inputs.reverse_translation_dict:
-            translation = self.inputs.reverse_translation_dict[word]
-        else:
-            concept = self.inputs.lexicon_to_concept[self.inputs.lexicon[idx]]
-            all_translations = [w for w in self.inputs.concept_to_words[concept] if w != word]
-            if not all_translations:
-                # print word, idx, concept
-                return [idx]  # this is the case where a word exists in one language but not the other
-            elif len(all_translations) > 1:
-                if remove_candidates_less_than_cs_point:
-                    return [self.inputs.lexicon.index(translation) for translation in all_translations
-                            if self.inputs.lexicon.index(translation) < self.inputs.code_switched_idx]
-                else:
-                    return [self.inputs.lexicon.index(translation) for translation in all_translations
-                            if self.inputs.lexicon.index(translation) >= self.inputs.code_switched_idx]
-            else:
-                translation = all_translations[0]
-        return [self.inputs.lexicon.index(translation)]"""
+
+
+def get_minimum_and_maximum_idx(clean_sentence):
+    return min(clean_sentence), max(clean_sentence)  # set with 2 indeces, min and max
 
 
 def is_not_nan(x):
