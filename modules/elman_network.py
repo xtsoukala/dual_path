@@ -5,8 +5,6 @@ import numpy as np
 from copy import deepcopy
 from plotter import Plotter
 
-np.random.seed(18)
-
 
 class SimpleRecurrentNetwork:
     def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False,
@@ -60,6 +58,7 @@ class SimpleRecurrentNetwork:
             except OSError, e:
                 if e.errno != os.errno.EEXIST:
                     raise
+        np.random.seed(simulation_num if not None else 18)  # set number of simulation as the seed
         means = []
         std = []
         labels = []

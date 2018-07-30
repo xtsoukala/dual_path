@@ -93,7 +93,7 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
-            # same as above but plot PERCENTAGE among correctly produced sentences only
+            ####### same as above but plot PERCENTAGE among correctly produced sentences only #######
             plt.plot(epochs, [percentage(value, correct_test_sentences[i])
                               for i, value in enumerate(results['correct_code_switches']['test'])],
                      color='darkslateblue', label="Test set")
@@ -115,7 +115,7 @@ class Plotter:
             plt.savefig(fname)
             plt.close()
 
-            # PLOT ONLY NOUNS AND ALTERNATIONAL CS
+            ####### PLOT ONLY NOUNS AND ALTERNATIONAL CS #######
             type_code_switches_test = results['type_code_switches']['test']
             plot_individual = False
             if 'en-noun' in type_code_switches_test:
@@ -152,7 +152,7 @@ class Plotter:
                 plt.savefig(fname)
                 plt.close()
 
-            # plot each code-switch type individually
+            ######## plot each code-switch type individually #######
 
             # first get all keywords (all CS types)
             all_cs_types = set([re.sub("es-|en-|-COG|-FF|-ENES", "", x)
@@ -162,44 +162,45 @@ class Plotter:
                                 for x in results['type_code_switches']['training'].keys()
                                 if '-COG' not in x and '-FF' not in x])
 
-            for dataset_type in ['training', 'test']:
-                type_test_EN = []
-                type_test_ES = []
-                type_test_correct_EN = []
-                type_test_correct_ES = []
-                for cs_type in all_cs_types:
-                    es_type = "es-%s" % cs_type
-                    if es_type in results['type_code_switches'][dataset_type]:
-                        cs_result = results['type_code_switches'][dataset_type][es_type]
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in cs_result]
-                        values_percentage_correct_testset = [percentage(x, results['correct_sentences'][dataset_type][i])
-                                                             for i, x in enumerate(cs_result)]
+            #for dataset_type in ['training', 'test']: check test set only
+            type_test_EN = []
+            type_test_ES = []
+            type_test_correct_EN = []
+            type_test_correct_ES = []
+            for cs_type in all_cs_types:
+                es_type = "es-%s" % cs_type
+                if es_type in type_code_switches_test:
+                    cs_result = type_code_switches_test[es_type]
+                    values_percentage_testset = [percentage(x, num_test)
+                                                 for x in cs_result]
+                    type_test_ES.append((np.mean(values_percentage_testset),
+                                         np.std(values_percentage_testset)))
+                    print correct_test_sentences
+                    values_percentage_correct_testset = [percentage(x, correct_test_sentences[i])
+                                                         for i, x in enumerate(cs_result)]
+                    print values_percentage_correct_testset
+                    type_test_correct_ES.append((np.mean(values_percentage_correct_testset),
+                                                 np.std(values_percentage_correct_testset)))
+                else:
+                    type_test_ES.append((0, 0))
+                    type_test_correct_ES.append((0, 0))
 
-                        type_test_ES.append((np.mean(values_percentage_testset),
-                                             np.std(values_percentage_testset)))
-                        type_test_correct_ES.append((np.mean(values_percentage_correct_testset),
-                                                     np.std(values_percentage_correct_testset)))
-                    else:
-                        type_test_ES.append((0, 0))
-                        type_test_correct_ES.append((0, 0))
-
-                    # same for EN
-                    en_type = "en-%s" % cs_type
-                    if en_type in results['type_code_switches'][dataset_type]:
-                        # take the percentage of sum in test set
-                        cs_result = results['type_code_switches'][dataset_type][en_type]
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in cs_result]
-                        values_percentage_correct_testset = [percentage(x, correct_test_sentences[i])
-                                                             for i, x in enumerate(cs_result)]
-                        type_test_EN.append((np.mean(values_percentage_testset),
-                                             np.std(values_percentage_testset)))
-                        type_test_correct_EN.append((np.mean(values_percentage_correct_testset),
-                                                     np.std(values_percentage_correct_testset)))
-                    else:
-                        type_test_EN.append((0, 0))
-                        type_test_correct_EN.append((0, 0))
+                # same for EN
+                en_type = "en-%s" % cs_type
+                if en_type in type_code_switches_test:
+                    # take the percentage of sum in test set
+                    cs_result = type_code_switches_test[en_type]
+                    values_percentage_testset = [percentage(x, num_test)
+                                                 for x in cs_result]
+                    values_percentage_correct_testset = [percentage(x, correct_test_sentences[i])
+                                                         for i, x in enumerate(cs_result)]
+                    type_test_EN.append((np.mean(values_percentage_testset),
+                                         np.std(values_percentage_testset)))
+                    type_test_correct_EN.append((np.mean(values_percentage_correct_testset),
+                                                 np.std(values_percentage_correct_testset)))
+                else:
+                    type_test_EN.append((0, 0))
+                    type_test_correct_EN.append((0, 0))
 
             # make sure there is still something to be plotted after the manipulations
             if type_test_ES or type_test_EN:
@@ -213,7 +214,7 @@ class Plotter:
                                   yerr=[x[1] for x in type_test_ES])
 
                 # add some text for labels, title and axes ticks
-                label = 'Types of code-switches (%% of %s set)' % dataset_type
+                label = 'Types of code-switches (%% of %s set)' % 'test'
                 ax.set_ylabel(label)
                 if title:
                     ax.set_title(title)
@@ -225,18 +226,20 @@ class Plotter:
 
                 if summary_sim:
                     fname = '%s/summary_%s_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
-                                                                         dataset_type)
+                                                                         'test')
                     # also save type_test_ES and type_test_EN
                     with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
                         f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
                                 "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
 
                 else:
-                    fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
+                    fname = '%s/type_code_switches_%s.pdf' % (self.results_dir, 'test')
                 plt.savefig(fname)
                 plt.close()
 
-            # same for percentage of correct sentences
+            print type_test_correct_ES
+            print type_test_correct_EN
+            ######## same for percentage of correct sentences #######
             # make sure there is still something to be plotted after the manipulations
             if is_not_empty(type_test_correct_ES) or is_not_empty(type_test_correct_EN):
                 ind = np.arange(len(all_cs_types))  # the x locations for the groups
@@ -249,7 +252,7 @@ class Plotter:
                                   yerr=[x[1] for x in type_test_correct_ES])
 
                 # add some text for labels, title and axes ticks
-                label = 'CS types (%% of correctly produced %s sentences)' % dataset_type
+                label = 'CS types (%% of correctly produced %s sentences)' % 'test'
                 ax.set_ylabel(label)
                 ax.set_ylim(bottom=0)
                 if title:
@@ -261,14 +264,14 @@ class Plotter:
 
                 if summary_sim:
                     fname = '%s/summary_%s_correct_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
-                                                                                 dataset_type)
+                                                                                 'test')
                     # also save type_test_ES and type_test_EN
                     with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
                         f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
                                 "All CS labels:%s" % (type_test_ES, type_test_EN, all_cs_types))
 
                 else:
-                    fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, dataset_type)
+                    fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, 'test')
                 plt.savefig(fname)
                 plt.close()
 

@@ -25,7 +25,7 @@ class DualPath:
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
-                 input_format, check_pronouns, simulation_num=None, allow_cognate_boost=False):
+                 input_format, check_pronouns, allow_cognate_boost=False, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -84,7 +84,7 @@ class DualPath:
                         'mse': {}}
 
     def initialize_network(self):
-        # The where, what, and cwhat units were unbiased to make them more input driven
+        # Chang: The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
@@ -385,7 +385,7 @@ class DualPath:
             produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
             has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
             is_grammatical, flexible_order = self.get_sentence_grammaticality_and_flex_order(produced_sentence_idx,
-                                                                                             target_sentence_idx, epoch, line)
+                                                                                             target_sentence_idx)
             code_switched = self.is_code_switched(produced_sentence_idx, target_lang=lang)
             if code_switched:
                 num_all_code_switches += 1
@@ -501,7 +501,7 @@ class DualPath:
         trg = [x for x in trg_sentence_idx if x not in feature_markers]
         return self.test_for_flexible_order(out, trg, allow_identical=True, ignore_det=False)
 
-    def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx, epoch, line):
+    def get_sentence_grammaticality_and_flex_order(self, out_sentence_idx, trg_sentence_idx):
         """
         Check a sentence's grammaticality. If the target and output sentences don't have identical POS but differ only
         on the double object expression (e.g., gives the book to him/gives him the book) then return flex_order = True
@@ -752,7 +752,6 @@ if __name__ == "__main__":
     simulations_with_pron_err = 0
     failed_sim_id = []
     if not args.sim or args.sim == 1:  # only run one simulation
-        np.random.seed(18)
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
@@ -766,9 +765,13 @@ if __name__ == "__main__":
         # now run the simulations
         processes = []
         for sim in range(args.sim):
-            np.random.seed(sim)  # set number of simulation as the seed
             inputs.input_dir = "%s/%s" % (results_dir, sim)
             inputs.update_sets(new_results_dir=inputs.input_dir)
+            with open("%s/simulation.info" % results_dir, 'a') as f:
+                f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
+                        (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
+                         inputs.num_train))
+
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
@@ -778,12 +781,6 @@ if __name__ == "__main__":
             process = Process(target=dualp.train_network, args=(args.shuffle,))
             process.start()
             processes.append(process)
-
-            with open("%s/simulation.info" % results_dir, 'a') as f:
-                f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
-                        (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
-                         inputs.num_train))
-
         for p in processes:
             p.join()
 
