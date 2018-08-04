@@ -14,7 +14,7 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
                  seed=0, lang='enes', lexicon_csv='corpus/lexicon.csv', structures_csv='corpus/structures.csv',
-                 include_ff=False, include_cognates=True, monolingual_only=False):
+                 include_ff=False, cognate_percentage=0.5, monolingual_only=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -25,8 +25,10 @@ class SetsGenerator:
         self.L1 = self.lang if len(lang) == 2 else self.lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else self.lang[2:]
         self.seed = seed
-        self.lexicon_df = get_clean_lexicon(lexicon_csv, false_friends=include_ff, cognates=include_cognates,
-                                            use_simple_semantics=use_simple_semantics)
+        self.cognate_percentage = cognate_percentage
+        self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
+                                                 cognates=True if cognate_percentage > 0 else False,
+                                                 use_simple_semantics=use_simple_semantics)
         self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
@@ -62,16 +64,18 @@ class SetsGenerator:
         if not self.L2 and percentage_L2 != 0:
             percentage_L2 = 0
 
-        num_train, num_test = calculate_number_of_sentences_per_set(num_sentences)
+        num_train, num_test = self.calculate_number_of_sentences_per_set(num_sentences)
         sentence_structures_train = self.generate_sentence_structures(num_train, percentage_L2=percentage_L2)
         sentence_structures_test = self.generate_sentence_structures(num_test, percentage_L2=percentage_L2)
         # save only training set if we're selecting sentences for the cognate experiment
         test_set = self.generate_sentences(sentence_structures_test,
                                            fname="test.in" if not cognates_experiment else None,
-                                           exclude_cognates=cognates_experiment)
+                                           exclude_cognates=cognates_experiment,
+                                           max_cognate=0 if cognates_experiment else num_test * self.cognate_percentage)
         training_set = self.generate_sentences(sentence_structures_train,
                                                fname="train.in",
-                                               exclude_test_sentences=test_set)
+                                               exclude_test_sentences=test_set,
+                                               max_cognate=num_train * self.cognate_percentage)
         assert num_test == len(test_set) and num_train == len(training_set)
         if cognates_experiment:  # return sets of message/sentence pairs (no need to save them yet)
             return test_set, training_set
@@ -93,7 +97,7 @@ class SetsGenerator:
             # replace one sentence per word with a false friend
             false_friend_sets, replacement_idx = self.generate_replacement_test_sets(original_test_set,
                                                                                      replacement_idx=replacement_idx,
-                                                                                     cognates=False)
+                                                                                     replace_with_cognates=False)
             all_test_sets += false_friend_sets
         if save_files:
             self.save_lexicon_and_structures_to_csv()
@@ -120,10 +124,12 @@ class SetsGenerator:
                 role_idx_to_replace = random.choice(range(len(all_roles) - 2))  # avoid switches at last point
                 new_idx.append(role_idx_to_replace)
             concept_to_replace = self.extract_concept_from_role(all_roles[role_idx_to_replace])
-            word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w = \
+            word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w, verb_type = \
                 self.get_word_from_concept(concept_to_replace, lang)
-            pos_to_replace = "%s::%sanimate" % (pos_w,
-                                                "" if semantic_gender_w and pos_w != 'verb' else "in")
+            if pos_w == 'verb':
+                pos_to_replace = "%s::%s" % (pos_w, verb_type)
+            else:
+                pos_to_replace = "%s::%sanimate" % (pos_w, "" if semantic_gender_w else "in")
             replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                      gender=syntactic_gender_w,
                                                                      only_select_false_friend=not replace_with_cognates,
@@ -177,7 +183,8 @@ class SetsGenerator:
         random.shuffle(sentence_structures)
         return sentence_structures
 
-    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=[], exclude_cognates=False):
+    def generate_sentences(self, sentence_structures, fname,  max_cognate, exclude_test_sentences=[],
+                           exclude_cognates=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename to store results (they won't be stored if set to None)
@@ -190,10 +197,11 @@ class SetsGenerator:
         remaining_structures = sentence_structures
         # the while loop is needed because of the unique sentence restriction.
         while remaining_structures:
-            remaining_structures, generated_pairs = self.convert_structures_to_sentences(remaining_structures,
-                                                                                         generated_pairs,
-                                                                                         exclude_test_sentences,
-                                                                                         exclude_cognates)
+            remaining_structures, generated_pairs, max_cognate = self.structures_to_sentences(remaining_structures,
+                                                                                              generated_pairs,
+                                                                                              exclude_test_sentences,
+                                                                                              exclude_cognates,
+                                                                                              max_cognate=max_cognate)
         random.shuffle(generated_pairs)
         if fname:  # fname is None in the cognate experiment case
             with codecs.open('%s/%s' % (self.results_dir, fname), 'w', "utf-8") as f:
@@ -201,11 +209,14 @@ class SetsGenerator:
                     f.write(u"%s## %s\n" % (sentence, message))
         return generated_pairs
 
-    def convert_structures_to_sentences(self, sentence_structures, generated_pairs, exclude_test_sentences,
-                                        exclude_cognates):
+    def structures_to_sentences(self, sentence_structures, generated_pairs, exclude_test_sentences, exclude_cognates,
+                                max_cognate):
+        sentences_with_cognates = 0
         sentence_idx = len(generated_pairs)  # keep track of how many sentences we have generated already
         remaining_structures = []
         for msg, pos_full in sentence_structures:
+            if not exclude_cognates and sentences_with_cognates >= max_cognate:
+                exclude_cognates = True
             message = msg.split(';')
             lang = message[-1].split(',')[-1].lower()
             sentence = []
@@ -216,25 +227,27 @@ class SetsGenerator:
             for i, pos in enumerate(pos_list):
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
-                gender = get_df_gender(morpheme_df, prev_gender=gender)
-                concept = get_df_concept(morpheme_df)
+                gender = self.get_df_gender(morpheme_df, prev_gender=gender)
+                concept = self.get_df_concept(morpheme_df)
                 if concept:
-                    semantic_gender = get_df_semantic_gender(morpheme_df, syntactic_gender=gender)
-                    message[msg_idx] = add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
+                    semantic_gender = self.get_df_semantic_gender(morpheme_df, syntactic_gender=gender)
+                    message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i+1] if i < len(pos_list) - 1 else 'NaN'
-                    msg_idx, boost_next = alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
+                    msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
                 sentence.append(morpheme_df.values[0])
             sentence = u"%s ." % " ".join(sentence)
             message = ";".join(message).upper()
 
-            if sentence_is_unique(message, exclude_test_sentences, generated_pairs):
+            if self.sentence_is_unique(message, exclude_test_sentences, generated_pairs):
                 generated_pairs.append((sentence, message))
                 sentence_idx += 1
+                if not exclude_cognates and ',COG' in message:
+                    sentences_with_cognates += 1
                 if print_on_screen:
                     print u"%s## %s" % (sentence, message)
             else:  # find unique sentence, don't add it to the training set
                 remaining_structures.append((msg, pos_full))
-        return remaining_structures, generated_pairs
+        return remaining_structures, generated_pairs, max_cognate - sentences_with_cognates
 
     def get_query_cache(self, params):
         if params in self.df_cache:
@@ -334,102 +347,102 @@ class SetsGenerator:
 
     def get_word_from_concept(self, concept, lang):
         w = self.lexicon_df.query("concept == '%s'" % concept)
-        return w[['morpheme_%s' % lang, 'pos', 'syntactic_gender_es', 'semantic_gender']].values[0]
+        return w[['morpheme_%s' % lang, 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
 
+    @staticmethod
+    def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
+        """
+        :param msg_idx: index of the message list (e.g., ['AGENT', 'AGENT-MOD', 'ACTION', 'PATIENT']
+        :param pos: current part of speech (e.g., 'det' for determiner, 'noun::animate' for an animate noun)
+        :param lang: language code (en, es)
+        :param next_pos: the pos that follows
+        :param boost_next: whether to move two indexes ahead. This hack is because in EN we want to use the adjective
+        as 'AGENT-MOD', then go back to 'AGENT' for the noun, and finally move to 'ACTION' for the verb
+        :return:
+        """
+        if boost_next:
+            msg_idx += 2
+            boost_next = False
+        elif pos == 'det' and lang == 'en' and 'adj' in next_pos:
+            msg_idx += 1
+        elif lang == 'en' and 'adj' in pos:
+            msg_idx -= 1
+            boost_next = True
+        elif pos != 'det':
+            msg_idx += 1
+        return msg_idx, boost_next
 
-def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
-    """
-    :param msg_idx: index of the message list (e.g., ['AGENT', 'AGENT-MOD', 'ACTION', 'PATIENT']
-    :param pos: current part of speech (e.g., 'det' for determiner, 'noun::animate' for an animate noun)
-    :param lang: language code (en, es)
-    :param next_pos: the pos that follows
-    :param boost_next: whether to move two indexes ahead. This hack is because in EN we want to use the adjective
-    as 'AGENT-MOD', then go back to 'AGENT' for the noun, and finally move to 'ACTION' for the verb
-    :return:
-    """
-    if boost_next:
-        msg_idx += 2
-        boost_next = False
-    elif pos == 'det' and lang == 'en' and 'adj' in next_pos:
-        msg_idx += 1
-    elif lang == 'en' and 'adj' in pos:
-        msg_idx -= 1
-        boost_next = True
-    elif pos != 'det':
-        msg_idx += 1
-    return msg_idx, boost_next
+    @staticmethod
+    def get_clean_lexicon(lexicon_csv, false_friends, cognates, use_simple_semantics):
+        if not os.path.isfile(lexicon_csv):
+            lexicon_csv = "modules/%s" % lexicon_csv
+        df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
+        query = "inactive != 'Y'"  # remove inactive words
+        if not false_friends:
+            query += " and is_false_friend != '1'"
+        if not cognates:
+            query += " and is_cognate != 'Y'"
+        lex = df.query(query)
+        if use_simple_semantics:
+            lex.drop(['compositional_concept', 'inactive'], axis=1)
+        else:
+            lex.drop(['concept', 'inactive'], axis=1)
+            lex = lex.rename(columns={'compositional_concept': 'concept'})
+        lex.drop(['full_verb_3rd_en', 'full_verb_3rd_es', 'participle_en', 'participle_es',
+                  'past_tense_en', 'past_tense_es'], axis=1)
+        return lex
 
+    @staticmethod
+    def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
+        if message in ([x[1] for x in exclude_test_sentences+generated_pairs]):
+            return False
+        return True
 
-def get_clean_lexicon(lexicon_csv, false_friends, cognates, use_simple_semantics):
-    if not os.path.isfile(lexicon_csv):
-        lexicon_csv = "modules/%s" % lexicon_csv
-    df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
-    query = "inactive != 'Y'"  # remove inactive words
-    if not false_friends:
-        query += " and is_false_friend != '1'"
-    if not cognates:
-        query += " and is_cognate != 'Y'"
-    lex = df.query(query)
-    if use_simple_semantics:
-        lex.drop(['compositional_concept', 'inactive'], axis=1)
-    else:
-        lex.drop(['concept', 'inactive'], axis=1)
-        lex = lex.rename(columns={'compositional_concept': 'concept'})
-    lex.drop(['full_verb_3rd_en', 'full_verb_3rd_es', 'participle_en', 'participle_es',
-              'past_tense_en', 'past_tense_es'], axis=1)
-    return lex
+    @staticmethod
+    def add_concept_and_gender_info(message, concept, semantic_gender):
+        if message[-1] != '=':
+            msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message, concept, semantic_gender)
+        else:
+            msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message, concept, semantic_gender)
+        return msg
 
+    @staticmethod
+    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
+        """
+        :param num_sentences: Number of sentences that need to be generated
+        :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
+        :return: Number of sentences for training and test sets
+        """
+        num_test = int(percentage_test_set * num_sentences)
+        num_train = num_sentences - num_test
+        return num_train, num_test
 
-def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
-    if message in ([x[1] for x in exclude_test_sentences+generated_pairs]):
-        return False
-    return True
+    @staticmethod
+    def get_df_concept(morpheme_df):
+        concept = False
+        if not pd.isnull(morpheme_df['concept']):
+            concept = morpheme_df['concept']
+            if morpheme_df['is_cognate'] == 'Y':
+                concept += ",COG"
+            elif morpheme_df['is_false_friend'] == '1':
+                concept += ",FF"
+        elif morpheme_df['pos'] == 'det':
+            concept = morpheme_df['type']
+        return concept
 
+    @staticmethod
+    def get_df_gender(morpheme_df, prev_gender=None):
+        if not pd.isnull(morpheme_df['syntactic_gender_es']) and morpheme_df['syntactic_gender_es'] != 'M-F':
+                return morpheme_df['syntactic_gender_es']
+        return prev_gender
 
-def add_concept_and_gender_info(message, concept, semantic_gender):
-    if message[-1] != '=':
-        msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message, concept, semantic_gender)
-    else:
-        msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message, concept, semantic_gender)
-    return msg
-
-
-def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
-    """
-    :param num_sentences: Number of sentences that need to be generated
-    :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
-    :return: Number of sentences for training and test sets
-    """
-    num_test = int(percentage_test_set * num_sentences)
-    num_train = num_sentences - num_test
-    return num_train, num_test
-
-
-def get_df_concept(morpheme_df):
-    concept = False
-    if not pd.isnull(morpheme_df['concept']):
-        concept = morpheme_df['concept']
-        if morpheme_df['is_cognate'] == 'Y':
-            concept += ",COG"
-        elif morpheme_df['is_false_friend'] == '1':
-            concept += ",FF"
-    elif morpheme_df['pos'] == 'det':
-        concept = morpheme_df['type']
-    return concept
-
-
-def get_df_gender(morpheme_df, prev_gender=None):
-    if not pd.isnull(morpheme_df['syntactic_gender_es']) and morpheme_df['syntactic_gender_es'] != 'M-F':
-            return morpheme_df['syntactic_gender_es']
-    return prev_gender
-
-
-def get_df_semantic_gender(morpheme_df, syntactic_gender):
-    if not pd.isnull(morpheme_df['semantic_gender']):
-        if morpheme_df['semantic_gender'] == 'M-F' and syntactic_gender:
-            return syntactic_gender
-        return morpheme_df['semantic_gender']
-    return None
+    @staticmethod
+    def get_df_semantic_gender(morpheme_df, syntactic_gender):
+        if not pd.isnull(morpheme_df['semantic_gender']):
+            if morpheme_df['semantic_gender'] == 'M-F' and syntactic_gender:
+                return syntactic_gender
+            return morpheme_df['semantic_gender']
+        return None
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified

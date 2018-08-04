@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import shutil
-import itertools
 from multiprocessing import Process, Manager
 from datetime import datetime
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
@@ -161,7 +160,7 @@ class DualPath:
 
         return produced_sent_ids, target_sentence_ids, message, lang
 
-    def train_network(self, shuffle_set, plot_results=True, evaluate=True):
+    def train_network(self, shuffle_set, plot_results=True, evaluate_test_set=True, evaluate_training_set=False):
         """
         :param shuffle_set: Whether to shuffle the training set after each iteration
         :param plot_results: Whether to plot the performance
@@ -177,36 +176,44 @@ class DualPath:
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
-        if evaluate:
+        if evaluate_test_set and evaluate_training_set:  # start multiprocessing when evaluating both
             manager = Manager()
-            train_results = manager.dict()
             test_results = manager.dict()
+            train_results = manager.dict()
+        else:
+            test_results = {}
 
         epoch = 0
         while epoch < self.epochs:  # start training for x epochs
-            if epoch % 5 == 0:  # check whether to save weights or not (only every 5 epochs)
+            if epoch % 5 == 0 and epoch > 0:  # check whether to save weights or not (only every 5 epochs)
                 self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
                 np.random.shuffle(self.inputs.trainlines)
 
-            if evaluate and epoch % self.test_every == 0:  # evaluate training AND testset
-                subprocesses = []
-                # test set
-                subprocess = Process(target=self.evaluate_network, args=(test_results, epoch, self.inputs.testlines,
-                                                                         self.inputs.num_test,
-                                                                         self.check_pronouns if epoch > 0 else False))
-                subprocess.start()
-                subprocesses.append(subprocess)
-                # training set
-                subprocess = Process(target=self.evaluate_network, args=(train_results, epoch, self.inputs.trainlines,
-                                                                         self.inputs.num_train,
-                                                                         self.check_pronouns if epoch > 0 else False,
-                                                                         False))
-                subprocess.start()
-                subprocesses.append(subprocess)
-                for sp in subprocesses:
-                    sp.join()
+            if evaluate_test_set and epoch % self.test_every == 0:
+                if not evaluate_training_set:  # no need to run multiprocessing if we only evaluate the test set
+                    self.evaluate_network(test_results, epoch, self.inputs.testlines,
+                                          self.inputs.num_test, self.check_pronouns if epoch > 0 else False)
+                else:
+                    subprocesses = []
+                    subprocess = Process(target=self.evaluate_network, args=(test_results, epoch, self.inputs.testlines,
+                                                                             self.inputs.num_test,
+                                                                             self.check_pronouns
+                                                                             if epoch > 0 else False))
+                    subprocess.start()
+                    subprocesses.append(subprocess)
+                    if evaluate_training_set:
+                        subprocess = Process(target=self.evaluate_network, args=(train_results, epoch,
+                                                                                 self.inputs.trainlines,
+                                                                                 self.inputs.num_train,
+                                                                                 self.check_pronouns
+                                                                                 if epoch > 0 else False,
+                                                                                 False))
+                        subprocess.start()
+                        subprocesses.append(subprocess)
+                    for sp in subprocesses:
+                        sp.join()
 
             for train_line in self.inputs.trainlines:  # start training
                 self.feed_line(train_line, epoch, backpropagate=True)
@@ -216,7 +223,7 @@ class DualPath:
 
         self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
 
-        if evaluate:
+        if evaluate_test_set:
             for sim in test_results.values():
                 s, p, pr, pr_pos, cc, c, t = sim
                 self.results['correct_sentences']['test'].append(s)
@@ -226,40 +233,22 @@ class DualPath:
                 self.results['correct_code_switches']['test'].append(cc)
                 self.results['code_switches']['test'].append(c)
                 self.results['type_code_switches']['test'].append(t)
+            self.results['type_code_switches']['test'] = self.aggregate_dict(self.results['type_code_switches']['test'],
+                                                                             self.epochs)
 
-            for sim in train_results.values():
-                s, p, pr, pr_pos, cc, c, t = sim
-                self.results['correct_sentences']['training'].append(s)
-                self.results['correct_pos']['training'].append(p)
-                self.results['pronoun_errors']['training'].append(pr)
-                self.results['pronoun_errors_flex']['training'].append(pr_pos)
-                self.results['correct_code_switches']['training'].append(cc)
-                self.results['code_switches']['training'].append(c)
-                self.results['type_code_switches']['training'].append(t)
-            # convert "type_code_switches" from list of dicts to a single dict
-            type_training = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['training'])))
-            type_test = sorted(set().union(*(d.keys() for d in self.results['type_code_switches']['test'])))
+            if evaluate_training_set:
+                for sim in train_results.values():
+                    s, p, pr, pr_pos, cc, c, t = sim
+                    self.results['correct_sentences']['training'].append(s)
+                    self.results['correct_pos']['training'].append(p)
+                    self.results['pronoun_errors']['training'].append(pr)
+                    self.results['pronoun_errors_flex']['training'].append(pr_pos)
+                    self.results['correct_code_switches']['training'].append(cc)
+                    self.results['code_switches']['training'].append(c)
+                    self.results['type_code_switches']['training'].append(t)
+                self.results['type_code_switches']['training'] = \
+                    self.aggregate_dict(self.results['type_code_switches']['training'], self.epochs)
 
-            types_dict = {}
-            for type in type_training:
-                val = []
-                for epoch in range(self.epochs):
-                    v = self.results['type_code_switches']['training'][epoch][type] \
-                        if type in self.results['type_code_switches']['training'][epoch] else 0
-                    val.append(v)
-                types_dict[type] = val
-            self.results['type_code_switches']['training'] = types_dict
-
-            types_dict = {}
-            for type in type_test:
-                val = []
-                for epoch in range(self.epochs):
-                    v = self.results['type_code_switches']['test'][epoch][type] \
-                        if type in self.results['type_code_switches']['test'][epoch] else 0
-                    val.append(v)
-                types_dict[type] = val
-            self.results['type_code_switches']['test'] = types_dict
-            # print self.results['type_code_switches']['test']
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
                 pickle.dump(self.results, pckl)
@@ -290,15 +279,24 @@ class DualPath:
         type_all_code_switches = {}
         file_prefix = "test" if is_test_set else "train"
 
+        cs_cog = 0
+        cs_enes = 0
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
+            #produced_sentence_idx = self.inputs.sentence_indeces('el esposo pequeño está demonstr -ando una cometa a_ the viuda .'.split())
+            #target_sentence_idx = self.inputs.sentence_indeces('el esposo pequeño está demonstr -ando una cometa a_ la viuda .'.split())
+            #message = 'AGENT=DEF,HUSBAND,M;AGENT-MOD=SHORT,M;ACTION=DEMONSTRAR,COG;PATIENT=INDEF,KITE;RECIPIENT=DEF,WIDOW,F;E=PROG,AGT,PAT,REC,PRESENT,ES'
+            #lang = 'es'
             has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
             is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_sentence_idx,
                                                                                         target_sentence_idx)
             code_switched = self.inputs.is_code_switched(produced_sentence_idx, target_lang=lang)
             if code_switched:
                 num_all_code_switches += 1
-
+                if ',COG' in message:
+                    cs_cog += 1
+                else:
+                    cs_enes += 1
             if is_grammatical:
                 num_correct_pos += 1
                 has_correct_pos = True
@@ -367,7 +365,6 @@ class DualPath:
                              not has_wrong_tense, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""), message))
-
         # on the set level
         with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
@@ -375,6 +372,21 @@ class DualPath:
 
         results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex,
                                num_correct_code_switches, num_all_code_switches, type_all_code_switches)
+
+    @staticmethod
+    def aggregate_dict(type_code_switches_dict, epochs):
+        # convert "type_code_switches" from list of dicts
+        # (e.g, [[{'es-noun': 4, 'en-alternational': 1}][{'es-noun': 6, 'en-alternational': 8}]])
+        # to a single dict of list (e.g., {'en-alternational': [1, 6, 14], 'es-noun': [4, 8, 22]}
+        types_dict = {}
+        all_keys = sorted(set().union(*(d.keys() for d in type_code_switches_dict)))
+        for key in all_keys:
+            val = []
+            for epoch in range(epochs):
+                v = type_code_switches_dict[epoch][key] if key in type_code_switches_dict[epoch] else 0
+                val.append(v)
+            types_dict[key] = val
+        return types_dict
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -556,6 +568,9 @@ if __name__ == "__main__":
         else:
             sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
 
+    if args.cognate_experiment and not args.nolang:
+        args.nolang = True
+
     if not args.title:
         args.title = generate_title_from_lang(args.lang)
 
@@ -597,6 +612,7 @@ if __name__ == "__main__":
                                args.generate_num, args.l2_percentage)
         del sets  # we no longer need it
         # now run the simulations
+
         processes = []
         for sim in range(args.sim):
             inputs.input_dir = "%s/%s" % (results_dir, sim)
@@ -605,13 +621,18 @@ if __name__ == "__main__":
                 f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
                         (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
                          inputs.num_train))
-
+            #dualp_sim = deepcopy(dualp)
+            #dualp_sim.inputs = inputs
+            #dualp_sim.simulation_num = sim
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
-                             set_weights_folder=args.set_weights, simulation_num=sim, momentum=args.momentum,
+                             set_weights_folder=args.set_weights, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_class=inputs,
-                             check_pronouns=args.check_pronouns)
+                             check_pronouns=args.check_pronouns, simulation_num=sim)
+            """dualp_sim.srn.reset_weights(set_weights_epoch=args.set_weights_epoch,
+                                        set_weights_folder=args.set_weights,
+                                        simulation_num=sim, results_dir=inputs.results_dir)"""
             process = Process(target=dualp.train_network, args=(args.shuffle,))
             process.start()
             processes.append(process)

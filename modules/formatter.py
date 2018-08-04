@@ -7,8 +7,6 @@ import pandas as pd
 import collections
 from elman_network import np
 
-np.random.seed(18)
-
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lexicon_csv, role_fname, evsem_fname, fixed_weights,
@@ -142,7 +140,7 @@ class InputFormatter:
             ignore_idx.extend(self.determiners)
 
         if self.same_unordered_lists([x for x in out_sentence_idx if x not in ignore_idx],
-                                            [x for x in trg_sentence_idx if x not in ignore_idx]):
+                                     [x for x in trg_sentence_idx if x not in ignore_idx]):
             flexible_order = True
         elif remove_last_word and self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
             flexible_order = True
@@ -182,6 +180,7 @@ class InputFormatter:
         translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
                                                                                         trg_sentence_idx[0])
         for translated_sentence_idx in translated_sentence_candidates:
+            # print translated_sentence_idx, self.sentence_from_indeces(translated_sentence_idx)
             cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
                 return cs_type
@@ -496,7 +495,8 @@ class InputFormatter:
             languages = ['morpheme_%s' % lang]
         else:
             languages = ['morpheme_en', 'morpheme_es']
-        q = list(self.lexicon_df.query(query)[languages].dropna().values.ravel())
+        q = self.lexicon_df.query(query)[languages].values.ravel()
+        q = [x for x in list(q) if is_not_nan(x)]
         return self.sentence_indeces(q)
 
     def find_equivalent_translation_idx(self, idx, lang):
@@ -527,7 +527,7 @@ def take_average_of_valid_results(valid_results):
         results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
             for t in ['training', 'test']:
-                if results_average[key][t] != []:  # do not simplify ( != [] is necessary)
+                if t in results_average[key] and results_average[key][t] != []:  # do not simplify ( != [] is necessary)
                     if type(simulation[key][t]) is dict:  # case: type_code_switches
                         for cs_type, val in simulation[key][t].items():
                             if cs_type in results_average[key][t]:
@@ -541,18 +541,33 @@ def take_average_of_valid_results(valid_results):
     # now average over all simulations
     for key, val in results_average.items():
         for t in ['training', 'test']:
-            if type(results_average[key][t]) is dict:  # case: type_code_switches
-                results_average[key][t] = {k: np.true_divide(v, len(valid_results))
-                                           for k, v in results_average[key][t].iteritems()}
-            else:
-                results_average[key][t] = np.true_divide(val[t], len(valid_results))
+            if t in results_average[key]:
+                if type(results_average[key][t]) is dict:  # case: type_code_switches
+                    results_average[key][t] = {k: np.true_divide(v, len(valid_results))
+                                               for k, v in results_average[key][t].iteritems()}
+                else:
+                    results_average[key][t] = np.true_divide(val[t], len(valid_results))
     return results_average
 
 
-def get_numpy_mean_and_std(x):
+def get_numpy_mean_and_std(x, average_over_list=False):
+    if isinstance(x, list):
+        x = np.array(x)
     if x.sum() > 0:
-        return x.mean(axis=0), x.std(axis=0)
-    return [[0] * len(x)] * 2
+        if average_over_list:
+            return x.mean(axis=0), x.std(axis=0)
+        return x.mean(), x.std()  # we only want one number in this case (axis=1)
+    return 0, 0 if not average_over_list else [[0] * len(x)] * 2
+
+
+def percentage(x, total):
+    if total == 0:
+        return float('NaN')
+    return np.true_divide(x * 100, total)
+
+
+def numpy_arange_len(x):
+    return np.arange(len(x))
 
 
 def compute_mean_and_std(valid_results, epochs):
@@ -566,7 +581,8 @@ def compute_mean_and_std(valid_results, epochs):
     all_cs_types = []
     for sim in valid_results:
         for t in ['test', 'training']:
-            all_cs_types.extend(sim['type_code_switches'][t].keys())
+            if sim['type_code_switches'][t]:
+                all_cs_types.extend(sim['type_code_switches'][t].keys())
     all_cs_types = set(all_cs_types)
 
     for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
@@ -576,7 +592,7 @@ def compute_mean_and_std(valid_results, epochs):
             results_sum[key] = {'training': [], 'test': []}
         for simulation in valid_results:  # go through all simulations
             for t in ['training', 'test']:
-                if t in simulation[key]:
+                if t in simulation[key] and simulation[key][t]:
                     if type(simulation[key][t]) is dict:  # case: type_code_switches
                         for cs_type in all_cs_types:
                             if cs_type not in results_sum[key][t]:
@@ -590,15 +606,16 @@ def compute_mean_and_std(valid_results, epochs):
     # now AVERAGE over all simulations.
     for key in all_keys:
         for t in ['training', 'test']:
-            if type(results_sum[key][t]) is dict:
-                for cs_type in all_cs_types:
-                    np_array = np.array(results_sum[key][t][cs_type])
-                    np_mean, np_std = get_numpy_mean_and_std(np_array)
-                    # results_sum[key][t]["%s-std" % cs_type] = np_std
-                    results_sum[key][t][cs_type] = np_mean
-            else:
-                np_array = np.array(results_sum[key][t])
-                np_mean, np_std = get_numpy_mean_and_std(np_array)
-                results_sum[key]["%s-std" % t] = np_std
-                results_sum[key][t] = np_mean
+            if t in results_sum[key] and results_sum[key][t]:
+                if type(results_sum[key][t]) is dict:
+                    for cs_type in all_cs_types:
+                        np_array = np.array(results_sum[key][t][cs_type])
+                        np_mean, np_std = get_numpy_mean_and_std(np_array, average_over_list=True)
+                        # results_sum[key][t]["%s-std" % cs_type] = np_std
+                        results_sum[key][t][cs_type] = np_mean
+                else:
+                    np_array = np.array(results_sum[key][t])
+                    np_mean, np_std = get_numpy_mean_and_std(np_array, average_over_list=True)
+                    results_sum[key]["%s-std" % t] = np_std
+                    results_sum[key][t] = np_mean
     return results_sum
