@@ -13,8 +13,8 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 seed=0, lang='enes', lexicon_csv='corpus/lexicon.csv', structures_csv='corpus/structures.csv',
-                 include_ff=False, cognate_percentage=0.5, monolingual_only=False):
+                 cognate_percentage, seed=0, lang='enes', lexicon_csv='corpus/lexicon.csv',
+                 structures_csv='corpus/structures.csv', include_ff=False, monolingual_only=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -129,7 +129,7 @@ class SetsGenerator:
             if pos_w == 'verb':
                 pos_to_replace = "%s::%s" % (pos_w, verb_type)
             else:
-                pos_to_replace = "%s::%sanimate" % (pos_w, "" if semantic_gender_w else "in")
+                pos_to_replace = "%s::%sanimate" % (pos_w, "" if self.is_not_nan(semantic_gender_w) else "in")
             replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                      gender=syntactic_gender_w,
                                                                      only_select_false_friend=not replace_with_cognates,
@@ -444,10 +444,16 @@ class SetsGenerator:
             return morpheme_df['semantic_gender']
         return None
 
+    @staticmethod
+    def is_not_nan(x):
+        if x == x:
+            return True
+        return False
+
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, use_full_verb_form=False, use_simple_semantics=True,
-                         allow_free_structure_production=False, lang='esen')
+    sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False,
+                         use_simple_semantics=True, allow_free_structure_production=False, lang='esen')
     # sets.generate_sets(num_sentences=2500, percentage_L2=0.4)
     sets.generate_sets_for_cognate_experiment(num_sentences=2500, percentage_L2=0.5)

@@ -2,6 +2,7 @@
 import shutil
 from multiprocessing import Process, Manager
 from datetime import datetime
+from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
 from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
@@ -269,36 +270,26 @@ class DualPath:
         :param check_pron: Whether to evaluate pronoun production
         :param is_test_set: Whether it is a test set (otherwise a training set is used)
         """
-        num_correct_meaning = 0
-        num_correct_pos = 0
-        num_pron_err = 0
-        # in addition to num_pron_err, count grammatically correct sentences with gender error that convey wrong meaning
-        num_pron_err_flex = 0
-        num_all_code_switches = 0
-        num_correct_code_switches = 0
-        type_all_code_switches = {}
+        counter = defaultdict(int)
+        counter['type_all_code_switches'] = defaultdict(int)
         file_prefix = "test" if is_test_set else "train"
 
         cs_cog = 0
         cs_enes = 0
         for line in set_lines:
             produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
-            #produced_sentence_idx = self.inputs.sentence_indeces('el esposo pequeño está demonstr -ando una cometa a_ the viuda .'.split())
-            #target_sentence_idx = self.inputs.sentence_indeces('el esposo pequeño está demonstr -ando una cometa a_ la viuda .'.split())
-            #message = 'AGENT=DEF,HUSBAND,M;AGENT-MOD=SHORT,M;ACTION=DEMONSTRAR,COG;PATIENT=INDEF,KITE;RECIPIENT=DEF,WIDOW,F;E=PROG,AGT,PAT,REC,PRESENT,ES'
-            #lang = 'es'
             has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
             is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_sentence_idx,
                                                                                         target_sentence_idx)
             code_switched = self.inputs.is_code_switched(produced_sentence_idx, target_lang=lang)
             if code_switched:
-                num_all_code_switches += 1
+                counter['all_code_switches'] += 1
                 if ',COG' in message:
                     cs_cog += 1
                 else:
                     cs_enes += 1
             if is_grammatical:
-                num_correct_pos += 1
+                counter['correct_pos'] += 1
                 has_correct_pos = True
 
                 if code_switched:  # only count grammatically correct sentences
@@ -306,12 +297,9 @@ class DualPath:
                     cs_type = self.inputs.get_code_switched_type(produced_sentence_idx, target_sentence_idx)
                     if cs_type:  # TODO: it could be interesting to check the failed sentences too
                         correct_meaning = True
-                        num_correct_code_switches += 1
+                        counter['correct_code_switches'] += 1
                         cs_type_with_lang = "%s-%s" % (lang, cs_type)
-                        if cs_type_with_lang in type_all_code_switches:
-                            type_all_code_switches[cs_type_with_lang] += 1
-                        else:
-                            type_all_code_switches.update({cs_type_with_lang: 1})
+                        counter['type_all_code_switches'][cs_type_with_lang] += 1
 
                         # check for cognates vs FFs vs regular (no lang)
                         if ',COG' in message:
@@ -320,33 +308,29 @@ class DualPath:
                             cs_type_with_cognate_status = "%s-FF" % cs_type
                         else:  # no cognates or false friends
                             cs_type_with_cognate_status = cs_type
-
-                        if cs_type_with_cognate_status in type_all_code_switches:
-                            type_all_code_switches[cs_type_with_cognate_status] += 1
-                        else:
-                            type_all_code_switches.update({cs_type_with_cognate_status: 1})
-
+                        counter['type_all_code_switches'][cs_type_with_cognate_status] += 1
                 else:
                     correct_meaning = self.inputs.has_correct_meaning(produced_sentence_idx, target_sentence_idx)
 
                 if correct_meaning:
-                    num_correct_meaning += 1
+                    counter['correct_meaning'] += 1
                 else:
                     has_wrong_det = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
                                                                      feature="determiners")
                     has_wrong_tense = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
                                                                        feature="tense")
                     if has_wrong_det or has_wrong_tense:
-                        num_correct_meaning += 1  # if the only mistake was the determiner, count it as correct
+                        counter['correct_meaning'] += 1  # if the only mistake was the determiner, count it as correct
 
                 if check_pron:  # only check the grammatical sentences
                     correctedness_status = ""
                     if self.inputs.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
                         if self.inputs.test_meaning_without_pronouns(produced_sentence_idx, target_sentence_idx):
-                            num_pron_err += 1
+                            counter['pron_err'] += 1
                         else:
                             correctedness_status = "(POS only)"
-                            num_pron_err_flex += 1
+                            # also count grammatically correct sentences with gender error that convey wrong meaning
+                            counter['pron_err_flex'] += 1
 
                         with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_prefix),
                                   'a') as f:
@@ -368,10 +352,11 @@ class DualPath:
         # on the set level
         with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
-                    (epoch, num_correct_meaning, num_sentences, num_correct_pos, num_sentences))
+                    (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))
 
-        results_dict[epoch] = (num_correct_meaning, num_correct_pos, num_pron_err, num_pron_err_flex,
-                               num_correct_code_switches, num_all_code_switches, type_all_code_switches)
+        results_dict[epoch] = (counter['correct_meaning'], counter['correct_pos'], counter['pron_err'],
+                               counter['pron_err_flex'], counter['correct_code_switches'],
+                               counter['all_code_switches'], counter['type_all_code_switches'])
 
     @staticmethod
     def aggregate_dict(type_code_switches_dict, epochs):
@@ -446,8 +431,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=80)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=40)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=45)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -467,10 +452,12 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=float, default=20,
+    parser.add_argument('-fw', '-fixed_weights', type=float, default=25,
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
                         help='Fixed weight value for identif-role connections')
+    parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
+                        type=float, default=0.2)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
@@ -482,7 +469,7 @@ if __name__ == "__main__":
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=20)
+                        type=int, default=30)
     """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
     parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
     parser.add_argument('-lexicon_csv', help='CSV file that contains the lexicon and concepts', default='lexicon.csv')
@@ -561,7 +548,7 @@ if __name__ == "__main__":
 
         args.input = "%s/input/" % results_dir
         sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_simple_semantics=args.simple_semantics,
+                             use_simple_semantics=args.simple_semantics, cognate_percentage=args.cognate_percentage,
                              allow_free_structure_production=args.free_pos)
         if args.cognate_experiment:
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
@@ -676,8 +663,10 @@ if __name__ == "__main__":
             layers_with_softmax_act_function.append(layer.name)
 
     with open("%s/simulation.info" % results_dir, 'a') as f:  # Append information regarding the simulations' success
-        f.write("\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n%s%s" %
-                (', '.join(layers_with_softmax_act_function), simulations_with_pron_err, args.sim,
-                 "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations else "",
-                 "\nIndeces of failed simulations (or simulations that would fail): %s" % ", ".join(failed_sim_id)
-                 if failed_sim_id else ""))
+        f.write("\nLexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s"
+                "\n%s%s" % (inputs.lexicon_size, ', '.join(layers_with_softmax_act_function), simulations_with_pron_err,
+                            args.sim,
+                            "Successful simulations:%s/%s" % (num_valid_simulations, args.sim)
+                            if num_valid_simulations else "",
+                            "\nIndeces of failed simulations (or simulations that would fail): %s" %
+                            ", ".join(failed_sim_id) if failed_sim_id else ""))
