@@ -11,22 +11,22 @@ class Plotter:
         self.results_dir = results_dir
 
     def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, summary_sim=None):
-        correct_test_sentences = results['correct_sentences']['test']
+        correct_test_sentences = results['correct_meaning']['test']
         correct_test_pos = results['correct_pos']['test']
         epochs = range(len(correct_test_sentences))
-        if results['correct_sentences']['training'] != []:
-            correct_training_sentences = results['correct_sentences']['training']
+        if results['correct_meaning']['training'] != []:
+            correct_training_sentences = results['correct_meaning']['training']
             plt.plot(epochs, [percentage(x, num_train) for x in correct_training_sentences], linestyle='--',
                      color='olivedrab', label='training')
             plt.plot(epochs, [percentage(x, num_train) for x in results['correct_pos']['training']], linestyle='--',
                      color='yellowgreen', label='training POS')
-        # now add test sentences
+        # test sentences
         plt.plot(epochs, [percentage(x, num_test) for x in correct_test_sentences],
                  color='darkslateblue', label='test')
         plt.plot(epochs, [percentage(x, num_test) for x in correct_test_pos],
                  color='deepskyblue', label='test POS')
-        if 'test-std' in results['correct_sentences']:
-            correct_test_std = results['correct_sentences']['test-std']
+        if 'test-std' in results['correct_meaning']:
+            correct_test_std = results['correct_meaning']['test-std']
             lower_bound = [percentage(x, num_test) for x in correct_test_sentences - correct_test_std]
             upper_bound = [percentage(x, num_test) for x in correct_test_sentences + correct_test_std]
             plt.fill_between(epochs, lower_bound, upper_bound, facecolor='darkslateblue', alpha=0.1)
@@ -51,13 +51,13 @@ class Plotter:
         # !------------  CODE-SWITCHES ------------!
         correct_code_switches = results['correct_code_switches']['test']
         if sum(correct_code_switches):
-            code_switches = results['code_switches']['test']
+            code_switches = results['all_code_switches']['test']
             plt.plot(epochs, [percentage(x, num_test) for x in code_switches], color='olivedrab',
                      label="All CS")
             plt.plot(epochs, [percentage(x, num_test) for x in correct_code_switches],
                      color='darkslateblue', label="Code-switches")
-            if results['code_switches']['training'] != []:
-                plt.plot(epochs, [percentage(x, num_train) for x in results['code_switches']['training']],
+            if results['all_code_switches']['training'] != []:
+                plt.plot(epochs, [percentage(x, num_train) for x in results['all_code_switches']['training']],
                          linestyle='--', color='yellowgreen', label="All CS (training)")
                 plt.plot(epochs, [percentage(x, num_train) for x in results['correct_code_switches']['training']],
                          linestyle='--', color='deepskyblue', label="Code-switches (training)")
@@ -66,7 +66,7 @@ class Plotter:
                 lower_bound = [percentage(x, num_test) for x in correct_code_switches - correct_code_switches_std]
                 upper_bound = [percentage(x, num_test) for x in correct_code_switches + correct_code_switches_std]
                 plt.fill_between(epochs, lower_bound, upper_bound, facecolor='darkslateblue', alpha=0.1)
-                code_switches_std = results['code_switches']['test-std']
+                code_switches_std = results['all_code_switches']['test-std']
                 lower_bound = [percentage(x, num_test) for x in code_switches - code_switches_std]
                 upper_bound = [percentage(x, num_test) for x in code_switches + code_switches_std]
                 plt.fill_between(epochs, lower_bound, upper_bound, facecolor='olivedrab', alpha=0.1)

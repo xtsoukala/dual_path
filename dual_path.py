@@ -72,12 +72,12 @@ class DualPath:
         self.initialize_srn()
 
         # dict to save results
-        self.results = {'correct_sentences': {'test': [], 'training': []},
+        self.results = {'correct_meaning': {'test': [], 'training': []},
                         'correct_pos': {'test': [], 'training': []},
                         'pronoun_errors_flex': {'test': [], 'training': []},
                         'pronoun_errors': {'test': [], 'training': []},
                         'correct_code_switches': {'test': [], 'training': []},
-                        'code_switches': {'test': [], 'training': []},
+                        'all_code_switches': {'test': [], 'training': []},
                         'type_code_switches': {'test': [], 'training': []},
                         'mse': {}}
 
@@ -225,30 +225,9 @@ class DualPath:
         self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
 
         if evaluate_test_set:
-            for sim in test_results.values():
-                s, p, pr, pr_pos, cc, c, t = sim
-                self.results['correct_sentences']['test'].append(s)
-                self.results['correct_pos']['test'].append(p)
-                self.results['pronoun_errors']['test'].append(pr)
-                self.results['pronoun_errors_flex']['test'].append(pr_pos)
-                self.results['correct_code_switches']['test'].append(cc)
-                self.results['code_switches']['test'].append(c)
-                self.results['type_code_switches']['test'].append(t)
-            self.results['type_code_switches']['test'] = self.aggregate_dict(self.results['type_code_switches']['test'],
-                                                                             self.epochs)
-
+            self.update_results(test_results)
             if evaluate_training_set:
-                for sim in train_results.values():
-                    s, p, pr, pr_pos, cc, c, t = sim
-                    self.results['correct_sentences']['training'].append(s)
-                    self.results['correct_pos']['training'].append(p)
-                    self.results['pronoun_errors']['training'].append(pr)
-                    self.results['pronoun_errors_flex']['training'].append(pr_pos)
-                    self.results['correct_code_switches']['training'].append(cc)
-                    self.results['code_switches']['training'].append(c)
-                    self.results['type_code_switches']['training'].append(t)
-                self.results['type_code_switches']['training'] = \
-                    self.aggregate_dict(self.results['type_code_switches']['training'], self.epochs)
+                self.update_results(train_results, type_set='training')
 
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
@@ -261,6 +240,13 @@ class DualPath:
                                  title=self.inputs.plot_title,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
+    def update_results(self, temp_results, type_set='test'):
+        for sim in range(self.epochs):
+            for key in ['correct_meaning', 'correct_pos', 'pronoun_errors', 'pronoun_errors_flex',
+                        'correct_code_switches', 'all_code_switches', 'type_code_switches']:
+                self.results[key][type_set].append(temp_results[sim][key] if key in temp_results[sim] else 0)
+        self.aggregate_dict(type_set=type_set)
+
     def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, check_pron, is_test_set=True):
         """
         :param results_dict: Dictionary that contains evaluation results for all epochs
@@ -271,7 +257,7 @@ class DualPath:
         :param is_test_set: Whether it is a test set (otherwise a training set is used)
         """
         counter = defaultdict(int)
-        counter['type_all_code_switches'] = defaultdict(int)
+        counter['type_code_switches'] = defaultdict(int)
         file_prefix = "test" if is_test_set else "train"
 
         cs_cog = 0
@@ -299,7 +285,7 @@ class DualPath:
                         correct_meaning = True
                         counter['correct_code_switches'] += 1
                         cs_type_with_lang = "%s-%s" % (lang, cs_type)
-                        counter['type_all_code_switches'][cs_type_with_lang] += 1
+                        counter['type_code_switches'][cs_type_with_lang] += 1
 
                         # check for cognates vs FFs vs regular (no lang)
                         if ',COG' in message:
@@ -308,7 +294,7 @@ class DualPath:
                             cs_type_with_cognate_status = "%s-FF" % cs_type
                         else:  # no cognates or false friends
                             cs_type_with_cognate_status = cs_type
-                        counter['type_all_code_switches'][cs_type_with_cognate_status] += 1
+                        counter['type_code_switches'][cs_type_with_cognate_status] += 1
                 else:
                     correct_meaning = self.inputs.has_correct_meaning(produced_sentence_idx, target_sentence_idx)
 
@@ -326,11 +312,11 @@ class DualPath:
                     correctedness_status = ""
                     if self.inputs.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
                         if self.inputs.test_meaning_without_pronouns(produced_sentence_idx, target_sentence_idx):
-                            counter['pron_err'] += 1
+                            counter['pronoun_errors'] += 1
                         else:
                             correctedness_status = "(POS only)"
                             # also count grammatically correct sentences with gender error that convey wrong meaning
-                            counter['pron_err_flex'] += 1
+                            counter['pronoun_errors_flex'] += 1
 
                         with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_prefix),
                                   'a') as f:
@@ -353,25 +339,22 @@ class DualPath:
         with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
             f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
                     (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))
+        results_dict[epoch] = counter
 
-        results_dict[epoch] = (counter['correct_meaning'], counter['correct_pos'], counter['pron_err'],
-                               counter['pron_err_flex'], counter['correct_code_switches'],
-                               counter['all_code_switches'], counter['type_all_code_switches'])
-
-    @staticmethod
-    def aggregate_dict(type_code_switches_dict, epochs):
+    def aggregate_dict(self, type_set):
         # convert "type_code_switches" from list of dicts
         # (e.g, [[{'es-noun': 4, 'en-alternational': 1}][{'es-noun': 6, 'en-alternational': 8}]])
         # to a single dict of list (e.g., {'en-alternational': [1, 6, 14], 'es-noun': [4, 8, 22]}
         types_dict = {}
-        all_keys = sorted(set().union(*(d.keys() for d in type_code_switches_dict)))
+        all_keys = sorted(set().union(*(d.keys() for d in self.results['type_code_switches'][type_set])))
         for key in all_keys:
             val = []
-            for epoch in range(epochs):
-                v = type_code_switches_dict[epoch][key] if key in type_code_switches_dict[epoch] else 0
+            for epoch in range(self.epochs):
+                v = self.results['type_code_switches'][type_set][epoch][key] \
+                    if key in self.results['type_code_switches'][type_set][epoch] else 0
                 val.append(v)
             types_dict[key] = val
-        return types_dict
+        self.results['type_code_switches'][type_set] = types_dict
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -457,7 +440,7 @@ if __name__ == "__main__":
     parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
-                        type=float, default=0.2)
+                        type=float, default=0.3)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
@@ -522,6 +505,9 @@ if __name__ == "__main__":
     parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment')
     parser.set_defaults(cognate_experiment=False)
+    parser.add_argument('--nomultiprocessing', '--no_multiprocessing', dest='use_multiprocessing', action='store_false',
+                        help='Use multiprocessing for parallel simulations')
+    parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
@@ -599,8 +585,8 @@ if __name__ == "__main__":
                                args.generate_num, args.l2_percentage)
         del sets  # we no longer need it
         # now run the simulations
-
-        processes = []
+        if args.use_multiprocessing:
+            processes = []
         for sim in range(args.sim):
             inputs.input_dir = "%s/%s" % (results_dir, sim)
             inputs.update_sets(new_results_dir=inputs.input_dir)
@@ -608,24 +594,24 @@ if __name__ == "__main__":
                 f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
                         (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
                          inputs.num_train))
-            #dualp_sim = deepcopy(dualp)
-            #dualp_sim.inputs = inputs
-            #dualp_sim.simulation_num = sim
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                              set_weights_folder=args.set_weights, momentum=args.momentum,
                              set_weights_epoch=args.set_weights_epoch, input_class=inputs,
                              check_pronouns=args.check_pronouns, simulation_num=sim)
-            """dualp_sim.srn.reset_weights(set_weights_epoch=args.set_weights_epoch,
-                                        set_weights_folder=args.set_weights,
-                                        simulation_num=sim, results_dir=inputs.results_dir)"""
-            process = Process(target=dualp.train_network, args=(args.shuffle,))
-            process.start()
-            processes.append(process)
-        for p in processes:
-            p.join()
+            if args.use_multiprocessing:
+                process = Process(target=dualp.train_network, args=(args.shuffle,))
+                process.start()
+                processes.append(process)
+            else:
+                dualp.train_network(shuffle_set=args.shuffle)
 
+        if args.use_multiprocessing:
+            for p in processes:
+                p.join()
+
+        # aggregate results
         all_results = []
         for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
@@ -637,13 +623,12 @@ if __name__ == "__main__":
         if all_results:
             valid_results = []
             for i, simulation in enumerate(all_results):
-                if inputs.training_is_successful(simulation['correct_sentences']['test'], threshold=args.threshold):
+                if inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=args.threshold):
                     valid_results.append(simulation)
-                    if not inputs.training_is_successful(simulation['correct_sentences']['test'], threshold=75):
+                    if not inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=75):
                         failed_sim_id.append("[%s]" % i)  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(i))  # keep track of simulations that failed
-
             num_valid_simulations = len(valid_results)  # some might have been discarded
 
             if num_valid_simulations:  # take the average of results and plot
