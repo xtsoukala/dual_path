@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import shutil
+import logging
 from multiprocessing import Process, Manager
 from datetime import datetime
 from collections import defaultdict
@@ -46,7 +47,9 @@ class DualPath:
         self.inputs = input_class
         self.compress_size = compress_size
         self.hidden_size = hidden_size
-
+        self.simulation_num = simulation_num
+        self.training_logger = self.init_logger('training')
+        self.test_logger = self.init_logger('test')
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -65,21 +68,25 @@ class DualPath:
         self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
-        self.simulation_num = simulation_num
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, dir=results_dir,
                                           debug_messages=srn_debug, include_role_copy=role_copy,
                                           include_input_copy=input_copy)
         self.initialize_srn()
-
-        # dict to save results
         self.results = {'correct_meaning': {'test': [], 'training': []},
                         'correct_pos': {'test': [], 'training': []},
                         'pronoun_errors_flex': {'test': [], 'training': []},
                         'pronoun_errors': {'test': [], 'training': []},
                         'correct_code_switches': {'test': [], 'training': []},
                         'all_code_switches': {'test': [], 'training': []},
-                        'type_code_switches': {'test': [], 'training': []},
-                        'mse': {}}
+                        'type_code_switches': {'test': [], 'training': []}}
+
+    def init_logger(self, name):
+        name = "%s_%s" % (name, self.simulation_num)
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False  # no stdout to console
+        logger.addHandler(logging.FileHandler("%s/%s.out" % (self.inputs.results_dir, name)))
+        return logger
 
     def initialize_srn(self):
         # Chang: The where, what, and cwhat units were unbiased to make them more input driven
@@ -241,9 +248,8 @@ class DualPath:
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def update_results(self, temp_results, type_set='test'):
-        valid_keys = [x for x in self.results.keys() if x != 'mse']
         for sim in range(self.epochs):
-            for key in valid_keys:
+            for key in self.results.keys():
                 self.results[key][type_set].append(temp_results[sim][key] if key in temp_results[sim] else 0)
         self.aggregate_dict(type_set=type_set)
 
@@ -258,8 +264,7 @@ class DualPath:
         """
         counter = defaultdict(int)
         counter['type_code_switches'] = defaultdict(int)
-        file_prefix = "test" if is_test_set else "train"
-
+        logger = self.test_logger if is_test_set else self.training_logger
         cs_cog = 0
         cs_enes = 0
         for line in set_lines:
@@ -318,7 +323,7 @@ class DualPath:
                             # also count grammatically correct sentences with gender error that convey wrong meaning
                             counter['pronoun_errors_flex'] += 1
 
-                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, file_prefix),
+                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
                                   'a') as f:
                             f.write("--------%s--------%s\nOUT:%s\nTRG:%s\n%s\n" %
                                     (epoch, correctedness_status,
@@ -327,17 +332,15 @@ class DualPath:
             if epoch > 0:
                 suffix = ("flex-" if (flexible_order and correct_meaning) or has_wrong_det or has_wrong_tense
                           else "in" if not correct_meaning else "")
-                with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
-                    f.write("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s "
-                            "Meaning:%scorrect %s\n%s\n" %
+                logger.info("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s Meaning:"
+                            "%scorrect %s\n%s" %
                             (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
                              self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
                              not has_wrong_tense, not has_wrong_det,
                              suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""), message))
         # on the set level
-        with open("%s/%s.out" % (self.inputs.results_dir, file_prefix), 'a') as f:
-            f.write("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s\n" %
+        logger.info("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s" %
                     (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))
         results_dict[epoch] = counter
 
@@ -409,6 +412,7 @@ def create_all_input_files(num_simulations, results_dir, sets, original_input_pa
         elif original_input_path:
             # use existing test/training set (copy them first)
             copy_files_endwith(os.path.join(original_input_path, str(sim)), rdir)
+
 
 if __name__ == "__main__":
     import argparse
@@ -527,7 +531,7 @@ if __name__ == "__main__":
                 import sys
 
                 sys.exit('No input folder found in the path (%s)' % args.input)
-        print "Predefined input folder found (%s), will use that instead of generating a new set" % args.input
+        logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
         copy_dir(args.input, '%s/input' % results_dir)
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir
@@ -552,18 +556,23 @@ if __name__ == "__main__":
     if not args.decrease_lrate:
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
-    # Save the parameters of the simulation(s)
-    with open("%s/simulation.info" % results_dir, 'w') as f:
-        f.write(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\nCompress: %s\n"
-                 "Copy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse gender info:%s\nEmphasis "
-                 "(overt ES pronouns):%s%%\nFixed weights: concept-role: %s, identif-role: %s\nSet weights folder: %s "
-                 "(epoch: %s)\nExclude lang during testing:%s\nShuffle set after each epoch: %s\n"
-                 "Allow free structure production:%s\n") %
-                (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title, args.hidden,
-                 args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate if (args.final_lrate and
-                                                                                 args.decrease_lrate) else "",
-                 args.compress, args.crole, args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw,
-                 args.fwi, args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
+    simulation_logger = logging.getLogger('simulation')
+    simulation_logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler("%s/simulation.log" % results_dir)
+    #fh.setLevel(logging.DEBUG)
+    simulation_logger.propagate = False  # no stdout to console
+    simulation_logger.addHandler(fh)
+
+    simulation_logger.info(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\n"
+                            "Compress: %s\nCopy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse "
+                            "gender info:%s\nEmphasis (overt ES pronouns):%s%%\nFixed weights: concept-role: %s, "
+                            "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
+                            "Shuffle set after each epoch: %s\nAllow free structure production:%s") %
+                           (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
+                            args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
+                            if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
+                            args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
+                            args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
                             role_fname=args.role, evsem_fname=args.eventsem,
@@ -592,10 +601,10 @@ if __name__ == "__main__":
         for sim in range(args.sim):
             inputs.input_dir = "%s/%s" % (results_dir, sim)
             inputs.update_sets(new_results_dir=inputs.input_dir)
-            with open("%s/simulation.info" % results_dir, 'a') as f:
-                f.write("\nNumber of cognates and false friends in training set for sim %s: %s/%s" %
-                        (sim, sum(',COG' in l for l in inputs.trainlines)+sum(',FF' in l for l in inputs.trainlines),
-                         inputs.num_train))
+            simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
+                                   (sim, sum(',COG' in l for l in inputs.trainlines) + sum(',FF' in l
+                                                                                           for l in inputs.trainlines),
+                                    inputs.num_train))
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
@@ -620,7 +629,7 @@ if __name__ == "__main__":
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'r') as f:
                     all_results.append(pickle.load(f))
             else:  # this would mean "missing data", we could raise a message
-                print 'Simulation #%s was problematic' % sim
+                logging.warning('Simulation #%s was problematic' % sim)
 
         if all_results:
             valid_results = []
@@ -644,16 +653,15 @@ if __name__ == "__main__":
                                   summary_sim=num_valid_simulations,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
 
-    layers_with_softmax_act_function = []
+    layers_with_softmax_act_function = ""
     for layer in dualp.srn.get_layers_for_backpropagation():
         if layer.activation_function == 'softmax':
-            layers_with_softmax_act_function.append(layer.name)
+            print type(layer.name)
+            layers_with_softmax_act_function += layer.name
 
-    with open("%s/simulation.info" % results_dir, 'a') as f:  # Append information regarding the simulations' success
-        f.write("\nLexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s"
-                "\n%s%s" % (inputs.lexicon_size, ', '.join(layers_with_softmax_act_function), simulations_with_pron_err,
-                            args.sim,
-                            "Successful simulations:%s/%s" % (num_valid_simulations, args.sim)
-                            if num_valid_simulations else "",
-                            "\nIndeces of failed simulations (or simulations that would fail): %s" %
-                            ", ".join(failed_sim_id) if failed_sim_id else ""))
+    simulation_logger.info("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun "
+                           "errors:%s/%s\n%s%s" %
+                           (inputs.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err,
+                            args.sim, "Successful simulations:%s/%s" % (num_valid_simulations, args.sim)
+                            if num_valid_simulations else "", "\nIndeces of (almost) failed simulations: %s" %
+                                                              ", ".join(failed_sim_id) if failed_sim_id else ""))
