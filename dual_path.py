@@ -241,8 +241,9 @@ class DualPath:
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def update_results(self, temp_results, type_set='test'):
+        valid_keys = [x for x in self.results.keys() if x != 'mse']
         for sim in range(self.epochs):
-            for key in self.results.keys():  # may need to exclude mse
+            for key in valid_keys:
                 self.results[key][type_set].append(temp_results[sim][key] if key in temp_results[sim] else 0)
         self.aggregate_dict(type_set=type_set)
 
