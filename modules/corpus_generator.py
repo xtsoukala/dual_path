@@ -13,8 +13,8 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 cognate_percentage, seed=0, lang='enes', lexicon_csv='corpus/lexicon.csv',
-                 structures_csv='corpus/structures.csv', include_ff=False, monolingual_only=False):
+                 cognate_percentage, monolingual_only, lang, seed=0, lexicon_csv='corpus/lexicon.csv',
+                 structures_csv='corpus/structures.csv', include_ff=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -61,7 +61,7 @@ class SetsGenerator:
             # (re)set the seed if it's not part of the cognate experiment (where this function is called twice)
             random.seed(self.seed)
 
-        if not self.L2 and percentage_L2 != 0:
+        if len(self.lang) == 2 and percentage_L2 != 0:
             percentage_L2 = 0
 
         num_train, num_test = self.calculate_number_of_sentences_per_set(num_sentences)
@@ -453,7 +453,7 @@ class SetsGenerator:
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False,
+    sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='esen')
     # sets.generate_sets(num_sentences=2500, percentage_L2=0.4)
     sets.generate_sets_for_cognate_experiment(num_sentences=2500, percentage_L2=0.5)

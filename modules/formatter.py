@@ -11,9 +11,10 @@ from elman_network import np
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lexicon_csv, role_fname, evsem_fname, fixed_weights,
                  fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis,
-                 prodrop, plot_title, use_word_embeddings):
+                 prodrop, plot_title, use_word_embeddings, monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.lang = language.lower()
+        self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2()
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, lexicon_csv), sep=',', header=0)  # 1st line: header
@@ -73,7 +74,11 @@ class InputFormatter:
             L2 = self.lang[2:]
         else:
             L1 = self.lang
-            L2 = None
+            if self.monolingual_only:
+                L2 = None
+            else:
+                L2 = [x for x in ['en', 'es'] if x != L1][0]
+                print "Will include L2 (%s) lexicon" % L2
         return L1, L2
 
     def update_sets(self, new_results_dir):
@@ -261,21 +266,21 @@ class InputFormatter:
         pos = ['', '.'] + pos
 
         code_switched_idx = len(lex)
-
-        l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
-                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2])
-        l2_pos_list = list(l2_column['pos'])
-        l2_concept_list = list(l2_column['concept'])
-        l2_type_list = list(l2_column['type'])
-        for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2])):
-            if item not in lex:  # only get unique items. set() would change the order, do this instead
-                lex.append(item)
-                pos.append(l2_pos_list[i])
-                # add concept info
-                if is_not_nan(l2_concept_list[i]):
-                    concept.append(l2_concept_list[i])
-                else:
-                    concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i]) else pos[-1])
+        if self.L2:
+            l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
+                                         'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2])
+            l2_pos_list = list(l2_column['pos'])
+            l2_concept_list = list(l2_column['concept'])
+            l2_type_list = list(l2_column['type'])
+            for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2])):
+                if item not in lex:  # only get unique items. set() would change the order, do this instead
+                    lex.append(item)
+                    pos.append(l2_pos_list[i])
+                    # add concept info
+                    if is_not_nan(l2_concept_list[i]):
+                        concept.append(l2_concept_list[i])
+                    else:
+                        concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i]) else pos[-1])
         return lex, pos, np.array(concept), code_switched_idx
 
     def get_lexicon_index(self, word):

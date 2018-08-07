@@ -237,13 +237,12 @@ class DualPath:
                 self.results['mse'] = self.srn.mse
                 plt = Plotter(results_dir=self.inputs.results_dir)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
-                                 title=self.inputs.plot_title,
+                                 title=self.inputs.plot_title, cognate_experiment=args.cognate_experiment,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def update_results(self, temp_results, type_set='test'):
         for sim in range(self.epochs):
-            for key in ['correct_meaning', 'correct_pos', 'pronoun_errors', 'pronoun_errors_flex',
-                        'correct_code_switches', 'all_code_switches', 'type_code_switches']:
+            for key in self.results.keys():  # may need to exclude mse
                 self.results[key][type_set].append(temp_results[sim][key] if key in temp_results[sim] else 0)
         self.aggregate_dict(type_set=type_set)
 
@@ -480,6 +479,8 @@ if __name__ == "__main__":
     parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
     parser.set_defaults(gender=True)
+    parser.add_argument('--monolingual', dest='monolingual', action='store_true', help='Do not include L2 lexicon')
+    parser.set_defaults(monolingual=False)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
                         help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
     parser.set_defaults(simple_semantics=True)
@@ -533,9 +534,9 @@ if __name__ == "__main__":
         from modules.corpus_generator import SetsGenerator
 
         args.input = "%s/input/" % results_dir
-        sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb,
-                             use_simple_semantics=args.simple_semantics, cognate_percentage=args.cognate_percentage,
-                             allow_free_structure_production=args.free_pos)
+        sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
+                             monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
+                             cognate_percentage=args.cognate_percentage, allow_free_structure_production=args.free_pos)
         if args.cognate_experiment:
             sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
         else:
@@ -568,7 +569,7 @@ if __name__ == "__main__":
                             language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
-                            use_word_embeddings=args.word_embeddings)
+                            use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual)
 
     num_valid_simulations = None
     simulations_with_pron_err = 0

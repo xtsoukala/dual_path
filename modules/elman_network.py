@@ -4,6 +4,7 @@ import os
 import numpy as np
 from copy import deepcopy
 from plotter import Plotter
+from collections import defaultdict
 
 
 class SimpleRecurrentNetwork:
@@ -59,19 +60,18 @@ class SimpleRecurrentNetwork:
                 if e.errno != os.errno.EEXIST:
                     raise
         np.random.seed(simulation_num if not None else 18)  # set number of simulation as the seed
-        means = []
-        std = []
-        labels = []
+        stats = defaultdict(list)
         for layer in self.layers:
             if not layer.in_size:
                 continue
-
-            if set_weights_folder:  # weights folder should contain the same num of simulations (or more)
+            # weights folder should contain the same num of simulations (or more)
+            if set_weights_folder and set_weights_epoch > 0:
                 w_dir = os.path.join(set_weights_folder, str(simulation_num) if simulation_num is not None else "",
                                      "weights")
-                weights_fname = "weights_%s%s.in" % (layer.name,
-                                                     "_%s" % set_weights_epoch if set_weights_epoch is not None else "")
-                layer.in_weights = np.genfromtxt(os.path.join(w_dir, weights_fname))
+                weights_fname = "weights_%s%s.npz" % (layer.name,
+                                                      "_%s" % set_weights_epoch
+                                                      if set_weights_epoch is not None else "")
+                layer.in_weights = np.load(os.path.join(w_dir, weights_fname))['arr_0']
             else:
                 layer.sd = 0.05  # or calculate according to input size: input_sd(layer.in_size)
                 # Using random weights with mean = 0 and low variance is CRUCIAL.
@@ -80,24 +80,25 @@ class SimpleRecurrentNetwork:
                 mean = 0
                 layer.in_weights = np.random.normal(mean, layer.sd,
                                                     size=[layer.in_size + int(layer.has_bias), layer.size])
-                means.append(layer.in_weights.mean())
-                std.append(layer.in_weights.std())
-                labels.append(layer.name)
-                np.savetxt("%s/weights/weights_%s.in" % (results_dir, layer.name), layer.in_weights)
-                with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
-                    f.write("name, max, min, mean, std\n"
-                            "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
-                                                  layer.in_weights.mean(), layer.in_weights.std()))
+                stats['means'].append(layer.in_weights.mean())
+                stats['std'].append(layer.in_weights.std())
+                stats['labels'].append(layer.name)
+                np.savez_compressed("%s/weights/weights_%s.npz" % (results_dir, layer.name), layer.in_weights)
+                if self.debug_messages:
+                    with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
+                        f.write("name, max, min, mean, std\n"
+                                "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
+                                                      layer.in_weights.mean(), layer.in_weights.std()))
                 if plot_stats:
                     plt = Plotter(results_dir=results_dir)
-                    plt.plot_layer_stats(labels=labels, std=std, means=means)
+                    plt.plot_layer_stats(stats)
 
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
     def save_weights(self, results_dir, epochs=0):
         for layer in self.get_layers_for_backpropagation():
-            np.savetxt("%s/weights/weights_%s_%s.in" % (results_dir, layer.name, epochs), layer.in_weights)
+            np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epochs), layer.in_weights)
 
     def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act, reset=True):
         weights_concept_role = updated_role_concept.T

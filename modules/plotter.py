@@ -10,7 +10,8 @@ class Plotter:
     def __init__(self, results_dir):
         self.results_dir = results_dir
 
-    def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, summary_sim=None):
+    def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, cognate_experiment=True,
+                     summary_sim=None):
         correct_test_sentences = results['correct_meaning']['test']
         correct_test_pos = results['correct_pos']['test']
         epochs = range(len(correct_test_sentences))
@@ -256,96 +257,82 @@ class Plotter:
                 plt.close()
 
             # NOW THE SAME FOR THE COG EXPERIMENT
-            for dataset_type in ['test']:  # ['training', 'test']:
-                type_test_enes = []
-                type_test_COG = []
-                type_test_FF = []
-                inlcude_ff = False
-                for cs_type in all_cs_types:  # cs types calculated above
-                    """es_type = "es-%s" % cs_type
-                    en_type = "en-%s" % cs_type
-                    v = []
-                    if es_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
-                        v.append(results['type_code_switches'][dataset_type][es_type][2:])
-                    if en_type in results['type_code_switches'][dataset_type]:  # exclude first 2 epochs
-                        v.append(results['type_code_switches'][dataset_type][en_type][2:])
+            if cognate_experiment:
+                for dataset_type in ['test']:  # ['training', 'test']:
+                    type_test_enes = []
+                    type_test_COG = []
+                    type_test_FF = []
+                    inlcude_ff = False
+                    for cs_type in all_cs_types:  # cs types calculated above
+                        cog_type = "%s-COG" % cs_type
+                        if cog_type in results['type_code_switches'][dataset_type]:
+                            # take the percentage of sum in test set
+                            values_percentage_testset = [percentage(x, num_test)
+                                                         for x in results['type_code_switches'][dataset_type][cog_type]]
+                            type_test_COG.append(get_numpy_mean_and_std(values_percentage_testset))
+                        else:
+                            type_test_COG.append((0, 0))
+                        # same for FF
+                        ff_type = "%s-FF" % cs_type
+                        if ff_type in results['type_code_switches'][dataset_type]:
+                            # take the percentage of sum in test set
+                            values_percentage_testset = [percentage(x, num_test)
+                                                         for x in results['type_code_switches'][dataset_type][ff_type]]
+                            type_test_FF.append(get_numpy_mean_and_std(values_percentage_testset))
+                            inlcude_ff = True
+                        else:
+                            type_test_FF.append((0, 0))
+                        # same for non cognates-false friends
+                        if cs_type in results['type_code_switches'][dataset_type]:
+                            # take the percentage of sum in test set
+                            values_percentage_testset = [percentage(x, num_test)
+                                                         for x in results['type_code_switches'][dataset_type][cs_type]]
+                            type_test_enes.append(get_numpy_mean_and_std(values_percentage_testset))
+                        else:
+                            type_test_enes.append((0, 0))
 
-                    if v:
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in [sum(i) for i in zip(*v)]]
-                        type_test.append(get_numpy_mean_and_std(values_percentage_testset))
+                # make sure there is still something to be plotted after the manipulations
+                if type_test_enes or type_test_FF or type_test_COG:
+                    ind = numpy_arange_len(all_cs_types)  # the x locations for the groups
+                    width = 0.3  # the width of the bars
+
+                    fig, ax = plt.subplots()
+                    rects = ax.bar(ind, [x[0] for x in type_test_enes], width, color='yellowgreen',
+                                   yerr=[x[1] for x in type_test_enes])
+                    rects_COG = ax.bar(ind + width, [x[0] for x in type_test_COG], width, color='g',
+                                       yerr=[x[1] for x in type_test_COG])
+                    if inlcude_ff:
+                        rects_FF = ax.bar(ind + width * 2, [x[0] for x in type_test_FF], width, color='greenyellow',
+                                          yerr=[x[1] for x in type_test_FF])
+
+                    # add some text for labels, title and axes ticks
+                    label = 'Types of code-switches (%% of %s set)' % dataset_type
+                    ax.set_ylabel(label)
+                    # ax.set_title('Early bilingual group')
+                    if inlcude_ff:
+                        ax.set_xticks(ind + (width * 2) / 2)
+                        ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
+                        file_name = "type_code_switches_COG_FF"
                     else:
-                        type_test.append((0, 0))"""
+                        ax.set_xticks(ind + (width) / 2)
+                        ax.legend((rects[0], rects_COG[0]), ('ESEN', 'COG'))
+                        file_name = "type_code_switches_COG"
+                    ax.set_ylim(bottom=0)
+                    ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
+                    plt.tight_layout()  # make room for labels
 
-                    # same for COG
-                    cog_type = "%s-COG" % cs_type
-                    if cog_type in results['type_code_switches'][dataset_type]:
-                        # take the percentage of sum in test set
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][cog_type]]
-                        type_test_COG.append(get_numpy_mean_and_std(values_percentage_testset))
+                    if summary_sim:
+                        fname = '%s/summary_%s_%s_%s.pdf' % (self.results_dir, summary_sim, file_name, dataset_type)
+                        # also save type_test_es and type_test_en
+                        with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
+                            f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
+                                    "\nType code-switch COG (test set): %s" %
+                                    (type_test_enes, type_test_FF, type_test_COG))
+
                     else:
-                        type_test_COG.append((0, 0))
-                    # same for FF
-                    ff_type = "%s-FF" % cs_type
-                    if ff_type in results['type_code_switches'][dataset_type]:
-                        # take the percentage of sum in test set
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][ff_type]]
-                        type_test_FF.append(get_numpy_mean_and_std(values_percentage_testset))
-                        inlcude_ff = True
-                    else:
-                        type_test_FF.append((0, 0))
-                    # same for non cognates-false friends
-                    if cs_type in results['type_code_switches'][dataset_type]:
-                        # take the percentage of sum in test set
-                        values_percentage_testset = [percentage(x, num_test)
-                                                     for x in results['type_code_switches'][dataset_type][cs_type]]
-                        type_test_enes.append(get_numpy_mean_and_std(values_percentage_testset))
-                    else:
-                        type_test_enes.append((0, 0))
-
-            # make sure there is still something to be plotted after the manipulations
-            if type_test_enes or type_test_FF or type_test_COG:
-                ind = numpy_arange_len(all_cs_types)  # the x locations for the groups
-                width = 0.3  # the width of the bars
-
-                fig, ax = plt.subplots()
-                rects = ax.bar(ind, [x[0] for x in type_test_enes], width, color='yellowgreen',
-                               yerr=[x[1] for x in type_test_enes])
-                rects_COG = ax.bar(ind + width, [x[0] for x in type_test_COG], width, color='g',
-                                   yerr=[x[1] for x in type_test_COG])
-                if inlcude_ff:
-                    rects_FF = ax.bar(ind + width * 2, [x[0] for x in type_test_FF], width, color='greenyellow',
-                                      yerr=[x[1] for x in type_test_FF])
-
-                # add some text for labels, title and axes ticks
-                label = 'Types of code-switches (%% of %s set)' % dataset_type
-                ax.set_ylabel(label)
-                # ax.set_title('Early bilingual group')
-                if inlcude_ff:
-                    ax.set_xticks(ind + (width * 2) / 2)
-                    ax.legend((rects[0], rects_COG[0], rects_FF[0]), ('ESEN', 'COG', 'FF'))
-                else:
-                    ax.set_xticks(ind + (width) / 2)
-                    ax.legend((rects[0], rects_COG[0]), ('ESEN', 'COG'))
-                ax.set_ylim(bottom=0)
-                ax.set_xticklabels(all_cs_types, rotation=55)  # rotate labels to fit better
-                plt.tight_layout()  # make room for labels
-
-                if summary_sim:
-                    fname = '%s/summary_%s_type_code_switches_COG_FF_%s.pdf' % (self.results_dir, summary_sim,
-                                                                                dataset_type)
-                    # also save type_test_es and type_test_en
-                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                        f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
-                                "\nType code-switch COG (test set): %s" %
-                                (type_test_enes, type_test_FF, type_test_COG))
-
-                else:
-                    fname = '%s/type_code_switches_COG_FF_%s.pdf' % (self.results_dir, dataset_type)
-                plt.savefig(fname)
-                plt.close()
+                        fname = '%s/%s_%s.pdf' % (self.results_dir, file_name, dataset_type)
+                    plt.savefig(fname)
+                    plt.close()
 
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
         if isinstance(results['pronoun_errors']['test'], list) and (sum(results['pronoun_errors_flex']['test']) or
@@ -393,11 +380,15 @@ class Plotter:
             plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
             plt.close()
 
-    def plot_layer_stats(self, labels, means, std):
-        layers = numpy_arange_len(labels)
+    def plot_layer_stats(self, stats):
+        """
+        :param stats: dict of lists that contain means, std and labels
+        :return:
+        """
+        layers = numpy_arange_len(stats['labels'])
         fig, ax = plt.subplots()
-        ax.bar(layers, means, color='r', yerr=std)
-        ax.set_xticklabels(labels)
+        ax.bar(layers, stats['means'], color='r', yerr=stats['std'])
+        ax.set_xticklabels(stats['labels'])
         plt.savefig('%s/weights/summary_weights.pdf' % self.results_dir)
         plt.close()
 
