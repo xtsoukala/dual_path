@@ -63,6 +63,8 @@ class DualPath:
         self.allow_cognate_boost = allow_cognate_boost
         self.exclude_lang = exclude_lang
         self.check_pronouns = check_pronouns
+        if check_pronouns:
+            self.pronoun_logger = self.init_logger('pronouns')
         self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
         self.input_copy = input_copy
@@ -81,8 +83,7 @@ class DualPath:
                         'type_code_switches': {'test': [], 'training': []}}
 
     def init_logger(self, name):
-        name = "%s_%s" % (name, self.simulation_num)
-        logger = logging.getLogger(name)
+        logger = logging.getLogger("%s_%s" % (name, self.simulation_num))
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # no stdout to console
         logger.addHandler(logging.FileHandler("%s/%s.out" % (self.inputs.results_dir, name)))
@@ -323,12 +324,10 @@ class DualPath:
                             # also count grammatically correct sentences with gender error that convey wrong meaning
                             counter['pronoun_errors_flex'] += 1
 
-                        with open("%s/pronoun_%s.err" % (self.inputs.results_dir, "test" if is_test_set else "train"),
-                                  'a') as f:
-                            f.write("--------%s--------%s\nOUT:%s\nTRG:%s\n%s\n" %
-                                    (epoch, correctedness_status,
-                                     self.inputs.sentence_from_indeces(produced_sentence_idx),
-                                     self.inputs.sentence_from_indeces(target_sentence_idx), message))
+                        self.pronoun_logger.info("--------%s (%s)--------%s\nOUT:%s\nTRG:%s\n%s\n" %
+                                                 (epoch, "test" if is_test_set else "training", correctedness_status,
+                                                  self.inputs.sentence_from_indeces(produced_sentence_idx),
+                                                  self.inputs.sentence_from_indeces(target_sentence_idx), message))
             if epoch > 0:
                 suffix = ("flex-" if (flexible_order and correct_meaning) or has_wrong_det or has_wrong_tense
                           else "in" if not correct_meaning else "")
@@ -378,6 +377,12 @@ def copy_files_endwith(src, dest, ends_with=".in"):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
+def copy_test_training_sets(src, dest):
+    for filename in os.listdir(src):
+        if filename in ['test.in', 'training.in']:
+            shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
+
+
 def generate_title_from_lang(lang_code):
     title = ''
     if lang_code == 'en':
@@ -398,7 +403,7 @@ def create_all_input_files(num_simulations, results_dir, sets, original_input_pa
         os.makedirs(rdir)
         if sets:  # generate new test/training sets
             if sim == 0:  # copy the .in files under the /input folder
-                copy_files_endwith(os.path.join("%s/input" % results_dir), rdir)
+                copy_test_training_sets(os.path.join("%s/input" % results_dir), rdir)
             else:
                 sets.results_dir = rdir
                 sets.seed = sim  # set new seed for language generator
@@ -465,7 +470,7 @@ if __name__ == "__main__":
     parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
     ####################################################################################################################
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
-                                                          'training.', default="train.in")
+                                                          'training.', default="training.in")
     parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
     """ ######################################## boolean arguments ################################################# """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
@@ -656,7 +661,6 @@ if __name__ == "__main__":
     layers_with_softmax_act_function = ""
     for layer in dualp.srn.get_layers_for_backpropagation():
         if layer.activation_function == 'softmax':
-            print type(layer.name)
             layers_with_softmax_act_function += layer.name
 
     simulation_logger.info("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun "

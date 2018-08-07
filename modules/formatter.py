@@ -280,7 +280,10 @@ class InputFormatter:
                     if is_not_nan(l2_concept_list[i]):
                         concept.append(l2_concept_list[i])
                     else:
-                        concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i]) else pos[-1])
+                        concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
+                                       else pos[-1])
+        with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
+            f.writelines("%s\n" % w for w in lex)
         return lex, pos, np.array(concept), code_switched_idx
 
     def get_lexicon_index(self, word):
@@ -302,17 +305,15 @@ class InputFormatter:
         regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
         return len([line for line in self.testlines if regexp.search(line)])
 
-    def read_set(self, set_name=None, test=False):
+    def read_set(self, test=False):
         """
-        :param set_name: file name (optional)
         :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
         :return:
         """
-        if not set_name:
-            if test:
-                set_name = self.testset
-            else:
-                set_name = self.trainingset
+        if test:
+            set_name = self.testset
+        else:
+            set_name = self.trainingset
         lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make pro-drop
@@ -336,38 +337,6 @@ class InputFormatter:
                    for sentence in self.trainlines]
         all_pos.sort()
         return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
-
-    def _read_lexicon_and_pos(self, fname, save_raw_lexicon=True):
-        """
-        :param fname: the name of the file that contains a list of categories (eg. noun, verb) and the lexicon
-        :return: lexicon is a list of words, and pos is a dict that contains information regarding the index
-                 (in the list of lexicon) of the word for each category. E.g. {'noun': [0, 1], 'verb': [2, 3, 4]}
-        """
-        lexicon = ['', '.']  # position 0 is >almost< never predicted! Check why
-        pos = {'': [0], '.': [1]}  # made-up POS for position 0 (empty string) and extra position for period
-        prev_pos = ''
-        pos_start = pos_end = 2
-        for line in self._read_file_to_list(fname):
-            if line.endswith(":"):  # POS lines are introduced by a colon (:) otherwise it's a lexicon item
-                if prev_pos:
-                    if prev_pos in pos:
-                        pos[prev_pos] += range(pos_start, pos_end)
-                    else:
-                        pos[prev_pos] = range(pos_start, pos_end)
-                    pos_start = pos_end
-                prev_pos = line[:-1]  # remove the colon, use it as a dict key for pos (dictionary)
-            elif line not in lexicon:  # make sure there are no duplicate words
-                lexicon.append(line)
-                pos_end += 1
-        if prev_pos in pos:
-            pos[prev_pos] += range(pos_start, pos_end)
-        else:
-            pos[prev_pos] = range(pos_start, pos_end)  # this adds the last syntactic category
-        if save_raw_lexicon:
-            with open(os.path.join(self.input_dir, "raw_%s" % fname), 'a') as f:
-                for w in lexicon:
-                    f.write("%s\n" % w)
-        return pos, lexicon
 
     def _read_file_to_list(self, fname):
         """
@@ -414,9 +383,9 @@ class InputFormatter:
         """
         return [self.get_lexicon_index(w) for w in sentence_lst]
 
-    def sentence_indeces_pos(self, sentence_idx, remove_period=True, convert_to_idx=False):
+    def sentence_indeces_pos(self, sentence_idx_lst, remove_period=True, convert_to_idx=False):
         """
-        :param sentence_idx: sentence in list format. Either contains activations in the lexicon for the sentence
+        :param sentence_idx_lst: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
         :param remove_period: whether to remove the period (last element) from the sentence (useful when checking POS)
         :param convert_to_idx: if sentence_idx contains list of words, they first need to be converted to the
@@ -424,10 +393,10 @@ class InputFormatter:
         :return:
         """
         if convert_to_idx:
-            sentence_idx = self.sentence_indeces(sentence_idx)
-        if remove_period and sentence_idx[-1] == self.period_idx:
-            sentence_idx = sentence_idx[:-1]
-        return [self.pos_lookup(word_idx) for word_idx in sentence_idx]
+            sentence_idx_lst = self.sentence_indeces(sentence_idx_lst)
+        if remove_period and sentence_idx_lst[-1] == self.period_idx:
+            sentence_idx_lst = sentence_idx_lst[:-1]
+        return [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -481,11 +450,11 @@ class InputFormatter:
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
                                 print message, '#####', concept
-                                import sys;sys.exit()
+                                import sys; sys.exit()
         return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language.lower()
 
     def cosine_similarity(self, first_word, second_word):
-        """ Cosine similarity between words when using word2vec"""
+        """ Cosine similarity between words when using word2vec """
         return np.dot(self.concepts[first_word], self.concepts[second_word] /
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 

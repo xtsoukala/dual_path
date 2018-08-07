@@ -73,7 +73,7 @@ class SetsGenerator:
                                            exclude_cognates=cognates_experiment,
                                            max_cognate=0 if cognates_experiment else num_test * self.cognate_percentage)
         training_set = self.generate_sentences(sentence_structures_train,
-                                               fname="train.in",
+                                               fname="training.in",
                                                exclude_test_sentences=test_set,
                                                max_cognate=num_train * self.cognate_percentage)
         assert num_test == len(test_set) and num_train == len(training_set)
