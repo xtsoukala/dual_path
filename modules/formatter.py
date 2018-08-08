@@ -251,20 +251,17 @@ class InputFormatter:
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
-        concept = ['', '.']
+        concepts = []
         l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos',
                                      'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1])
-        lex = ['', '.'] + list(l1_column['morpheme_%s' % self.L1])
+        lex = list(l1_column['morpheme_%s' % self.L1])
         pos = list(l1_column['pos'])
         l1_type = list(l1_column['type'])
-        for i, c in enumerate(list(l1_column['concept'])):
-            if is_not_nan(c):
-                concept.append(c)
+        for i, concept in enumerate(list(l1_column['concept'])):
+            if is_not_nan(concept):
+                concepts.append(concept)
             else:
-                concept.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
-        # add space and period before the POS list
-        pos = ['', '.'] + pos
-
+                concepts.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
         code_switched_idx = len(lex)
         if self.L2:
             l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
@@ -278,13 +275,13 @@ class InputFormatter:
                     pos.append(l2_pos_list[i])
                     # add concept info
                     if is_not_nan(l2_concept_list[i]):
-                        concept.append(l2_concept_list[i])
+                        concepts.append(l2_concept_list[i])
                     else:
-                        concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
+                        concepts.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
                                        else pos[-1])
         with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in lex)
-        return lex, pos, np.array(concept), code_switched_idx
+        return lex, pos, np.array(concepts), code_switched_idx
 
     def get_lexicon_index(self, word):
         """
@@ -382,8 +379,8 @@ class InputFormatter:
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
         """
         return [self.get_lexicon_index(w) for w in sentence_lst]
-
-    def sentence_indeces_pos(self, sentence_idx_lst, remove_period=True, convert_to_idx=False):
+    # TODO: remove_period: True
+    def sentence_indeces_pos(self, sentence_idx_lst, remove_period=False, convert_to_idx=False):
         """
         :param sentence_idx_lst: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)

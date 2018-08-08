@@ -449,7 +449,7 @@ if __name__ == "__main__":
     parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
-                        type=float, default=0.3)
+                        type=float, default=0.35)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
@@ -564,7 +564,6 @@ if __name__ == "__main__":
     simulation_logger = logging.getLogger('simulation')
     simulation_logger.setLevel(logging.DEBUG)
     fh = logging.FileHandler("%s/simulation.log" % results_dir)
-    #fh.setLevel(logging.DEBUG)
     simulation_logger.propagate = False  # no stdout to console
     simulation_logger.addHandler(fh)
 

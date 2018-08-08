@@ -1,4 +1,5 @@
 morpheme_es,morpheme_en,concept,compositional_concept,pos,semantic_gender,syntactic_gender_es,full_verb_3rd_en,full_verb_3rd_es,participle_en,participle_es,past_tense_en,past_tense_es,type,adj_es_female,is_cognate,is_false_friend,inactive
+.,.,.,,.,,,,,,,,,,,,,
 conductor,conductor,CONDUCTOR,CONDUCTOR,noun,M,M,,,,,,,,,Y,,
 criminal,criminal,CRIMINAL,CRIMINAL,noun,F,F,,,,,,,,,Y,,Y
 investigator,investigator,INVESTIGATOR,INVESTIGATOR,noun,M,M,,,,,,,,,Y,,

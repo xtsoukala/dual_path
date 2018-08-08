@@ -24,9 +24,8 @@ class SimpleRecurrentNetwork:
         self.dir = dir
         self.output_size = 0
         self.target_activation = []
-
-        self.mse = {}
-        self.divergence_error = {}
+        self.mse = defaultdict(list)
+        self.divergence_error = defaultdict(list)
 
     def _complete_initialization(self):
         for layer in self.layers:  # if there are > 1 layers and if at least one has input weights
@@ -162,7 +161,7 @@ class SimpleRecurrentNetwork:
             input_layer.activation[input_idx] = 1
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
             input_layer.activation = convert_range(input_layer.activation)
-        if target_idx:  # no need to set target when testing
+        if target_idx is not None:  # no need to set target when testing
             self.target_activation = np.zeros(self.output_size)
             self.target_activation[target_idx] = 1
 
@@ -229,7 +228,7 @@ class SimpleRecurrentNetwork:
         self._calculate_mean_square_and_divergence_error(epoch, output_layer.activation)
 
         if output_layer.activation_function == "softmax":
-            output_layer.gradient = self.target_activation - output_layer.activation
+            output_layer.gradient = (self.target_activation - output_layer.activation)  # no derivative here
         elif output_layer.activation_function == "tanh":
             output_layer.gradient = ((convert_range(self.target_activation) - output_layer.activation) *
                                      tanh_derivative(output_layer.activation))
@@ -238,18 +237,16 @@ class SimpleRecurrentNetwork:
                                      sigmoid_derivative(output_layer.activation))
 
     def _calculate_mean_square_and_divergence_error(self, epoch, output_activation):
-        if epoch not in self.mse:
-            self.mse[epoch] = []
         # perform element-wise average along the array (returns single value)
         self.mse[epoch].append(((self.target_activation - output_activation) ** 2).mean(axis=None))
-
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
                         divergence_err = np.sum(self.target_activation)
-       if epoch not in self.divergence_error:
-            self.divergence_error[epoch] = []
-        self.divergence_error[epoch].append(self.target_activation * np.log(np.true_divide(target_activation,
-                                                                                               output_activation)))"""
+        # if all(output_activation) == 0:
+        #    print output_activation
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self.divergence_error[epoch].append(self.target_activation * np.log(np.true_divide(self.target_activation,
+                                                                                output_activation)))"""
 
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
@@ -266,12 +263,8 @@ class SimpleRecurrentNetwork:
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
-        try:
-            self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
-                                              np.atleast_2d(self.current_layer.gradient))
-        except:
-            print self.current_layer.name
-            print self.current_layer.gradient
+        self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
+                                          np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
         len_delta = np.sqrt(np.sum(self.current_layer.delta ** 2))
         if len_delta > 1:
@@ -415,6 +408,20 @@ def relu(x):
 
 def relu_derivative(x):
     return 1 * (x > 0)
+
+
+def softmax_derivative_complete(s):
+    # input s is softmax value of the original input x. Its shape is (1,n)
+    # e.i. s = np.array([0.3,0.7]), x = np.array([0,1])
+    # make the matrix whose size is n^2.
+    jacobian_m = np.diag(s)
+    for i in range(len(jacobian_m)):
+        for j in range(len(jacobian_m)):
+            if i == j:
+                jacobian_m[i][j] = s[i] * (1-s[i])
+            else:
+                jacobian_m[i][j] = -s[i]*s[j]
+    return jacobian_m
 
 
 def sigmoid(x):
