@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from copy import deepcopy
 import sys
+import numpy as np
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 print_on_screen = False  # used only to debug, no need to add it as a called parameter
@@ -156,8 +157,8 @@ class SetsGenerator:
         """
         # if percentages are not set, distribute equally
         # calculate structures for L1
-        l1_times_repeat = int(round((1 - percentage_L2) * (num_sentences / self.num_structures_L1)))
-        l1_mod_repeat = int(round((1 - percentage_L2) * (num_sentences % self.num_structures_L1)))
+        l1_times_repeat = int(np.floor((1 - percentage_L2) * (num_sentences / self.num_structures_L1)))
+        l1_mod_repeat = int(np.floor((1 - percentage_L2) * (num_sentences % self.num_structures_L1)))
         # TODO: take percentages into consideration if not set to NaN
         sentence_structures = pd.concat([self.structures_df[['message', self.L1]]] * l1_times_repeat,
                                         ignore_index=True, sort=False)
@@ -168,7 +169,7 @@ class SetsGenerator:
 
         sentence_structures = [("%s,%s" % (i[0], self.L1.upper()), i[1]) for i in sentence_structures]
         if self.L2 and percentage_L2 > 0:
-            l2_times_repeat = int(round(percentage_L2 * num_sentences / self.num_structures_L2))
+            l2_times_repeat = int(round(percentage_L2 * (num_sentences / self.num_structures_L2)))
             l2_mod_repeat = int(round(percentage_L2 * (num_sentences % self.num_structures_L2)))
             l2_df = pd.concat([self.structures_df[['message', self.L2]]] * l2_times_repeat,
                               ignore_index=True, sort=False)
