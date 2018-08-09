@@ -152,13 +152,10 @@ optional arguments:
 
 The output is stored under the given results folder (-resdir) in the following format:
 
-```
---------1--------
-OUT:a waiter give -s a bag to a host .
+```OUT:a waiter give -s a bag to a host .
 TRG:a waiter give -s a host a bag .
 Grammatical:True Tense:True Definiteness:True Meaning:flex-correct 
 AGENT=INDEF,WAITER,M;ACTION=GIVE;RECIPIENT=INDEF,HOST,M;PATIENT=INDEF,BAG;E=SIMPLE,AGT,-1,PAT,REC,PRESENT,EN
---------1--------
 OUT:a popular bull is golp -ing the man .
 TRG:a popular bull is hit -ing the man .
 Grammatical:True Tense:True Definiteness:True Meaning:correct (code-switch: verb)
@@ -167,4 +164,3 @@ AGENT=INDEF,BULL,M;AGENT-MOD=POPULAR,M,COG;ACTION=HIT;PATIENT=DEF,MAN,M;E=PROG,A
 
 Where OUT: is the produced sentence, TRG: the target (intended) sentence. Grammatical: Whether the sentence is grammatically correct, even if it conveys the wrong meaning. Tense: Whether the tense (present, past) is correct. Definiteness: Wether the determiners have the correct definiteness (definite, indefinite), Meaning: Whether the sentence expresses the message correctly (all concepts need to be correctly produced).
 The last sentence is the message used to produce the sentence.
-    
