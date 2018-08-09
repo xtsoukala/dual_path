@@ -157,6 +157,7 @@ OUT:a waiter give -s a bag to a host .
 TRG:a waiter give -s a host a bag .
 Grammatical:True Tense:True Definiteness:True Meaning:flex-correct 
 AGENT=INDEF,WAITER,M;ACTION=GIVE;RECIPIENT=INDEF,HOST,M;PATIENT=INDEF,BAG;E=SIMPLE,AGT,-1,PAT,REC,PRESENT,EN
+--------1--------
 OUT:a popular bull is golp -ing the man .
 TRG:a popular bull is hit -ing the man .
 Grammatical:True Tense:True Definiteness:True Meaning:correct (code-switch: verb)
