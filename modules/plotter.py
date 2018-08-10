@@ -79,9 +79,6 @@ class Plotter:
             plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
             if summary_sim:
                 fname = '%s/summary_%s_code_switches_percentage.pdf' % (self.results_dir, summary_sim)
-                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nCode-switched percentage (test set): %s" % [percentage(x, num_test) for x
-                                                                           in results['correct_code_switches']['test']])
             else:
                 fname = '%s/code_switches_percentage.pdf' % self.results_dir
             plt.savefig(fname)

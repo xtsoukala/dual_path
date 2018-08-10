@@ -6,7 +6,7 @@ from datetime import datetime
 from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
 from modules.plotter import Plotter
-from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
+from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, percentage
 
 
 class DualPath:
@@ -157,7 +157,7 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
                     # TODO: play with activations, e.g. activate the target language slightly more
-                    lang_act = [0.8, 0.8]  # if self.inputs.languages.index(lang) == 0 else [1, 1]
+                    lang_act = [0.9, 0.9]  # if self.inputs.languages.index(lang) == 0 else [1, 1]
                     self.srn.reset_target_lang(target_lang_act=lang_act)  # if left None: 50/50
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
@@ -165,7 +165,7 @@ class DualPath:
                     break
             # boost after cognate
             if self.exclude_lang and prod_idx in self.inputs.cognate_idx and self.allow_cognate_boost:
-                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang))
+                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang.upper()))
 
         return produced_sent_ids, target_sentence_ids, message, lang
 
@@ -173,9 +173,9 @@ class DualPath:
         """
         :param shuffle_set: Whether to shuffle the training set after each iteration
         :param plot_results: Whether to plot the performance
-        :param evaluate: Whether to evaluate training and test sets every x epochs. The only reason NOT to evaluate
-                         is for speed, if we want to training network and save weights
-
+        :param evaluate_test_set: Whether to evaluate test set every x epochs. The only reason NOT to evaluate
+        is for speed, if we want to training network and save weights
+        :param evaluate_training_set: Whether to evaluate the training set (default: False)
         Training: for each word of input sentence:
             - compute predicted response
             - determine error, (back)propagate and update weights
@@ -465,8 +465,8 @@ if __name__ == "__main__":
     parser.set_defaults(cinput=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('--nolang', dest='nolang', action='store_true', help='Exclude language info during TESTing')
-    parser.set_defaults(nolang=False)
+    parser.add_argument('--nolang', dest='exclude_lang', action='store_true', help='Exclude language info during TESTing')
+    parser.set_defaults(exclude_lang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
@@ -540,8 +540,8 @@ if __name__ == "__main__":
         else:
             sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
 
-    if args.cognate_experiment and not args.nolang:
-        args.nolang = True
+    if args.cognate_experiment and not args.exclude_lang:
+        args.exclude_lang = True
 
     if not args.title:
         args.title = lang_code_to_title[args.lang]
@@ -565,7 +565,7 @@ if __name__ == "__main__":
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
-                            args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos,
+                            args.set_weights, args.set_weights_epoch, args.exclude_lang, args.shuffle, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
@@ -579,7 +579,7 @@ if __name__ == "__main__":
     if not args.sim or args.sim == 1:  # only run one simulation
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
+                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
                          ignore_tense_and_det=args.ignore_tense_and_det, input_class=inputs, momentum=args.momentum,
                          check_pronouns=args.check_pronouns)
@@ -600,7 +600,7 @@ if __name__ == "__main__":
                                     inputs.num_train))
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                             test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
+                             test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
                              set_weights_folder=args.set_weights, momentum=args.momentum, input_class=inputs,
                              ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
                              check_pronouns=args.check_pronouns, simulation_num=sim)
@@ -641,15 +641,20 @@ if __name__ == "__main__":
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 plot = Plotter(results_dir=results_dir)
-                plot.plot_results(compute_mean_and_std(valid_results, epochs=args.epochs), title=inputs.plot_title,
+                results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
+                plot.plot_results(results_mean_and_std, title=inputs.plot_title,
                                   num_train=inputs.num_train, num_test=inputs.num_test,
                                   summary_sim=num_valid_simulations,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
+                if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
+                    simulation_logger.info("\nCode-switched percentage (test set): %s" %
+                                           [percentage(x, inputs.num_test)
+                                            for x in results_mean_and_std['correct_code_switches']['test']])
 
     layers_with_softmax_act_function = ""
     for layer in dualp.srn.get_layers_for_backpropagation():
         if layer.activation_function == 'softmax':
-            layers_with_softmax_act_function += layer.name
+            layers_with_softmax_act_function += ", %s" % layer.name
 
     simulation_logger.info("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun "
                            "errors:%s/%s\n%s%s" %

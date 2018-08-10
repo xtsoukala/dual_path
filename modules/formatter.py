@@ -118,7 +118,7 @@ class InputFormatter:
         if out_pos in self.allowed_structures:  # if sentence in list of existing POS
             return is_grammatical, has_flex_order
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
-        if len(out_pos) > len(trg_pos):
+        if len(out_pos) > len(trg_pos) and 'prep' not in out_pos:
             trg_pos.append('prep')
         elif len(out_pos) < len(trg_pos):  # if they are equal don't append
             out_pos.append('prep')
