@@ -128,9 +128,9 @@ class SetsGenerator:
             word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w, verb_type = \
                 self.get_word_from_concept(concept_to_replace, lang)
             if pos_w == 'verb':
-                pos_to_replace = "%s::%s" % (pos_w, verb_type)
+                pos_to_replace = "%s:%s" % (pos_w, verb_type)
             else:
-                pos_to_replace = "%s::%sanimate" % (pos_w, "" if self.is_not_nan(semantic_gender_w) else "in")
+                pos_to_replace = "%s:%sanimate" % (pos_w, "" if self.is_not_nan(semantic_gender_w) else "in")
             replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                      gender=syntactic_gender_w,
                                                                      only_select_false_friend=not replace_with_cognates,
@@ -164,8 +164,8 @@ class SetsGenerator:
                                         ignore_index=True, sort=False)
         sentence_structures = list(sentence_structures.itertuples(index=False, name=None))
         for i in range(l1_mod_repeat):
-            row = random.randint(1, self.num_structures_L1)  # select random row
-            sentence_structures.append((self.structures_df['message'][row], self.structures_df[self.L1][row]))
+            row = random.randint(0, self.num_structures_L1 - 1)  # select random row
+            sentence_structures.append((self.structures_df['message'].iloc[row], self.structures_df[self.L1].iloc[row]))
 
         sentence_structures = [("%s,%s" % (i[0], self.L1.upper()), i[1]) for i in sentence_structures]
         if self.L2 and percentage_L2 > 0:
@@ -177,9 +177,9 @@ class SetsGenerator:
                              for i in list(l2_df.itertuples(index=False, name=None))]
             sentence_structures.extend(l2_structures)
             for i in range(l2_mod_repeat):
-                row = random.randint(1, self.num_structures_L2)
-                sentence_structures.append((self.structures_df['message'][row]+","+self.L2.upper(),
-                                            self.structures_df[self.L2][row]))
+                row = random.randint(0, self.num_structures_L2 - 1)
+                sentence_structures.append((self.structures_df['message'].iloc[row]+","+self.L2.upper(),
+                                            self.structures_df[self.L2].iloc[row]))
         assert num_sentences == len(sentence_structures)
         random.shuffle(sentence_structures)
         return sentence_structures
@@ -255,7 +255,7 @@ class SetsGenerator:
             return self.df_cache[params]
         return False
 
-    def select_random_morpheme_for_lang(self, pos, lang, gender=None, exclude_cognates=False,
+    def select_random_morpheme_for_lang(self, pos, lang, tense = None, gender=None, exclude_cognates=False,
                                         only_select_cognate=False, only_select_false_friend=False):
         params = ''.join([str(x) for x in locals().values()])
         cache = self.get_query_cache(params)
@@ -263,8 +263,11 @@ class SetsGenerator:
             if gender and not any([x in pos for x in ['noun', 'adj']]):
                 gender = None
             pos_type = None
-            if '::' in pos:
-                pos, pos_type = pos.split('::')
+            num_types = pos.count(':')
+            if num_types == 2:
+                pos, pos_type, tense = pos.split(':')
+            elif num_types == 1:
+                pos, pos_type = pos.split(':')
             query = "pos == '%s' and morpheme_%s == morpheme_%s" % (pos, lang, lang)  # avoid NaN values
             if pos_type == 'animate':
                 query += " and semantic_gender == semantic_gender"
@@ -273,6 +276,8 @@ class SetsGenerator:
             elif pos_type:
                 query += " and type == '%s'" % pos_type
 
+            if tense:
+                query += " and tense == '%s'" % tense
             if gender:
                 query += " and (syntactic_gender_es == '%s' or syntactic_gender_es == 'M-F')" % gender
 
@@ -297,7 +302,7 @@ class SetsGenerator:
         self.structures_df.to_csv('%s/structures.csv' % self.results_dir, encoding='utf-8', index=False)
         with codecs.open('%s/identifiability.in' % self.results_dir, 'w',  "utf-8") as f:
             f.write("%s" % "\n".join(self.identifiability))
-        with open('%s/event_sem.in' % self.results_dir, 'w') as f:
+        with open('%s/event_semantics.in' % self.results_dir, 'w') as f:
             f.write("%s" % "\n".join(self.event_sem))
         with open('%s/target_lang.in' % self.results_dir, 'w') as f:
             f.write("%s" % "\n".join(set(self.target_lang)))
@@ -354,7 +359,7 @@ class SetsGenerator:
     def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
         """
         :param msg_idx: index of the message list (e.g., ['AGENT', 'AGENT-MOD', 'ACTION', 'PATIENT']
-        :param pos: current part of speech (e.g., 'det' for determiner, 'noun::animate' for an animate noun)
+        :param pos: current part of speech (e.g., 'det' for determiner, 'noun:animate' for an animate noun)
         :param lang: language code (en, es)
         :param next_pos: the pos that follows
         :param boost_next: whether to move two indexes ahead. This hack is because in EN we want to use the adjective

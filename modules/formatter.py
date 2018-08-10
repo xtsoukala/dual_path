@@ -9,9 +9,9 @@ from elman_network import np
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, lexicon_csv, role_fname, evsem_fname, fixed_weights,
-                 fixed_weights_identif, language, trainingset, testset, semantic_gender, emphasis,
-                 prodrop, plot_title, use_word_embeddings, monolingual_only):
+    def __init__(self, results_dir, input_dir, lexicon_csv, fixed_weights, fixed_weights_identif, language,
+                 trainingset, testset, semantic_gender, emphasis, prodrop, plot_title, use_word_embeddings,
+                 monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.lang = language.lower()
         self.monolingual_only = monolingual_only
@@ -27,8 +27,8 @@ class InputFormatter:
         self.semantic_gender = semantic_gender
         self.identif = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
-        self.roles = self._read_file_to_list(role_fname)
-        self.event_semantics = self._read_file_to_list(evsem_fname)
+        self.roles = self._read_file_to_list('roles.in')
+        self.event_semantics = self._read_file_to_list('event_semantics.in')
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis_percentage = emphasis

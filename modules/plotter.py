@@ -51,7 +51,7 @@ class Plotter:
 
         # !------------  CODE-SWITCHES ------------!
         correct_code_switches = results['correct_code_switches']['test']
-        if sum(correct_code_switches):
+        if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             code_switches = results['all_code_switches']['test']
             plt.plot(epochs, [percentage(x, num_test) for x in code_switches], color='olivedrab',
                      label="All CS")

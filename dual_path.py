@@ -25,7 +25,7 @@ class DualPath:
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
-                 input_class, check_pronouns, allow_cognate_boost=False, simulation_num=None):
+                 input_class, check_pronouns, ignore_tense_and_det, allow_cognate_boost=False, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -59,7 +59,7 @@ class DualPath:
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
-        # |----------!PARAMS----------|
+        self.ignore_tense_and_det = ignore_tense_and_det
         self.allow_cognate_boost = allow_cognate_boost
         self.exclude_lang = exclude_lang
         self.check_pronouns = check_pronouns
@@ -311,7 +311,7 @@ class DualPath:
                                                                      feature="determiners")
                     has_wrong_tense = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
                                                                        feature="tense")
-                    if has_wrong_det or has_wrong_tense:
+                    if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                         counter['correct_meaning'] += 1  # if the only mistake was the determiner, count it as correct
 
                 if check_pron:  # only check the grammatical sentences
@@ -321,7 +321,7 @@ class DualPath:
                             counter['pronoun_errors'] += 1
                         else:
                             correctedness_status = "(POS only)"
-                            # also count grammatically correct sentences with gender error that convey wrong meaning
+                            # flex: grammatically correct sentences with gender error that convey wrong meaning
                             counter['pronoun_errors_flex'] += 1
 
                         self.pronoun_logger.info("--------%s (%s)--------%s\nOUT:%s\nTRG:%s\n%s\n" %
@@ -377,23 +377,10 @@ def copy_files_endwith(src, dest, ends_with=".in"):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def copy_test_training_sets(src, dest):
+def copy_test_training_sets(src, dest, valid_filename_list=('test.in', 'training.in')):
     for filename in os.listdir(src):
-        if filename in ['test.in', 'training.in']:
+        if filename in valid_filename_list:
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
-
-
-def generate_title_from_lang(lang_code):
-    title = ''
-    if lang_code == 'en':
-        title = 'English monolingual model'
-    elif lang_code == 'es':
-        title = 'Spanish monolingual model'
-    elif lang_code == 'el':
-        title = 'Greek monolingual model'
-    elif lang_code == 'enes' or lang_code == 'esen':
-        title = 'Bilingual EN-ES model'
-    return title
 
 
 def create_all_input_files(num_simulations, results_dir, sets, original_input_path, cognate_experiment,
@@ -428,8 +415,13 @@ if __name__ == "__main__":
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
-    parser.add_argument('-l2_percentage', '-l2_perc', help='% of L2 input', type=float, default=0.5)
+    parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    """ input-related arguments; ithey are probably redundant as all the user needs to specify is the input folder """
+    parser.add_argument('-lexicon_csv', help='CSV file that contains the lexicon and concepts', default='lexicon.csv')
+    parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
+                                                          'training.', default="training.in")
+    parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
@@ -462,17 +454,7 @@ if __name__ == "__main__":
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
                         type=int, default=30)
-    """ input-related arguments, they are probably redundant as all the user needs to specify is the input/ folder """
-    parser.add_argument('-lexicon', help='File name that contains the lexicon', default='lexicon.in')
-    parser.add_argument('-lexicon_csv', help='CSV file that contains the lexicon and concepts', default='lexicon.csv')
-    parser.add_argument('-concepts', help='File name that contains the concepts', default='concepts.in')
-    parser.add_argument('-role', help='File name that contains the roles', default='roles.in')
-    parser.add_argument('-eventsem', help='File name that contains the event semantics', default='event_sem.in')
-    ####################################################################################################################
-    parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
-                                                          'training.', default="training.in")
-    parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
-    """ ######################################## boolean arguments ################################################# """
+    """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
     parser.add_argument('--crole', dest='crole', action='store_true',
@@ -516,14 +498,20 @@ if __name__ == "__main__":
     parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment')
     parser.set_defaults(cognate_experiment=False)
+    parser.add_argument('--flex_eval', dest='ignore_tense_and_det', action='store_true',
+                        help='Ignore mistakes on determiners (definiteness) and tense (past, present)')
+    parser.set_defaults(ignore_tense_and_det=False)
     parser.add_argument('--nomultiprocessing', '--no_multiprocessing', dest='use_multiprocessing', action='store_false',
                         help='Use multiprocessing for parallel simulations')
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
     # create path to store results
-    results_dir = "simulations/%s%s_%s_h%s_c%s" % ((args.resdir if args.resdir else ""),
-                                                   datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
-                                                   args.lang, args.hidden, args.compress)
+    results_dir = "simulations/%s%s_%s__%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
+                                                          datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
+                                                          args.lang, args.sim, args.hidden, args.compress)
+    lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
+                          'el': 'Greek monolingual model', 'enes': 'Bilingual EN-ES model',
+                          'esen': 'Bilingual EN-ES model'}
     os.makedirs(results_dir)
     original_input_path = None  # keep track of the original input in case it was copied
     sets = None
@@ -556,7 +544,7 @@ if __name__ == "__main__":
         args.nolang = True
 
     if not args.title:
-        args.title = generate_title_from_lang(args.lang)
+        args.title = lang_code_to_title[args.lang]
 
     if not args.decrease_lrate:
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
@@ -571,20 +559,20 @@ if __name__ == "__main__":
                             "Compress: %s\nCopy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse "
                             "gender info:%s\nEmphasis (overt ES pronouns):%s%%\nFixed weights: concept-role: %s, "
                             "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
-                            "Shuffle set after each epoch: %s\nAllow free structure production:%s") %
+                            "Shuffle set after each epoch: %s\nAllow free structure production:%s\nIgnore tense and "
+                            "determiners when evaluating:%s") %
                            (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
-                            args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos))
+                            args.set_weights, args.set_weights_epoch, args.nolang, args.shuffle, args.free_pos,
+                            args.ignore_tense_and_det))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
-                            role_fname=args.role, evsem_fname=args.eventsem,
                             language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                             use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual)
-
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
@@ -593,7 +581,8 @@ if __name__ == "__main__":
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
                          set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
-                         input_class=inputs, momentum=args.momentum, check_pronouns=args.check_pronouns)
+                         ignore_tense_and_det=args.ignore_tense_and_det, input_class=inputs, momentum=args.momentum,
+                         check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
         create_all_input_files(args.sim, results_dir, sets, original_input_path, args.cognate_experiment,
@@ -612,8 +601,8 @@ if __name__ == "__main__":
             dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                              epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                              test_every=args.test_every, compress_size=args.compress, exclude_lang=args.nolang,
-                             set_weights_folder=args.set_weights, momentum=args.momentum,
-                             set_weights_epoch=args.set_weights_epoch, input_class=inputs,
+                             set_weights_folder=args.set_weights, momentum=args.momentum, input_class=inputs,
+                             ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
                              check_pronouns=args.check_pronouns, simulation_num=sim)
             if args.use_multiprocessing:
                 process = Process(target=dualp.train_network, args=(args.shuffle,))
