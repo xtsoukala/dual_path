@@ -58,7 +58,6 @@ class SetsGenerator:
         :param cognates_experiment: (if True) include cognates and ff only in training sets
         :param save_files: whether to save lexicon/concepts etc or just training/test sets
         """
-        print num_sentences
         if not cognates_experiment:
             # (re)set the seed if it's not part of the cognate experiment (where this function is called twice)
             random.seed(self.seed)
@@ -156,11 +155,12 @@ class SetsGenerator:
         :param percentage_L2: percentage of L2 structures
         :return:
         """
+        num_l2 = percentage_L2 * num_sentences
+        num_l1 = num_sentences - num_l2
         # if percentages are not set, distribute equally
-        # calculate structures for L1 # FIXME: need to have smarter floor/ceiling decision
-        l1_times_repeat = int(np.ceil((1 - percentage_L2) * (num_sentences / self.num_structures_L1)))
-        l1_mod_repeat = int(np.floor((1 - percentage_L2) * (num_sentences % self.num_structures_L1)))
-        print (l1_times_repeat + l1_mod_repeat) * num_sentences
+        # calculate structures for L1
+        l1_times_repeat = int(np.floor(num_l1 / self.num_structures_L1))
+        l1_mod_repeat = int(np.floor(num_l1 % self.num_structures_L1))
         # TODO: take percentages into consideration if not set to NaN
         sentence_structures = pd.concat([self.structures_df[['message', self.L1]]] * l1_times_repeat,
                                         ignore_index=True, sort=False)
@@ -171,18 +171,18 @@ class SetsGenerator:
 
         sentence_structures = [("%s,%s" % (i[0], self.L1.upper()), i[1]) for i in sentence_structures]
         if self.L2 and percentage_L2 > 0:
-            l2_times_repeat = int(np.ceil(percentage_L2 * (num_sentences / self.num_structures_L2)))
-            l2_mod_repeat = int(np.floor(percentage_L2 * (num_sentences % self.num_structures_L2)))
-            l2_df = pd.concat([self.structures_df[['message', self.L2]]] * l2_times_repeat,
-                              ignore_index=True, sort=False)
-            l2_structures = [("%s,%s" % (i[0], self.L2.upper()), i[1])
-                             for i in list(l2_df.itertuples(index=False, name=None))]
-            sentence_structures.extend(l2_structures)
+            l2_times_repeat = int(np.floor(num_l2 / self.num_structures_L2))
+            l2_mod_repeat = int(np.floor(num_l2 % self.num_structures_L2))
+            if l2_times_repeat:
+                l2_df = pd.concat([self.structures_df[['message', self.L2]]] * l2_times_repeat,
+                                  ignore_index=True, sort=False)
+                l2_structures = [("%s,%s" % (i[0], self.L2.upper()), i[1])
+                                 for i in list(l2_df.itertuples(index=False, name=None))]
+                sentence_structures.extend(l2_structures)
             for i in range(l2_mod_repeat):
                 row = random.randint(0, self.num_structures_L2 - 1)
                 sentence_structures.append((self.structures_df['message'].iloc[row]+","+self.L2.upper(),
                                             self.structures_df[self.L2].iloc[row]))
-        print num_sentences, len(sentence_structures)
         assert num_sentences == len(sentence_structures)
         random.shuffle(sentence_structures)
         return sentence_structures
@@ -467,5 +467,5 @@ if __name__ == "__main__":
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
     sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='esen')
-    sets.generate_sets(num_sentences=2500, percentage_L2=0.4)
+    sets.generate_sets(num_sentences=2500, percentage_L2=0.3)
     #sets.generate_sets_for_cognate_experiment(num_sentences=2500, percentage_L2=0.5)
