@@ -157,8 +157,8 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
                     # TODO: play with activations, e.g. activate the target language slightly more
-                    lang_act = [0.9, 0.9]  # if self.inputs.languages.index(lang) == 0 else [1, 1]
-                    self.srn.reset_target_lang(target_lang_act=lang_act)  # if left None: 50/50
+                    lang_act = np.ones(2)  # [0.5, 0.5] if self.inputs.languages.index(lang) == 0 else [1, 1]
+                    self.srn.update_layer_activation("target_lang", activation=lang_act)
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced

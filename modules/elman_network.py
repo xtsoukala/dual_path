@@ -116,17 +116,10 @@ class SimpleRecurrentNetwork:
         else:
             event_sem.activation = event_sem_activations
 
-        self.reset_target_lang(target_lang_act)
+        self.update_layer_activation("target_lang", activation=target_lang_act)
 
         if reset:
             self.reset_context_delta_and_crole()
-
-    def reset_target_lang(self, target_lang_act=None):
-        target_lang = self.get_layer("target_lang")
-        if target_lang_act is not None:
-            target_lang.activation = target_lang_act
-        else:
-            target_lang.activation = [1] * target_lang.size
 
     def boost_non_target_lang(self, target_lang_idx):
         target_lang = self.get_layer("target_lang")
@@ -143,12 +136,9 @@ class SimpleRecurrentNetwork:
             layer.previous_delta = np.empty([])
 
         if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
-            crole = self.get_layer("role_copy")
-            crole.activation = np.zeros(crole.size)
-
+            self.update_layer_activation("role_copy", activation=None)
         if self.include_input_copy:
-            cinput = self.get_layer("input_copy")
-            cinput.activation = np.zeros(cinput.size)
+            self.update_layer_activation("input_copy", activation=None)
 
     def set_inputs(self, input_idx, target_idx=None):
         input_layer = self.get_layer("input")
@@ -161,6 +151,13 @@ class SimpleRecurrentNetwork:
             output_layer = self.get_layer("output")
             output_layer.target_activation = np.zeros(output_layer.size)
             output_layer.target_activation[target_idx] = 1
+
+    def update_layer_activation(self, layer_name, activation):
+        layer = self.get_layer(layer_name)
+        if activation is None:  # set to zero
+            layer.activation = np.zeros(layer.size)
+        else:
+            layer.activation = activation
 
     def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
@@ -196,12 +193,10 @@ class SimpleRecurrentNetwork:
         hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
         if self.include_input_copy:
             input_layer = self.get_layer("input")
-            input_copy_layer = self.get_layer("input_copy")
-            input_copy_layer.activation = deepcopy(input_layer.activation)
+            self.update_layer_activation("input_copy", activation=deepcopy(input_layer.activation))
         if self.include_role_copy:
             role_layer = self.get_layer("role")
-            role_copy_layer = self.get_layer("role_copy")
-            role_copy_layer.activation = deepcopy(role_layer.activation)
+            self.update_layer_activation("role_copy", activation=deepcopy(role_layer.activation))
 
     def backpropagate(self, epoch):
         self._compute_output_error(epoch)
@@ -412,9 +407,9 @@ def softmax_derivative_complete(s):
     for i in range(len(jacobian_m)):
         for j in range(len(jacobian_m)):
             if i == j:
-                jacobian_m[i][j] = s[i] * (1-s[i])
+                jacobian_m[i][j] = s[i] * (1 - s[i])
             else:
-                jacobian_m[i][j] = -s[i]*s[j]
+                jacobian_m[i][j] = -s[i] * s[j]
     return jacobian_m
 
 
