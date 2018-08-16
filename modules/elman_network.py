@@ -8,10 +8,10 @@ from collections import defaultdict
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, dir, context_init=0.5, debug_messages=True, include_role_copy=False,
+    def __init__(self, learn_rate, momentum, dir, context_init_value=0.5, debug_messages=True, include_role_copy=False,
                  include_input_copy=False):
         self.layers = []
-        self.context_init = context_init  # Initial activations of context layer
+        self.context_init_value = context_init_value  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
         self.momentum = momentum
         self.initialization_completed = False  # needs to be set to True for the model to start training
@@ -22,8 +22,6 @@ class SimpleRecurrentNetwork:
         self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
         self.dir = dir
-        self.output_size = 0
-        self.target_activation = []
         self.mse = defaultdict(list)
         self.divergence_error = defaultdict(list)
 
@@ -37,9 +35,7 @@ class SimpleRecurrentNetwork:
                   convert_input=False, is_recurrent=False):
         self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
                                        is_recurrent=is_recurrent, activation_function=activation_function,
-                                       context_init=self.context_init))
-        if name == "output":
-            self.output_size = size
+                                       context_init_value=self.context_init_value))
 
     def connect_layers(self, first_layer_name, second_layer_name):
         first = self.get_layer(first_layer_name)
@@ -142,7 +138,7 @@ class SimpleRecurrentNetwork:
 
     def reset_context_delta_and_crole(self):
         recurrent_layer = self.get_layer("hidden")
-        recurrent_layer.context_activation = np.array([self.context_init] * recurrent_layer.size)
+        recurrent_layer.context_activation = np.array([self.context_init_value] * recurrent_layer.size)
         for layer in self.get_layers_for_backpropagation():  # Also reset the previous delta values
             layer.previous_delta = np.empty([])
 
@@ -162,13 +158,9 @@ class SimpleRecurrentNetwork:
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
             input_layer.activation = convert_range(input_layer.activation)
         if target_idx is not None:  # no need to set target when testing
-            self.target_activation = np.zeros(self.output_size)
-            self.target_activation[target_idx] = 1
-
-    def set_input_activations(self, inputs, targets):
-        input_layer = self.get_layer("input")
-        input_layer.activation = inputs
-        self.target_activation = targets
+            output_layer = self.get_layer("output")
+            output_layer.target_activation = np.zeros(output_layer.size)
+            output_layer.target_activation[target_idx] = 1
 
     def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
@@ -225,28 +217,28 @@ class SimpleRecurrentNetwork:
     def _compute_output_error(self, epoch):
         # Calculate error[Eo](target - output)
         output_layer = self.get_layer("output")
-        self._calculate_mean_square_and_divergence_error(epoch, output_layer.activation)
+        self._calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
 
         if output_layer.activation_function == "softmax":
-            output_layer.gradient = (self.target_activation - output_layer.activation)  # no derivative here
+            output_layer.gradient = (output_layer.target_activation - output_layer.activation)  # no derivative here
         elif output_layer.activation_function == "tanh":
-            output_layer.gradient = ((convert_range(self.target_activation) - output_layer.activation) *
+            output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
                                      tanh_derivative(output_layer.activation))
         elif output_layer.activation_function == "sigmoid":
-            output_layer.gradient = ((self.target_activation - output_layer.activation) *
+            output_layer.gradient = ((output_layer.target_activation - output_layer.activation) *
                                      sigmoid_derivative(output_layer.activation))
 
-    def _calculate_mean_square_and_divergence_error(self, epoch, output_activation):
+    def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
-        self.mse[epoch].append(((self.target_activation - output_activation) ** 2).mean(axis=None))
+        self.mse[epoch].append(((target_activation - output_activation) ** 2).mean(axis=None))
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
-                        divergence_err = np.sum(self.target_activation)
+                        divergence_err = np.sum(target_activation)
         # if all(output_activation) == 0:
         #    print output_activation
         with np.errstate(divide='ignore', invalid='ignore'):
-            self.divergence_error[epoch].append(self.target_activation * np.log(np.true_divide(self.target_activation,
-                                                                                output_activation)))"""
+            self.divergence_error[epoch].append(target_activation * np.log(np.true_divide(target_activation,
+            output_activation)))"""
 
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
@@ -324,7 +316,8 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, activation_function, convert_input, context_init, is_recurrent=False):
+    def __init__(self, name, size, has_bias, activation_function, convert_input,
+                 context_init_value, is_recurrent=False):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size
@@ -338,6 +331,7 @@ class NeuronLayer:
         self.size = size
         self.sd = 0  # it is used to initialize weights
         self.activation = np.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.target_activation = np.zeros(size)
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
@@ -351,12 +345,12 @@ class NeuronLayer:
         # the following two properties are only for the hidden (recurrent) layer
         self.is_recurrent = is_recurrent
         if is_recurrent:
-            self.make_recurrent(context_init)
+            self.make_recurrent(context_init_value)
 
-    def make_recurrent(self, context_init):
+    def make_recurrent(self, context_init_value):
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
-        self.context_activation = np.array([context_init] * self.size)
+        self.context_activation = np.array([context_init_value] * self.size)
 
 
 def input_sd(number_of_inputs):
