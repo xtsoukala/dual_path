@@ -10,8 +10,8 @@ class Plotter:
     def __init__(self, results_dir):
         self.results_dir = results_dir
 
-    def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, cognate_experiment=True,
-                     summary_sim=None):
+    def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
+                     cognate_experiment=True, summary_sim=None):
         correct_test_sentences = results['correct_meaning']['test']
         correct_test_pos = results['correct_pos']['test']
         epochs = range(len(correct_test_sentences))
@@ -97,13 +97,8 @@ class Plotter:
             plt.ylim([0, 60])
             plt.xlim(min(epochs), max(epochs))
             plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
-            if summary_sim:
-                fname = '%s/summary_%s_code_switches_correct_percentage.pdf' % (self.results_dir, summary_sim)
-                with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                    f.write("\nCode-switched percentage (test set): %s" % [percentage(x, num_test) for x
-                                                                           in results['correct_code_switches']['test']])
-            else:
-                fname = '%s/code_switches_correct_percentage.pdf' % self.results_dir
+            fname = '%s/%scode_switches_correct_percentage.pdf' % (self.results_dir,
+                                                                   "summary_%s_" % summary_sim if summary_sim else "")
             plt.savefig(fname)
             plt.close()
 
@@ -209,8 +204,7 @@ class Plotter:
                     fname = '%s/summary_%s_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
                                                                          'test')
                     # also save type_test_es and type_test_en
-                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                        f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                    simulation_logger.info("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
                                 "All CS labels:%s" % (type_test_es, type_test_en, all_cs_types))
 
                 else:
@@ -244,9 +238,8 @@ class Plotter:
                     fname = '%s/summary_%s_correct_type_code_switches_%s.pdf' % (self.results_dir, summary_sim,
                                                                                  'test')
                     # also save type_test_es and type_test_en
-                    with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                        f.write("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
-                                "All CS labels:%s" % (type_test_es, type_test_en, all_cs_types))
+                    simulation_logger.info("\nType code-switch ES (test set): %s\nType code-switch EN (test set): %s\n"
+                                           "All CS labels:%s" % (type_test_es, type_test_en, all_cs_types))
 
                 else:
                     fname = '%s/correct_type_code_switches_%s.pdf' % (self.results_dir, 'test')
@@ -321,11 +314,10 @@ class Plotter:
                     if summary_sim:
                         fname = '%s/summary_%s_%s_%s.pdf' % (self.results_dir, summary_sim, file_name, dataset_type)
                         # also save type_test_es and type_test_en
-                        with open("%s/simulation.info" % self.results_dir, 'a') as f:  # Append information
-                            f.write("\nType code-switch non-cognates (test set): %s\nType code-switch FF (test set): %s"
-                                    "\nType code-switch COG (test set): %s" %
-                                    (type_test_enes, type_test_FF, type_test_COG))
-
+                        simulation_logger.info("\nType code-switch non-cognates (test set): %s\n"
+                                               "Type code-switch FF (test set): %s\n"
+                                               "Type code-switch COG (test set): %s" % (type_test_enes, type_test_FF,
+                                                                                        type_test_COG))
                     else:
                         fname = '%s/%s_%s.pdf' % (self.results_dir, file_name, dataset_type)
                     plt.savefig(fname)

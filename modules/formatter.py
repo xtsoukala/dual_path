@@ -118,12 +118,14 @@ class InputFormatter:
         if out_pos in self.allowed_structures:  # if sentence in list of existing POS
             return is_grammatical, has_flex_order
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
-        if len(out_pos) > len(trg_pos) and 'prep' not in out_pos:
-            trg_pos.append('prep')
-        elif len(out_pos) < len(trg_pos):  # if they are equal don't append
-            out_pos.append('prep')
-        if self.same_unordered_lists(out_pos, trg_pos) and out_pos[-1] != 'prep':  # it shouldn't end with 'to'
-            return is_grammatical, has_flex_order
+        if not out_pos[-1] == 'prep':  # it shouldn't end with 'to'
+            if 'prep' in out_pos and 'prep' not in trg_pos:
+                trg_pos.append('prep')
+            elif 'prep' in trg_pos and 'prep' not in out_pos:
+                out_pos.append('prep')
+            # TODO: If the verb is Spanish we shouldn't allow double datives
+            if self.same_unordered_lists(out_pos, trg_pos):
+                return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False,

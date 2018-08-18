@@ -246,7 +246,8 @@ class DualPath:
                 plt = Plotter(results_dir=self.inputs.results_dir)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
                                  title=self.inputs.plot_title, cognate_experiment=args.cognate_experiment,
-                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
+                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun,
+                                 simulation_logger=simulation_logger)
 
     def update_results(self, temp_results, type_set='test'):
         for sim in range(self.epochs):
@@ -411,7 +412,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=45)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=50)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -453,7 +454,7 @@ if __name__ == "__main__":
     parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=30)
+                        type=int, default=50)
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -506,7 +507,7 @@ if __name__ == "__main__":
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
     # create path to store results
-    results_dir = "simulations/%s%s_%s__%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
+    results_dir = "simulations/%s%s_%s_%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
                                                           datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
                                                           args.lang, args.sim, args.hidden, args.compress)
     lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
@@ -629,7 +630,7 @@ if __name__ == "__main__":
             for i, simulation in enumerate(all_results):
                 if inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=args.threshold):
                     valid_results.append(simulation)
-                    if not inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=75):
+                    if not inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=80):
                         failed_sim_id.append("[%s]" % i)  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(i))  # keep track of simulations that failed
@@ -644,7 +645,7 @@ if __name__ == "__main__":
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
                 plot.plot_results(results_mean_and_std, title=inputs.plot_title,
                                   num_train=inputs.num_train, num_test=inputs.num_test,
-                                  summary_sim=num_valid_simulations,
+                                  summary_sim=num_valid_simulations, simulation_logger=simulation_logger,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
                 if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                     simulation_logger.info("\nCode-switched percentage (test set): %s" %
