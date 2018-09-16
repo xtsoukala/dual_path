@@ -115,7 +115,7 @@ class SetsGenerator:
         :return:
         """
         replacement_sets = []
-        new_idx = []
+        new_replacement_idx = []
         for idx, (sentence, message) in enumerate(original_sets):
             lang = message[-2:].lower()
             all_roles = message.split(';')
@@ -123,7 +123,7 @@ class SetsGenerator:
                 role_idx_to_replace = all_roles[replacement_idx[idx]]
             else:
                 role_idx_to_replace = random.choice(range(len(all_roles) - 2))  # avoid switches at last point
-                new_idx.append(role_idx_to_replace)
+                new_replacement_idx.append(role_idx_to_replace)
             concept_to_replace = self.extract_concept_from_role(all_roles[role_idx_to_replace])
             word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w, verb_type = \
                 self.get_word_from_concept(concept_to_replace, lang)
@@ -146,7 +146,7 @@ class SetsGenerator:
             message = ';'.join(all_roles)
             replacement_sets.append((sentence, message))
         if not replacement_idx:
-            replacement_idx = new_idx
+            replacement_idx = new_replacement_idx
         return replacement_sets, replacement_idx
 
     def generate_sentence_structures(self, num_sentences, percentage_L2):
@@ -413,9 +413,11 @@ class SetsGenerator:
     @staticmethod
     def add_concept_and_gender_info(message, concept, semantic_gender):
         if message[-1] != '=':
-            msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message, concept, semantic_gender)
+            msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message,
+                                                                                         concept, semantic_gender)
         else:
-            msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message, concept, semantic_gender)
+            msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message,
+                                                                                       concept, semantic_gender)
         return msg
 
     @staticmethod
@@ -468,4 +470,4 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='esen')
     sets.generate_sets(num_sentences=2500, percentage_L2=0.3)
-    #sets.generate_sets_for_cognate_experiment(num_sentences=2500, percentage_L2=0.5)
+    # sets.generate_sets_for_cognate_experiment(num_sentences=2500, percentage_L2=0.5)

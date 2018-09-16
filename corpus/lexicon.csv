@@ -24,7 +24,7 @@ considerar,considerar,CONSIDERAR,CONSIDERAR,verb_full,,,,,,,,,intrans::3rd,,,Y,,
 comunic,comunic,COMUNICAR,COMUNICAR,verb,,,,,,,,,intrans,,,Y,,Y
 comunicar,comunicar,COMUNICAR,COMUNICAR,verb_full,,,,,,,,,intrans::3rd,,,Y,,Y
 calm,calm,CALMAR,CALMAR,verb,,,,,,,,,intrans,,,Y,,
-calmar,calmar,CALMAR,CALMAR,verb_full,,,,,,,,,intrans::3rd,,,Y,,
+calmar,calmar,CALMAR,CALMAR,verb_full,,,,,,,,,intrans::3rd,,,Y,,Y
 adopt,adopt,ADOPTAR,ADOPTAR,verb,,,,adoptar,,,,,trans,,,Y,,Y
 consult,consult,CONSULTAR,CONSULTAR,verb,,,,consultar,,,,,trans,,,Y,,Y
 abandon,abandon,ABANDONAR,ABANDONAR,verb,,,,abandonar,,,,,trans,,,Y,,
@@ -130,11 +130,11 @@ barrato,cheap,CHEAP,CHEAP,adj,,M,,,,,,,,,barrata,,,
 caro,expensive,EXPENSIVE,EXPENSIVE,adj,,M,,,,,,,,,cara,,,
 colorido,colorful,COLORFUL,COLORFUL,adj,,M,,,,,,,,,colorida,,,
 grande,big,BIG,BIG,adj,,M-F,,,,,,,,,,,,
-pues,actually,,,adv,,,,,,,,,,,,,,
+pues,actually,,,adv,,,,,,,,,,,,,,Y
 está,is,,,aux,,,,,,,,,singular,present,,,,
 estaba,was,,,aux,,,,,,,,,singular,past,,,,
-están,are,,,aux,,,,,,,,,plural,present,,,,
-estaban,were,,,aux,,,,,,,,,plural,past,,,,
+están,are,,,aux,,,,,,,,,plural,present,,,,Y
+estaban,were,,,aux,,,,,,,,,plural,past,,,,Y
 por,by,,,prep,,,,,,,,,by,,,,,
 con,with,,,prep,,,,,,,,,with,,,,,
 a_,to,,,prep,,,,,,,,,to,,,,,

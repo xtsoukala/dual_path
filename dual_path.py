@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import shutil
 import logging
+import re
 from multiprocessing import Process, Manager
 from datetime import datetime
 from collections import defaultdict
@@ -237,13 +238,20 @@ class DualPath:
             if evaluate_training_set:
                 self.update_results(train_results, type_set='training')
 
+            cs_keys = []
+            if self.results['type_code_switches']['test']:
+                cs_keys = self.results['type_code_switches']['test'].keys()
+            if self.results['type_code_switches']['training']:
+                cs_keys += self.results['type_code_switches']['training'].keys()
+            self.results['all_cs_types'] = set([re.sub("es-|en-|-COG|-FF", "", k) for k in cs_keys])
+
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
                 pickle.dump(self.results, pckl)
 
             if plot_results:
                 self.results['mse'] = self.srn.mse
-                plt = Plotter(results_dir=self.inputs.results_dir)
+                plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
                                  title=self.inputs.plot_title, cognate_experiment=args.cognate_experiment,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun,
@@ -412,7 +420,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=50)
+    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=60)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
@@ -451,7 +459,7 @@ if __name__ == "__main__":
                                                           'average of the results (Monte Carlo approach)')
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
-    parser.add_argument('-pron', dest='emphasis', type=int, default=0, help='Percentage of overt pronouns in ES')
+    parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
                         type=int, default=50)
@@ -466,7 +474,8 @@ if __name__ == "__main__":
     parser.set_defaults(cinput=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('--nolang', dest='exclude_lang', action='store_true', help='Exclude language info during TESTing')
+    parser.add_argument('--nolang', dest='exclude_lang', action='store_true',
+                        help='Exclude language info during TESTing')
     parser.set_defaults(exclude_lang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
@@ -508,8 +517,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # create path to store results
     results_dir = "simulations/%s%s_%s_%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
-                                                          datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
-                                                          args.lang, args.sim, args.hidden, args.compress)
+                                                         datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
+                                                         args.lang, args.sim, args.hidden, args.compress)
     lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
                           'el': 'Greek monolingual model', 'enes': 'Bilingual EN-ES model',
                           'esen': 'Bilingual EN-ES model'}
@@ -558,19 +567,19 @@ if __name__ == "__main__":
 
     simulation_logger.info(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\n"
                             "Compress: %s\nCopy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse "
-                            "gender info:%s\nEmphasis (overt ES pronouns):%s%%\nFixed weights: concept-role: %s, "
+                            "gender info:%s\novert_pronouns (overt ES pronouns):%s%%\nFixed weights: concept-role: %s, "
                             "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
                             "Shuffle set after each epoch: %s\nAllow free structure production:%s\nIgnore tense and "
                             "determiners when evaluating:%s") %
                            (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
-                            args.cinput, args.np, args.prodrop, args.gender, args.emphasis, args.fw, args.fwi,
+                            args.cinput, args.np, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
                             args.set_weights, args.set_weights_epoch, args.exclude_lang, args.shuffle, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
-                            language=args.lang, semantic_gender=args.gender, emphasis=args.emphasis,
+                            language=args.lang, semantic_gender=args.gender, overt_pronouns=args.overt_pronouns,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
                             plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                             use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual)
@@ -641,14 +650,17 @@ if __name__ == "__main__":
                                                  if sum(simulation['pronoun_errors']['test']) > 0 or
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
-                plot = Plotter(results_dir=results_dir)
+                plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations)
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
+                with open("%s/summary_results.pickled" % results_dir, 'w') as pckl:
+                    pickle.dump(results_mean_and_std, pckl)
                 plot.plot_results(results_mean_and_std, title=inputs.plot_title,
+                                  cognate_experiment=args.cognate_experiment,
                                   num_train=inputs.num_train, num_test=inputs.num_test,
-                                  summary_sim=num_valid_simulations, simulation_logger=simulation_logger,
+                                  simulation_logger=simulation_logger,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
                 if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
-                    simulation_logger.info("\nCode-switched percentage (test set): %s" %
+                    simulation_logger.info("Code-switched percentage (test set): %s" %
                                            [percentage(x, inputs.num_test)
                                             for x in results_mean_and_std['correct_code_switches']['test']])
 

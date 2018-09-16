@@ -10,7 +10,7 @@ from elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lexicon_csv, fixed_weights, fixed_weights_identif, language,
-                 trainingset, testset, semantic_gender, emphasis, prodrop, plot_title, use_word_embeddings,
+                 trainingset, testset, semantic_gender, overt_pronouns, prodrop, plot_title, use_word_embeddings,
                  monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.lang = language.lower()
@@ -25,13 +25,13 @@ class InputFormatter:
         self.concepts = list(self.lexicon_df.concept.dropna().unique()) if not use_word_embeddings \
             else word2vec.load('word2vec/text8.bin')
         self.semantic_gender = semantic_gender
-        self.identif = self._read_file_to_list('identifiability.in')
+        self.identifiability = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list('roles.in')
         self.event_semantics = self._read_file_to_list('event_semantics.in')
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
-        self.emphasis_percentage = emphasis
+        self.emphasis_percentage = overt_pronouns
         self.testset = testset
         self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
@@ -61,7 +61,7 @@ class InputFormatter:
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
         self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
-        self.identif_size = len(self.identif)
+        self.identif_size = len(self.identifiability)
         self.roles_size = len(self.roles)
 
         self.plot_title = plot_title
@@ -235,9 +235,9 @@ class InputFormatter:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
         if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-            all(x < self.code_switched_idx for x in min_and_max_idx)) and
+                 all(x < self.code_switched_idx for x in min_and_max_idx)) and
                 self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
-                return False
+            return False
         return True
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_lang):
@@ -280,9 +280,10 @@ class InputFormatter:
                         concepts.append(l2_concept_list[i])
                     else:
                         concepts.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
-                                       else pos[-1])
+                                        else pos[-1])
         with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in lex)
+
         return lex, pos, np.array(concepts), code_switched_idx
 
     def get_lexicon_index(self, word):
@@ -381,6 +382,7 @@ class InputFormatter:
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
         """
         return [self.get_lexicon_index(w) for w in sentence_lst]
+
     # TODO: remove_period: True
     def sentence_indeces_pos(self, sentence_idx_lst, remove_period=False, convert_to_idx=False):
         """
@@ -429,8 +431,9 @@ class InputFormatter:
                 # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
-                    if concept in self.identif:
-                        weights_role_concept[self.roles.index(role)][self.identif.index(concept)] = self.fixed_identif
+                    if concept in self.identifiability:
+                        weights_role_concept[self.roles.index(role)][
+                            self.identifiability.index(concept)] = self.fixed_identif
                     elif concept not in ['COG', 'FF']:
                         if self.use_word_embeddings:
                             activation_vector = self.concepts['unknown']
@@ -449,7 +452,8 @@ class InputFormatter:
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
                                 print message, '#####', concept
-                                import sys; sys.exit()
+                                import sys
+                                sys.exit()
         return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language.lower()
 
     def cosine_similarity(self, first_word, second_word):
@@ -460,7 +464,7 @@ class InputFormatter:
     def training_is_successful(self, x, threshold=75):
         if x:
             return np.true_divide(x[-1] * 100, self.num_test) >= threshold
-        print x
+        print "Training did not pass the threshold: %s / %s" % (x, threshold)
         return False
 
     def df_query_to_idx(self, query, lang=None):
@@ -475,7 +479,7 @@ class InputFormatter:
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indeces (cognates/period)
         if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
-             (lang == self.L2 and idx <= self.code_switched_idx))):
+                                                (lang == self.L2 and idx <= self.code_switched_idx))):
             return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
         return [idx]
 
@@ -500,7 +504,7 @@ def take_average_of_valid_results(valid_results):
         results_average[key] = {'training': [], 'test': []}
         for simulation in valid_results:
             for t in ['training', 'test']:
-                if t in results_average[key] and results_average[key][t] != []:  # do not simplify ( != [] is necessary)
+                if t in results_average[key] and is_not_empty(results_average[key][t]):
                     if type(simulation[key][t]) is dict:  # case: type_code_switches
                         for cs_type, val in simulation[key][t].items():
                             if cs_type in results_average[key][t]:
@@ -523,14 +527,36 @@ def take_average_of_valid_results(valid_results):
     return results_average
 
 
-def get_numpy_mean_and_std(x, average_over_list=False):
+def is_not_empty(x):
+    if x != [] and sum_list_greater_than_zero(x):  # do not simplify
+        return True
+    return False
+
+
+def sum_list_greater_than_zero(x):
+    if sum([sum(i) for i in x]) > 0:
+        return True
+    return False
+
+
+def get_np_mean_and_std_err(x, summary_sim=None):
     if isinstance(x, list):
         x = np.array(x)
     if x.sum() > 0:
-        if average_over_list:
-            return x.mean(axis=0), x.std(axis=0)
+        if summary_sim:
+            return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)
         return x.mean(), x.std()  # we only want one number in this case (axis=1)
-    return 0, 0 if not average_over_list else [[0] * len(x)] * 2
+    return 0, 0
+
+
+def is_nd_array(x):
+    if isinstance(x, np.ndarray):
+        return True
+    return False
+
+
+def standard_error(std, num_simulations):
+    return np.true_divide(std, np.sqrt(num_simulations))
 
 
 def percentage(x, total):
@@ -550,14 +576,12 @@ def compute_mean_and_std(valid_results, epochs):
     """
     results_sum = {}
     all_keys = valid_results[0].keys()
-
-    all_cs_types = []
+    cs_keywords = []
     for sim in valid_results:
         for t in ['test', 'training']:
             if sim['type_code_switches'][t]:
-                all_cs_types.extend(sim['type_code_switches'][t].keys())
-    all_cs_types = set(all_cs_types)
-
+                cs_keywords.extend(sim['type_code_switches'][t].keys())
+    cs_keywords = set(cs_keywords)
     for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
         if key == 'type_code_switches':
             results_sum[key] = {'training': {}, 'test': {}}
@@ -567,7 +591,7 @@ def compute_mean_and_std(valid_results, epochs):
             for t in ['training', 'test']:
                 if t in simulation[key] and simulation[key][t]:
                     if type(simulation[key][t]) is dict:  # case: type_code_switches
-                        for cs_type in all_cs_types:
+                        for cs_type in cs_keywords:
                             if cs_type not in results_sum[key][t]:
                                 results_sum[key][t][cs_type] = []
                             if cs_type in simulation[key][t]:
@@ -576,19 +600,20 @@ def compute_mean_and_std(valid_results, epochs):
                                 results_sum[key][t][cs_type].append([0] * epochs)
                     else:
                         results_sum[key][t].append(simulation[key][t])
-    # now AVERAGE over all simulations.
+    # now compute MEAN and STANDARD ERROR of all simulations
     for key in all_keys:
         for t in ['training', 'test']:
             if t in results_sum[key] and results_sum[key][t]:
                 if type(results_sum[key][t]) is dict:
-                    for cs_type in all_cs_types:
+                    for cs_type in cs_keywords:
                         np_array = np.array(results_sum[key][t][cs_type])
-                        np_mean, np_std = get_numpy_mean_and_std(np_array, average_over_list=True)
-                        # results_sum[key][t]["%s-std" % cs_type] = np_std
+                        np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
+                        results_sum[key][t]["%s-std_error" % cs_type] = np_std_err
                         results_sum[key][t][cs_type] = np_mean
                 else:
                     np_array = np.array(results_sum[key][t])
-                    np_mean, np_std = get_numpy_mean_and_std(np_array, average_over_list=True)
-                    results_sum[key]["%s-std" % t] = np_std
+                    np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
+                    results_sum[key]["%s-std_error" % t] = np_std_err
                     results_sum[key][t] = np_mean
+    results_sum['all_cs_types'] = set([re.sub("es-|en-|-COG|-FF", "", x) for x in cs_keywords])
     return results_sum
