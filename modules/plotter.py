@@ -133,9 +133,6 @@ class Plotter:
                           'type_test_last_epoch_en': [], 'type_test_last_epoch_es': [],
                           'type_correct_test_last_epoch_en': [], 'type_correct_test_last_epoch_es': []}
             correct_test = results['correct_meaning']['test']
-            print results['all_cs_types']
-            print correct_test
-            print num_test
             for cs_type in results['all_cs_types']:
                 for lang in ['es', 'en']:
                     cs_type_per_lang = "%s-%s" % (lang, cs_type)
@@ -197,7 +194,8 @@ class Plotter:
                     plt.tight_layout()  # make room for labels
                     if self.summary_sim:
                         simulation_logger.info("type%s_test_es: %s\ntype%s_test_en: %s" %
-                                               (c, c, cs_results['type%s_test_es' % c], cs_results['type%s_test_en' % c]))
+                                               (c, c, cs_results['type%s_test_es' % c],
+                                                cs_results['type%s_test_en' % c]))
                     fname = '%s/%stype%s_test_cs.pdf' % (self.results_dir,
                                                          "%s" % (("summary_%s_" % self.summary_sim)
                                                                  if self.summary_sim else ""), c)
@@ -237,56 +235,99 @@ class Plotter:
                     plt.savefig(fname)
                     plt.close()
 
-            # NOW THE SAME FOR THE COG EXPERIMENT
+            ############################################################################################################
             if cognate_experiment:
                 for dataset_type in ['test']:  # ['training', 'test']:
-                    type_test_enes = []
-                    type_test_cog = []
-                    type_test_ff = []
+                    cognate_results = {'type_test_enes': [], 'type_test_cog': [], 'type_test_ff': [],
+                                       'type_correct_test_enes': [], 'type_correct_test_cog': [],
+                                       'type_correct_test_ff': [],
+                                       'type_correct_enes_last_epoch': [], 'type_correct_cog_last_epoch': [],
+                                       'type_correct_ff_last_epoch': []}
                     inlcude_ff = False
                     for cs_type in results['all_cs_types']:  # cs types calculated above
-                        cog_type = "%s-COG" % cs_type
+                        cog_type = "%s-cog" % cs_type
                         if cog_type in results['type_code_switches'][dataset_type]:
                             # take the percentage of sum in test set
                             values_percentage_testset = [percentage(x, num_test)
                                                          for x in results['type_code_switches'][dataset_type][cog_type]]
-                            type_test_cog.append(get_np_mean_and_std_err(values_percentage_testset,
-                                                                         summary_sim=self.summary_sim))
+                            cognate_results['type_test_cog'].append(get_np_mean_and_std_err(
+                                values_percentage_testset, summary_sim=self.summary_sim))
+
+                            values_correct_testset = [percentage(x, correct_test[i]) for i, x in
+                                                      enumerate(results['type_code_switches'][dataset_type][cog_type])]
+                            cognate_results['type_correct_test_cog'].append(get_np_mean_and_std_err(
+                                values_correct_testset, summary_sim=self.summary_sim))
+
+                            value_last_epoch = percentage(results['type_code_switches'][dataset_type][cog_type][-1],
+                                                          correct_test[-1])
+                            if self.summary_sim and '%s-std_err' % cog_type \
+                                    in results['type_code_switches'][dataset_type]:
+                                std_err = percentage(results['type_code_switches'][dataset_type]['%s-std_err' % cog_type],
+                                                     correct_test[-1])
+                            else:
+                                std_err = 0
+                            cognate_results['type_correct_cog_last_epoch'].append((value_last_epoch, std_err))
                         else:
-                            type_test_cog.append((0, 0))
-                        # same for FF
-                        ff_type = "%s-FF" % cs_type
+                            cognate_results['type_test_cog'].append((0, 0))
+                            cognate_results['type_correct_test_cog'].append((0, 0))
+                            cognate_results['type_correct_cog_last_epoch'].append((0, 0))
+                        # FIXME: same for FF
+                        ff_type = "%s-ff" % cs_type
                         if ff_type in results['type_code_switches'][dataset_type]:
                             # take the percentage of sum in test set
                             values_percentage_testset = [percentage(x, num_test)
                                                          for x in results['type_code_switches'][dataset_type][ff_type]]
-                            type_test_ff.append(get_np_mean_and_std_err(values_percentage_testset,
-                                                                        summary_sim=self.summary_sim))
+                            cognate_results['type_test_ff'].append(get_np_mean_and_std_err(values_percentage_testset,
+                                                                                           summary_sim=self.summary_sim))
                             inlcude_ff = True
                         else:
-                            type_test_ff.append((0, 0))
-                        # same for non cognates-false friends
+                            cognate_results['type_test_ff'].append((0, 0))
+                        # same for NON cognates-false friends
                         if cs_type in results['type_code_switches'][dataset_type]:
                             # take the percentage of sum in test set
                             values_percentage_testset = [percentage(x, num_test)
                                                          for x in results['type_code_switches'][dataset_type][cs_type]]
-                            type_test_enes.append(get_np_mean_and_std_err(values_percentage_testset,
-                                                                          summary_sim=self.summary_sim))
+                            cognate_results['type_test_enes'].append(get_np_mean_and_std_err(
+                                values_percentage_testset, summary_sim=self.summary_sim))
+
+                            values_percentage_testset = [percentage(x, correct_test[i]) for i, x in
+                                                         enumerate(results['type_code_switches'][dataset_type][cs_type])]
+                            cognate_results['type_correct_test_enes'].append(get_np_mean_and_std_err(
+                                values_percentage_testset, summary_sim=self.summary_sim))
+
+                            last_epoch = percentage(results['type_code_switches'][dataset_type][cs_type][-1],
+                                                    correct_test[-1])
+                            if self.summary_sim and '%s-std_err' % cs_type \
+                                    in results['type_code_switches'][dataset_type]:
+                                std_err = percentage(results['type_code_switches'][dataset_type]['%s-std_err' % cs_type]
+                                                     , correct_test[-1])
+                            else:
+                                std_err = 0
+                            cognate_results['type_correct_enes_last_epoch'].append((last_epoch, std_err))
                         else:
-                            type_test_enes.append((0, 0))
+                            cognate_results['type_test_enes'].append((0, 0))
+                            cognate_results['type_correct_test_enes'].append((0, 0))
+                            cognate_results['type_correct_enes_last_epoch'].append((0, 0))
 
                 # make sure there is still something to be plotted after the manipulations
-                if type_test_enes or type_test_ff or type_test_cog:
+                if cognate_results['type_test_enes'] or cognate_results['type_test_ff'] \
+                        or cognate_results['type_test_cog']:
                     fig, ax = plt.subplots()
-                    err_non_cog = [x[1] for x in type_test_enes] if self.summary_sim else len(type_test_enes)
-                    err_cog = [x[1] for x in type_test_cog] if self.summary_sim else len(type_test_cog)
-                    rects = ax.bar(cs_indeces, [x[0] for x in type_test_enes], bar_width, color='yellowgreen',
+                    err_non_cog = [x[1] for x in cognate_results['type_test_enes']] if self.summary_sim else len(
+                        cognate_results['type_test_enes'])
+                    err_cog = [x[1] for x in cognate_results['type_test_cog']] if self.summary_sim else len(
+                        cognate_results['type_test_cog'])
+                    rects = ax.bar(cs_indeces, [x[0] for x in cognate_results['type_test_enes']], bar_width,
+                                   color='yellowgreen',
                                    yerr=err_non_cog)
-                    rects_cog = ax.bar(cs_indeces + bar_width, [x[0] for x in type_test_cog], bar_width, color='g',
+                    rects_cog = ax.bar(cs_indeces + bar_width, [x[0] for x in cognate_results['type_test_cog']],
+                                       bar_width, color='g',
                                        yerr=err_cog)
                     if inlcude_ff:
-                        err_ff = [x[1] for x in type_test_ff] if self.summary_sim else len(type_test_ff)
-                        rects_ff = ax.bar(cs_indeces + bar_width * 2, [x[0] for x in type_test_ff], bar_width,
+                        err_ff = [x[1] for x in cognate_results['type_test_ff']] if self.summary_sim else len(
+                            cognate_results['type_test_ff'])
+                        rects_ff = ax.bar(cs_indeces + bar_width * 2, [x[0] for x in cognate_results['type_test_ff']],
+                                          bar_width,
                                           color='greenyellow', yerr=err_ff)
 
                     # add some text for labels, title and axes ticks
@@ -306,12 +347,45 @@ class Plotter:
                     plt.tight_layout()  # make room for labels
                     if self.summary_sim:
                         simulation_logger.info("type_test_enes: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
-                                               (type_test_enes, type_test_ff, type_test_cog))
+                                               (cognate_results['type_test_enes'], cognate_results['type_test_ff'],
+                                                cognate_results['type_test_cog']))
                     fname = '%s/%s%s_%s.pdf' % (self.results_dir, "summary_%s_" % (self.summary_sim
                                                                                    if self.summary_sim else ""),
                                                 file_name, dataset_type)
                     plt.savefig(fname)
                     plt.close()
+
+                # Same for LAST EPOCH
+                fig, ax = plt.subplots()
+                rects = ax.bar(cs_indeces, [x[0] for x in cognate_results['type_correct_enes_last_epoch']], bar_width,
+                               color='yellowgreen',
+                               yerr=[x[1] for x in cognate_results['type_correct_enes_last_epoch']])
+                rects_cog = ax.bar(cs_indeces + bar_width, [x[0] for x in cognate_results['type_correct_cog_last_epoch']],
+                                   bar_width, color='g',
+                                   yerr=[x[1] for x in cognate_results['type_correct_cog_last_epoch']])
+                label = 'CS types (%% of correctly produced %s set - last epoch)' % dataset_type
+                ax.set_ylabel(label)
+                # ax.set_title('Early bilingual group')
+                if False: #inlcude_ff:
+                    ax.set_xticks(cs_indeces + (bar_width * 2) / 2)
+                    ax.legend((rects[0], rects_cog[0], rects_ff[0]), ('NON-COG', 'COG', 'FF'))
+                    file_name = "type_code_switches_cog_ff"
+                else:
+                    ax.set_xticks(cs_indeces + bar_width / 2)
+                    ax.legend((rects[0], rects_cog[0]), ('NON-COG', 'COG'))
+                    file_name = "type_code_switches_cog_last_epoch"
+                ax.set_ylim(bottom=0)
+                ax.set_xticklabels(results['all_cs_types'], rotation=55)  # rotate labels to fit better
+                plt.tight_layout()  # make room for labels
+                """if self.summary_sim:
+                    simulation_logger.info("type_test_enes: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
+                                           (cognate_results['type_test_enes'], cognate_results['type_test_ff'],
+                                            cognate_results['type_test_cog']))"""
+                fname = '%s/%s%s_%s.pdf' % (self.results_dir, "summary_%s_" % (self.summary_sim
+                                                                               if self.summary_sim else ""),
+                                            file_name, dataset_type)
+                plt.savefig(fname)
+                plt.close()
 
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
         if ((isinstance(results['pronoun_errors']['test'], list) or is_nd_array(results['pronoun_errors']['test'])) and

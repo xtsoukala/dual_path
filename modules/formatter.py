@@ -615,5 +615,5 @@ def compute_mean_and_std(valid_results, epochs):
                     np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
                     results_sum[key]["%s-std_error" % t] = np_std_err
                     results_sum[key][t] = np_mean
-    results_sum['all_cs_types'] = set([re.sub("es-|en-|-COG|-FF", "", x) for x in cs_keywords])
+    results_sum['all_cs_types'] = set([re.sub("es-|en-|-cog|-ff", "", x) for x in cs_keywords])
     return results_sum

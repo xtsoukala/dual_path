@@ -243,7 +243,7 @@ class DualPath:
                 cs_keys = self.results['type_code_switches']['test'].keys()
             if self.results['type_code_switches']['training']:
                 cs_keys += self.results['type_code_switches']['training'].keys()
-            self.results['all_cs_types'] = set([re.sub("es-|en-|-COG|-FF", "", k) for k in cs_keys])
+            self.results['all_cs_types'] = set([re.sub("es-|en-|-cog|-ff", "", k) for k in cs_keys])
 
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
@@ -304,9 +304,9 @@ class DualPath:
 
                         # check for cognates vs FFs vs regular (no lang)
                         if ',COG' in message:
-                            cs_type_with_cognate_status = "%s-COG" % cs_type
+                            cs_type_with_cognate_status = "%s-cog" % cs_type
                         elif ',FF' in message:
-                            cs_type_with_cognate_status = "%s-FF" % cs_type
+                            cs_type_with_cognate_status = "%s-ff" % cs_type
                         else:  # no cognates or false friends
                             cs_type_with_cognate_status = cs_type
                         counter['type_code_switches'][cs_type_with_cognate_status] += 1
