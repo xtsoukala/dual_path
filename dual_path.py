@@ -199,7 +199,7 @@ class DualPath:
                 self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
-                np.random.shuffle(self.inputs.trainlines)
+                np.random.shuffle(self.inputs.trainlines)  # minpy
 
             if evaluate_test_set and epoch % self.test_every == 0:
                 if not evaluate_training_set:  # no need to run multiprocessing if we only evaluate the test set
@@ -253,9 +253,8 @@ class DualPath:
                 self.results['mse'] = self.srn.mse
                 plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
-                                 title=self.inputs.plot_title, cognate_experiment=args.cognate_experiment,
-                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun,
-                                 simulation_logger=simulation_logger)
+                                 cognate_experiment=args.cognate_experiment, simulation_logger=simulation_logger,
+                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def update_results(self, temp_results, type_set='test'):
         for sim in range(self.epochs):
@@ -581,7 +580,7 @@ if __name__ == "__main__":
     inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
                             language=args.lang, semantic_gender=args.gender, overt_pronouns=args.overt_pronouns,
                             prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
-                            plot_title=args.title, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
+                            fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                             use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual)
     num_valid_simulations = None
     simulations_with_pron_err = 0
@@ -650,15 +649,14 @@ if __name__ == "__main__":
                                                  if sum(simulation['pronoun_errors']['test']) > 0 or
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
-                plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations)
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
                 with open("%s/summary_results.pickled" % results_dir, 'w') as pckl:
                     pickle.dump(results_mean_and_std, pckl)
-                plot.plot_results(results_mean_and_std, title=inputs.plot_title,
-                                  cognate_experiment=args.cognate_experiment,
-                                  num_train=inputs.num_train, num_test=inputs.num_test,
-                                  simulation_logger=simulation_logger,
-                                  test_sentences_with_pronoun=inputs.test_sentences_with_pronoun)
+                plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title)
+                plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
+                                  test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
+                                  num_test=inputs.num_test, num_train=inputs.num_train,
+                                  simulation_logger=simulation_logger)
                 if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                     simulation_logger.info("Code-switched percentage (test set): %s" %
                                            [percentage(x, inputs.num_test)

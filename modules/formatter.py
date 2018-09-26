@@ -10,8 +10,7 @@ from elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, lexicon_csv, fixed_weights, fixed_weights_identif, language,
-                 trainingset, testset, semantic_gender, overt_pronouns, prodrop, plot_title, use_word_embeddings,
-                 monolingual_only):
+                 trainingset, testset, semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.lang = language.lower()
         self.monolingual_only = monolingual_only
@@ -63,8 +62,6 @@ class InputFormatter:
         self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
         self.identif_size = len(self.identifiability)
         self.roles_size = len(self.roles)
-
-        self.plot_title = plot_title
 
         del self.lexicon_df  # remove it after the processing
 
@@ -223,7 +220,7 @@ class InputFormatter:
             if len(set(check_idx_pos)) == 1:
                 cs_type = "%s" % check_idx_pos[0].lower()
             else:
-                cs_type = "inter-word switch"
+                cs_type = "congruent lex."
         return cs_type
 
     def is_code_switched(self, sentence_indeces, target_lang):
@@ -235,7 +232,7 @@ class InputFormatter:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
         if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-                 all(x < self.code_switched_idx for x in min_and_max_idx)) and
+             all(x < self.code_switched_idx for x in min_and_max_idx)) and
                 self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
             return False
         return True
@@ -253,7 +250,7 @@ class InputFormatter:
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
-        concepts = []
+        idx_to_concept = []
         l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos',
                                      'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1])
         lex = list(l1_column['morpheme_%s' % self.L1])
@@ -261,9 +258,9 @@ class InputFormatter:
         l1_type = list(l1_column['type'])
         for i, concept in enumerate(list(l1_column['concept'])):
             if is_not_nan(concept):
-                concepts.append(concept)
+                idx_to_concept.append(concept)
             else:
-                concepts.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
+                idx_to_concept.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
         code_switched_idx = len(lex)
         if self.L2:
             l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
@@ -277,14 +274,13 @@ class InputFormatter:
                     pos.append(l2_pos_list[i])
                     # add concept info
                     if is_not_nan(l2_concept_list[i]):
-                        concepts.append(l2_concept_list[i])
+                        idx_to_concept.append(l2_concept_list[i])
                     else:
-                        concepts.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
+                        idx_to_concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
                                         else pos[-1])
         with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in lex)
-
-        return lex, pos, np.array(concepts), code_switched_idx
+        return lex, pos, np.array(idx_to_concept), code_switched_idx  # idx_to_concept: minpy
 
     def get_lexicon_index(self, word):
         """
@@ -479,7 +475,7 @@ class InputFormatter:
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indeces (cognates/period)
         if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
-                                                (lang == self.L2 and idx <= self.code_switched_idx))):
+                                            (lang == self.L2 and idx <= self.code_switched_idx))):
             return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
         return [idx]
 
@@ -492,7 +488,6 @@ def is_not_nan(x):
     if x == x:
         return True
     return False
-
 
 def take_average_of_valid_results(valid_results):
     """
@@ -547,6 +542,16 @@ def get_np_mean_and_std_err(x, summary_sim=None):
             return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)
         return x.mean(), x.std()  # we only want one number in this case (axis=1)
     return 0, 0
+
+
+def get_np_mean(x, summary_sim=None):
+    if isinstance(x, list):
+        x = np.array(x)
+    if x.sum() > 0:
+        if summary_sim:
+            return x.mean(axis=0)
+        return x.mean()  # we only want one number in this case (axis=1)
+    return 0
 
 
 def is_nd_array(x):

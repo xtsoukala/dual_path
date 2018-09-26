@@ -1,54 +1,22 @@
 from formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array
 import matplotlib
-import re
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
 
 
 class Plotter:
-    def __init__(self, results_dir, summary_sim):
+    def __init__(self, results_dir, summary_sim, title=None):
         self.results_dir = results_dir
         self.epochs = []
+        self.num_epochs = 0
+        self.bar_width = 0.35
+        self.cs_results = {}
         self.results = []
+        self.title = title
         self.summary_sim = summary_sim
         self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
-
-    def plot_individual_switch_types(self, switch_types, type_code_switches, test_percentage):
-        plot_individual = False
-        for switch_type, color in switch_types:
-            if switch_type in type_code_switches:
-                plt.plot(self.epochs, [percentage(value, test_percentage[i])
-                                       for i, value in enumerate(type_code_switches[switch_type])],
-                         color=color, label=switch_type)
-                plot_individual = True
-                if '%s-std_error' % switch_type in type_code_switches:
-                    test_std_error = type_code_switches['%s-std_error' % switch_type]
-                    lower_bound = type_code_switches[switch_type] - test_std_error
-                    upper_bound = type_code_switches[switch_type] + test_std_error
-                    if isinstance(test_percentage, int):
-                        lower_bound = [percentage(x, test_percentage)
-                                       for x in lower_bound]
-                        upper_bound = [percentage(x, test_percentage)
-                                       for x in upper_bound]
-                    elif is_nd_array(test_percentage):
-                        lower_bound = [percentage(x, test_percentage[i])
-                                       for i, x in enumerate(lower_bound)]
-                        upper_bound = [percentage(x, test_percentage[i])
-                                       for i, x in enumerate(upper_bound)]
-
-                    plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=color, alpha=0.1)
-        if plot_individual:
-            plt.xlabel('epochs')
-            plt.ylabel('% among correctly produced sentences')
-            plt.ylim([0, 30])
-            plt.xlim([1, max(self.epochs)])  # no correct sentences in epoch 0
-            plt.legend(loc='upper right', ncol=2, fancybox=True, shadow=True)
-            fname = '%s/%snoun_alternational_percentage.pdf' % (self.results_dir,
-                                                                "summary_%s_" % self.summary_sim if self.summary_sim
-                                                                else "")
-            plt.savefig(fname)
-            plt.close()
+        self.color_bars = ['yellowgreen', 'g', 'greenyellow']
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
                                legend_loc='upper right'):
@@ -56,7 +24,7 @@ class Plotter:
             if isinstance(test_percentage, int):
                 test_value = [percentage(val, test_percentage)
                               for val in self.results[item_to_plot]['test']]
-            elif is_nd_array(test_percentage):
+            elif is_nd_array(test_percentage) or isinstance(test_percentage, list):
                 test_value = [percentage(val, test_percentage[i])
                               for i, val in enumerate(self.results[item_to_plot]['test'])]
             else:
@@ -76,7 +44,6 @@ class Plotter:
                                    for i, x in enumerate(lower_bound)]
                     upper_bound = [percentage(x, test_percentage[i])
                                    for i, x in enumerate(upper_bound)]
-
                 plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.colors[item_idx][0], alpha=0.1)
 
             if is_not_empty(self.results[item_to_plot]['training']):
@@ -96,11 +63,55 @@ class Plotter:
                                      "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
         plt.close()
 
-    def plot_results(self, results, title, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
-                     cognate_experiment):
+    def plot_cs_type_over_time(self, label, results, legend, fname, legend_loc='upper right', ylim=10):
+        for i, result in enumerate(results):
+            if max(result[0]) > ylim:
+                ylim = max(result[0])
+            plt.plot(self.epochs, result[0], color=self.colors[i][0], label=legend[i])
+            lower_bound = [x - y for x, y in zip(result[0], result[1])]
+            upper_bound = [x + y for x, y in zip(result[0], result[1])]
+            plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.colors[i][0], alpha=0.1)
+        plt.xlabel('epochs')
+        plt.ylabel(label)
+        plt.ylim([0, ylim])
+        plt.xlim(1, max(self.epochs))  # only start from epoch 0 for performance.png
+        plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
+        plt.savefig("%s/%s%s.pdf" % (self.results_dir,
+                                     "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
+        plt.close()
+
+    def plot_bar_chart(self, label, items_to_plot, legend, fname):
+        cs_indeces = numpy_arange_len(self.results['all_cs_types'])
+        fig, ax = plt.subplots()
+        rects = []
+        for i, item in enumerate(items_to_plot):
+            rects.append(
+                ax.bar(cs_indeces + (self.bar_width * i), [x[0] for x in self.cs_results[item]], self.bar_width,
+                       color=self.color_bars[i], yerr=[x[1] for x in self.cs_results[item]]))
+        ax.set_ylabel(label)
+        if self.title:
+            ax.set_title(self.title)
+        ax.set_xticks(cs_indeces + self.bar_width / len(items_to_plot))
+        ax.set_ylim(bottom=0)
+        ax.legend(([x[0] for x in rects]), legend)
+        ax.set_xticklabels(self.results['all_cs_types'], rotation=55)  # rotate labels to fit better
+        plt.tight_layout()  # make room for labels
+        fname = '%s/%s%s_cs.pdf' % \
+                (self.results_dir, "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""),
+                 fname)
+        plt.savefig(fname)
+        plt.close()
+
+    def plot_results(self, results, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
+                     cognate_experiment, plot_mse=False):
+        correct_test = results['correct_meaning']['test']
+        type_code_switches_test = results['type_code_switches']['test']
+
         if not self.epochs:
-            self.epochs = range(len(results['correct_meaning']['test']))
+            self.epochs = range(len(correct_test))
+            self.num_epochs = len(self.epochs)
         self.results = results
+
         self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], label='Percentage correct (%)',
                                     test_percentage=num_test, training_percentage=num_train, ylim=100,
                                     fname="performance", legend_loc='lower right')
@@ -113,279 +124,108 @@ class Plotter:
                                         fname='code_switches_%s_set' % 'test')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
             self.plot_changes_over_time(ylim=80, items_to_plot=['correct_code_switches'],
-                                        test_percentage=results['correct_meaning']['test'],
+                                        test_percentage=correct_test,
                                         training_percentage=results['correct_meaning']['training'],
                                         fname="code_switches_correct_%s_set" % 'test',
                                         label='%% CS among correctly produced %s set' % 'test')
 
-            # !------------  PLOT ONLY NOUNS AND ALTERNATIONAL CS ------------!
-            self.plot_individual_switch_types(switch_types=[('en-noun', 'darkslateblue'), ('es-noun', 'deepskyblue'),
-                                                            ('es-alternational', 'olivedrab'),
-                                                            ('en-alternational', 'yellowgreen')],
-                                              type_code_switches=results['type_code_switches']['test'],
-                                              test_percentage=results['correct_meaning']['test'])
-
-            # !------------  plot each code-switch type individually ------------!
-            # first get all keywords (all CS types)
-            type_code_switches_test = results['type_code_switches']['test']
-            cs_results = {'type_test_en': [], 'type_test_es': [],
-                          'type_correct_test_en': [], 'type_correct_test_es': [],
-                          'type_test_last_epoch_en': [], 'type_test_last_epoch_es': [],
-                          'type_correct_test_last_epoch_en': [], 'type_correct_test_last_epoch_es': []}
-            correct_test = results['correct_meaning']['test']
+            # !------------  code-switching ------------!
+            self.cs_results = {'type_correct_test_en': [], 'type_correct_test_es': [],
+                               'type_correct_test_last_epoch_en': [], 'type_correct_test_last_epoch_es': []}
             for cs_type in results['all_cs_types']:
                 for lang in ['es', 'en']:
                     cs_type_per_lang = "%s-%s" % (lang, cs_type)
                     if cs_type_per_lang in type_code_switches_test:  # if we include training set we need to edit this
-                        cs_type_per_lang_percentage = [percentage(x, num_test)
-                                                       for x in type_code_switches_test[cs_type_per_lang]]
-                        cs_results['type_test_%s' % lang].append(get_np_mean_and_std_err(cs_type_per_lang_percentage,
-                                                                                         summary_sim=self.summary_sim))
-
+                        # all epochs
                         cs_percentage_correct = [percentage(x, correct_test[i])
                                                  for i, x in enumerate(type_code_switches_test[cs_type_per_lang])]
-                        mean, std_err = get_np_mean_and_std_err(cs_percentage_correct, summary_sim=self.summary_sim)
-                        cs_results['type_correct_test_%s' % lang].append((mean, std_err))
-                        # LAST epoch only
-                        cs_result_last_epoch = type_code_switches_test[cs_type_per_lang][-1]
-                        if "%s-std_error" % cs_type_per_lang in type_code_switches_test:
-                            cs_std_error = type_code_switches_test["%s-std_error" % cs_type_per_lang][-1]
+                        if self.summary_sim and "%s-std_error" % cs_type_per_lang in type_code_switches_test:
+                            std_err = [percentage(x, correct_test[i]) for i, x in
+                                       enumerate(type_code_switches_test["%s-std_error" % cs_type_per_lang])]
                         else:
-                            cs_std_error = 0
-                        cs_results['type_test_last_epoch_%s' % lang].append((percentage(cs_result_last_epoch, num_test),
-                                                                             percentage(cs_std_error, num_test)))
-                        cs_results['type_correct_test_last_epoch_%s' % lang].append((percentage(cs_result_last_epoch,
-                                                                                                correct_test[-1]),
-                                                                                     percentage(cs_std_error,
-                                                                                                correct_test[-1])))
+                            std_err = [0] * len(correct_test)
+                        self.cs_results['type_correct_test_%s' % lang].append((cs_percentage_correct, std_err))
+                        # LAST epoch only
+                        self.cs_results['type_correct_test_last_epoch_%s' % lang].append((cs_percentage_correct[-1],
+                                                                                          std_err[-1]))
                     else:
-                        cs_results['type_test_%s' % lang].append((0, 0))
-                        cs_results['type_correct_test_%s' % lang].append((0, 0))
-
-                        cs_results['type_test_last_epoch_%s' % lang].append((0, 0))
-                        cs_results['type_correct_test_last_epoch_%s' % lang].append((0, 0))
+                        self.cs_results['type_correct_test_%s' % lang].append(([0] * self.num_epochs,
+                                                                               [0] * self.num_epochs))
+                        self.cs_results['type_correct_test_last_epoch_%s' % lang].append((0, 0))
 
             # make sure there is still something to be plotted after the manipulations
-            if cs_results['type_test_es'] or cs_results['type_test_en']:
-                cs_indeces = numpy_arange_len(results['all_cs_types'])
-                bar_width = 0.35
-
-                for c in ["", "_correct"]:
-                    fig, ax = plt.subplots()
-                    if self.summary_sim:
-                        yerr_en = [x[1] for x in cs_results['type%s_test_en' % c]]
-                        yerr_es = [x[1] for x in cs_results['type%s_test_es' % c]]
-                    else:
-                        yerr_en = [0] * len(cs_results['type%s_test_en' % c])
-                        yerr_es = yerr_en
-                    rects_en = ax.bar(cs_indeces, [x[0] for x in cs_results['type%s_test_en' % c]], bar_width,
-                                      color='r', yerr=yerr_en)
-                    rects_es = ax.bar(cs_indeces + bar_width, [x[0] for x in cs_results['type%s_test_es' % c]],
-                                      bar_width, color='y', yerr=yerr_es)
-
-                    label = 'CS types (%% of %s%s set)' % ('correctly produced ' if c else c, 'test')
-                    ax.set_ylabel(label)
-                    if title:
-                        ax.set_title(title)
-                    ax.set_xticks(cs_indeces + bar_width / 2)
-                    ax.set_ylim(bottom=0)
-                    ax.legend((rects_en[0], rects_es[0]), ('EN', 'ES'))
-                    ax.set_xticklabels(results['all_cs_types'], rotation=55)  # rotate labels to fit better
-                    plt.tight_layout()  # make room for labels
-                    if self.summary_sim:
-                        simulation_logger.info("type%s_test_es: %s\ntype%s_test_en: %s" %
-                                               (c, c, cs_results['type%s_test_es' % c],
-                                                cs_results['type%s_test_en' % c]))
-                    fname = '%s/%stype%s_test_cs.pdf' % (self.results_dir,
-                                                         "%s" % (("summary_%s_" % self.summary_sim)
-                                                                 if self.summary_sim else ""), c)
-                    plt.savefig(fname)
-                    plt.close()
-
-                    # also plot LAST EPOCH only
-                    fig, ax = plt.subplots()
-                    if self.summary_sim:
-                        yerr_en = [x[1] for x in cs_results['type%s_test_last_epoch_en' % c]]
-                        yerr_es = [x[1] for x in cs_results['type%s_test_last_epoch_es' % c]]
-                    else:
-                        yerr_en = [0] * len(cs_results['type%s_test_last_epoch_en' % c])
-                        yerr_es = yerr_en
-                    rects_en = ax.bar(cs_indeces, [x[0] for x in cs_results['type%s_test_last_epoch_en' % c]],
-                                      bar_width, color='r', yerr=yerr_en)
-                    rects_es = ax.bar(cs_indeces + bar_width,
-                                      [x[0] for x in cs_results['type%s_test_last_epoch_es' % c]], bar_width,
-                                      color='y', yerr=yerr_es)
-                    # add some text for labels, title and axes ticks
-                    label = 'CS types (%% of %s %s set - last epoch)' % ("correct" if c else "", 'test')
-                    ax.set_ylabel(label)
-                    if title:
-                        ax.set_title(title)
-                    ax.set_xticks(cs_indeces + bar_width / 2)
-                    ax.set_ylim(bottom=0)
-                    ax.legend((rects_en[0], rects_es[0]), ('EN', 'ES'))
-                    ax.set_xticklabels(results['all_cs_types'], rotation=55)  # rotate labels to fit better
-                    plt.tight_layout()  # make room for labels
-                    if self.summary_sim:
-                        simulation_logger.info("type%s_test_last_epoch_es: %s\ntype%s_test_last_epoch_en: %s" %
-                                               (c, c, cs_results['type%s_test_last_epoch_es' % c],
-                                                cs_results['type%s_test_last_epoch_en' % c]))
-                    fname = '%s/%stype%s_test_cs_last_epoch.pdf' % (self.results_dir,
-                                                                    ("summary_%s_" % self.summary_sim
-                                                                     if self.summary_sim else ""), c)
-                    plt.savefig(fname)
-                    plt.close()
+            if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
+                self.plot_bar_chart(label='CS types (%% of correctly produced %s set - last epoch)' % 'test',
+                                    items_to_plot=['type_correct_test_last_epoch_es', 'type_correct_test_last_epoch_es']
+                                    , legend=('ES', 'EN'), fname='type_correct_test_last_epoch')
+                if self.summary_sim:
+                    simulation_logger.info("type_correct_last_epoch_test_es: %s\ntype_correct_test_last_epoch_en: %s" %
+                                           (self.cs_results['type_correct_test_last_epoch_es'],
+                                            self.cs_results['type_correct_test_last_epoch_en']))
+                # !------------ Now plot all CS types per epoch  ------------#
+                for i, cs_type in enumerate(results['all_cs_types']):
+                    self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
+                                                legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
+                                                results=[self.cs_results['type_correct_test_en'][i],
+                                                         self.cs_results['type_correct_test_es'][i]])
 
             ############################################################################################################
-            if cognate_experiment:
-                for dataset_type in ['test']:  # ['training', 'test']:
-                    cognate_results = {'type_test_enes': [], 'type_test_cog': [], 'type_test_ff': [],
-                                       'type_correct_test_enes': [], 'type_correct_test_cog': [],
-                                       'type_correct_test_ff': [],
-                                       'type_correct_enes_last_epoch': [], 'type_correct_cog_last_epoch': [],
-                                       'type_correct_ff_last_epoch': []}
-                    inlcude_ff = False
-                    for cs_type in results['all_cs_types']:  # cs types calculated above
-                        cog_type = "%s-cog" % cs_type
-                        if cog_type in results['type_code_switches'][dataset_type]:
-                            # take the percentage of sum in test set
-                            values_percentage_testset = [percentage(x, num_test)
-                                                         for x in results['type_code_switches'][dataset_type][cog_type]]
-                            cognate_results['type_test_cog'].append(get_np_mean_and_std_err(
-                                values_percentage_testset, summary_sim=self.summary_sim))
-
-                            values_correct_testset = [percentage(x, correct_test[i]) for i, x in
-                                                      enumerate(results['type_code_switches'][dataset_type][cog_type])]
-                            cognate_results['type_correct_test_cog'].append(get_np_mean_and_std_err(
-                                values_correct_testset, summary_sim=self.summary_sim))
-
-                            value_last_epoch = percentage(results['type_code_switches'][dataset_type][cog_type][-1],
-                                                          correct_test[-1])
-                            if self.summary_sim and '%s-std_err' % cog_type \
-                                    in results['type_code_switches'][dataset_type]:
-                                std_err = percentage(results['type_code_switches'][dataset_type]['%s-std_err' % cog_type],
-                                                     correct_test[-1])
+            if True:  # cognate_experiment:
+                # for dataset_type in ['test']:  # ['training', 'test']:
+                include_ff = False
+                self.cs_results.update({'type_correct_test': [], 'type_correct_test-cog': [],
+                                        'type_correct_test-ff': [],
+                                        'type_correct_test_last_epoch': [],
+                                        'type_correct_test_last_epoch-cog': [], 'type_correct_test_last_epoch-ff': []})
+                for cs_type in results['all_cs_types']:
+                    for key in ['', '-cog', '-ff']:
+                        cs_type_per_key = "%s%s" % (cs_type, key)
+                        if cs_type_per_key in type_code_switches_test:
+                            # all epochs
+                            cs_percentage_correct = [percentage(x, correct_test[i])
+                                                     for i, x in
+                                                     enumerate(type_code_switches_test[cs_type_per_key])]
+                            if self.summary_sim and "%s-std_error" % cs_type_per_key in type_code_switches_test:
+                                std_err = [percentage(x, correct_test[i]) for i, x in
+                                           enumerate(type_code_switches_test["%s-std_error" % cs_type_per_key])]
                             else:
-                                std_err = 0
-                            cognate_results['type_correct_cog_last_epoch'].append((value_last_epoch, std_err))
+                                std_err = [0] * len(correct_test)
+                            self.cs_results['type_correct_test%s' % key].append((cs_percentage_correct, std_err))
+                            # LAST epoch only
+                            self.cs_results['type_correct_test_last_epoch%s' % key].append((cs_percentage_correct[-1],
+                                                                                            std_err[-1]))
+                            if key == '-ff':
+                                include_ff = True
                         else:
-                            cognate_results['type_test_cog'].append((0, 0))
-                            cognate_results['type_correct_test_cog'].append((0, 0))
-                            cognate_results['type_correct_cog_last_epoch'].append((0, 0))
-                        # FIXME: same for FF
-                        ff_type = "%s-ff" % cs_type
-                        if ff_type in results['type_code_switches'][dataset_type]:
-                            # take the percentage of sum in test set
-                            values_percentage_testset = [percentage(x, num_test)
-                                                         for x in results['type_code_switches'][dataset_type][ff_type]]
-                            cognate_results['type_test_ff'].append(get_np_mean_and_std_err(values_percentage_testset,
-                                                                                           summary_sim=self.summary_sim))
-                            inlcude_ff = True
-                        else:
-                            cognate_results['type_test_ff'].append((0, 0))
-                        # same for NON cognates-false friends
-                        if cs_type in results['type_code_switches'][dataset_type]:
-                            # take the percentage of sum in test set
-                            values_percentage_testset = [percentage(x, num_test)
-                                                         for x in results['type_code_switches'][dataset_type][cs_type]]
-                            cognate_results['type_test_enes'].append(get_np_mean_and_std_err(
-                                values_percentage_testset, summary_sim=self.summary_sim))
-
-                            values_percentage_testset = [percentage(x, correct_test[i]) for i, x in
-                                                         enumerate(results['type_code_switches'][dataset_type][cs_type])]
-                            cognate_results['type_correct_test_enes'].append(get_np_mean_and_std_err(
-                                values_percentage_testset, summary_sim=self.summary_sim))
-
-                            last_epoch = percentage(results['type_code_switches'][dataset_type][cs_type][-1],
-                                                    correct_test[-1])
-                            if self.summary_sim and '%s-std_err' % cs_type \
-                                    in results['type_code_switches'][dataset_type]:
-                                std_err = percentage(results['type_code_switches'][dataset_type]['%s-std_err' % cs_type]
-                                                     , correct_test[-1])
-                            else:
-                                std_err = 0
-                            cognate_results['type_correct_enes_last_epoch'].append((last_epoch, std_err))
-                        else:
-                            cognate_results['type_test_enes'].append((0, 0))
-                            cognate_results['type_correct_test_enes'].append((0, 0))
-                            cognate_results['type_correct_enes_last_epoch'].append((0, 0))
+                            self.cs_results['type_correct_test%s' % key].append(
+                                ([0] * self.num_epochs, [0] * self.num_epochs))
+                            self.cs_results['type_correct_test_last_epoch%s' % key].append((0, 0))
 
                 # make sure there is still something to be plotted after the manipulations
-                if cognate_results['type_test_enes'] or cognate_results['type_test_ff'] \
-                        or cognate_results['type_test_cog']:
-                    fig, ax = plt.subplots()
-                    err_non_cog = [x[1] for x in cognate_results['type_test_enes']] if self.summary_sim else len(
-                        cognate_results['type_test_enes'])
-                    err_cog = [x[1] for x in cognate_results['type_test_cog']] if self.summary_sim else len(
-                        cognate_results['type_test_cog'])
-                    rects = ax.bar(cs_indeces, [x[0] for x in cognate_results['type_test_enes']], bar_width,
-                                   color='yellowgreen',
-                                   yerr=err_non_cog)
-                    rects_cog = ax.bar(cs_indeces + bar_width, [x[0] for x in cognate_results['type_test_cog']],
-                                       bar_width, color='g',
-                                       yerr=err_cog)
-                    if inlcude_ff:
-                        err_ff = [x[1] for x in cognate_results['type_test_ff']] if self.summary_sim else len(
-                            cognate_results['type_test_ff'])
-                        rects_ff = ax.bar(cs_indeces + bar_width * 2, [x[0] for x in cognate_results['type_test_ff']],
-                                          bar_width,
-                                          color='greenyellow', yerr=err_ff)
-
-                    # add some text for labels, title and axes ticks
-                    label = 'CS types (%% of %s set)' % dataset_type
-                    ax.set_ylabel(label)
-                    # ax.set_title('Early bilingual group')
-                    if inlcude_ff:
-                        ax.set_xticks(cs_indeces + (bar_width * 2) / 2)
-                        ax.legend((rects[0], rects_cog[0], rects_ff[0]), ('NON-COG', 'COG', 'FF'))
-                        file_name = "type_code_switches_cog_ff"
-                    else:
-                        ax.set_xticks(cs_indeces + bar_width / 2)
-                        ax.legend((rects[0], rects_cog[0]), ('NON-COG', 'COG'))
-                        file_name = "type_code_switches_cog"
-                    ax.set_ylim(bottom=0)
-                    ax.set_xticklabels(results['all_cs_types'], rotation=55)  # rotate labels to fit better
-                    plt.tight_layout()  # make room for labels
+                if self.cs_results['type_correct_test'] or self.cs_results['type_correct_test-cog']:
+                    # LAST EPOCH only
+                    items_to_plot = ['type_correct_test_last_epoch', 'type_correct_test_last_epoch-cog']
+                    legend = ['NON-COG', 'COG']
+                    if include_ff:
+                        items_to_plot.append('type_correct_test_last_epoch-ff')
+                        legend.append('FF')
+                    self.plot_bar_chart(label='CS types (%% of %s set - last epoch)' % 'test', legend=legend,
+                                        items_to_plot=items_to_plot, fname='type_cs_cognate_experiment_last_epoch')
                     if self.summary_sim:
                         simulation_logger.info("type_test_enes: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
-                                               (cognate_results['type_test_enes'], cognate_results['type_test_ff'],
-                                                cognate_results['type_test_cog']))
-                    fname = '%s/%s%s_%s.pdf' % (self.results_dir, "summary_%s_" % (self.summary_sim
-                                                                                   if self.summary_sim else ""),
-                                                file_name, dataset_type)
-                    plt.savefig(fname)
-                    plt.close()
+                                               (self.cs_results['type_correct_test_last_epoch'],
+                                                self.cs_results['type_correct_test_last_epoch-ff'],
+                                                self.cs_results['type_correct_test_last_epoch-cog']))
 
-                # Same for LAST EPOCH
-                fig, ax = plt.subplots()
-                rects = ax.bar(cs_indeces, [x[0] for x in cognate_results['type_correct_enes_last_epoch']], bar_width,
-                               color='yellowgreen',
-                               yerr=[x[1] for x in cognate_results['type_correct_enes_last_epoch']])
-                rects_cog = ax.bar(cs_indeces + bar_width, [x[0] for x in cognate_results['type_correct_cog_last_epoch']],
-                                   bar_width, color='g',
-                                   yerr=[x[1] for x in cognate_results['type_correct_cog_last_epoch']])
-                label = 'CS types (%% of correctly produced %s set - last epoch)' % dataset_type
-                ax.set_ylabel(label)
-                # ax.set_title('Early bilingual group')
-                if False: #inlcude_ff:
-                    ax.set_xticks(cs_indeces + (bar_width * 2) / 2)
-                    ax.legend((rects[0], rects_cog[0], rects_ff[0]), ('NON-COG', 'COG', 'FF'))
-                    file_name = "type_code_switches_cog_ff"
-                else:
-                    ax.set_xticks(cs_indeces + bar_width / 2)
-                    ax.legend((rects[0], rects_cog[0]), ('NON-COG', 'COG'))
-                    file_name = "type_code_switches_cog_last_epoch"
-                ax.set_ylim(bottom=0)
-                ax.set_xticklabels(results['all_cs_types'], rotation=55)  # rotate labels to fit better
-                plt.tight_layout()  # make room for labels
-                """if self.summary_sim:
-                    simulation_logger.info("type_test_enes: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
-                                           (cognate_results['type_test_enes'], cognate_results['type_test_ff'],
-                                            cognate_results['type_test_cog']))"""
-                fname = '%s/%s%s_%s.pdf' % (self.results_dir, "summary_%s_" % (self.summary_sim
-                                                                               if self.summary_sim else ""),
-                                            file_name, dataset_type)
-                plt.savefig(fname)
-                plt.close()
+                    # !------------ Now plot all CS types per epoch for COGNATE EXPERIMENT  ------------#
+                    for i, cs_type in enumerate(results['all_cs_types']):
+                        results_lst = [self.cs_results['type_correct_test'][i],
+                                       self.cs_results['type_correct_test-cog'][i]]
+                        if include_ff:
+                            results_lst.append(self.cs_results['type_correct_test-ff'][i])
+                        self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
+                                                    fname='cognate_experiment_%s' % cs_type,
+                                                    results=results_lst, legend=legend)
 
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
         if ((isinstance(results['pronoun_errors']['test'], list) or is_nd_array(results['pronoun_errors']['test'])) and
@@ -400,7 +240,7 @@ class Plotter:
                                             fname='pronoun_errors_percentage',
                                             test_percentage=test_sentences_with_pronoun, ylim=15)
 
-        if not self.summary_sim and results['mse']:  # no need to plot an average of all the simulations
+        if plot_mse and not self.summary_sim and results['mse']:  # no need to plot an average of all the simulations
             mse_list = [get_np_mean_and_std_err(results['mse'][epoch])[0] for epoch in self.epochs]
             plt.plot(self.epochs, mse_list, color='darkslateblue', label='MSE')
             plt.xlabel('epochs')
@@ -436,14 +276,6 @@ class Plotter:
         ax1.grid(True)
         plt.savefig('%s/%s_connection_weights.pdf' % (self.results_dir, layer_name))
         plt.close()
-
-    @staticmethod
-    def is_not_empty(x):
-        if not x:
-            return False
-        if sum(s[0] for s in x):
-            return True
-        return False
 
 
 def plot_layers(srn, fig, plot_weights=False):

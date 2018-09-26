@@ -2,6 +2,7 @@
 import sys
 import os
 import numpy as np
+#import minpy.numpy as np
 from copy import deepcopy
 from plotter import Plotter
 from collections import defaultdict
@@ -74,7 +75,7 @@ class SimpleRecurrentNetwork:
                 # and np.random.uniform doesn't always have mean = 0.
                 mean = 0
                 layer.in_weights = np.random.normal(mean, layer.sd,
-                                                    size=[layer.in_size + int(layer.has_bias), layer.size])
+                                                    size=[layer.in_size + int(layer.has_bias), layer.size])  # minpy
                 stats['means'].append(layer.in_weights.mean())
                 stats['std'].append(layer.in_weights.std())
                 stats['labels'].append(layer.name)
@@ -330,7 +331,7 @@ class NeuronLayer:
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
-        self.in_weights = []  # weights from incoming layers
+        self.in_weights = np.array([])  # weights from incoming layers
         self.in_size = 0
         self.in_layers = []
         self.in_activation = []

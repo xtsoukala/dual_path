@@ -7,6 +7,7 @@ import pandas as pd
 from copy import deepcopy
 import sys
 import numpy as np
+from formatter import is_not_nan
 reload(sys)
 sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
 print_on_screen = False  # used only to debug, no need to add it as a called parameter
@@ -130,7 +131,7 @@ class SetsGenerator:
             if pos_w == 'verb':
                 pos_to_replace = "%s:%s" % (pos_w, verb_type)
             else:
-                pos_to_replace = "%s:%sanimate" % (pos_w, "" if self.is_not_nan(semantic_gender_w) else "in")
+                pos_to_replace = "%s:%sanimate" % (pos_w, "" if is_not_nan(semantic_gender_w) else "in")
             replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                      gender=syntactic_gender_w,
                                                                      only_select_false_friend=not replace_with_cognates,
@@ -458,11 +459,6 @@ class SetsGenerator:
             return morpheme_df['semantic_gender']
         return None
 
-    @staticmethod
-    def is_not_nan(x):
-        if x == x:
-            return True
-        return False
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
