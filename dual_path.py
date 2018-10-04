@@ -7,7 +7,7 @@ import sys
 import platform
 from datetime import datetime
 from collections import defaultdict
-from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
+from modules.elman_network import SimpleRecurrentNetwork, deepcopy, np
 from modules.plotter import Plotter
 from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, percentage
 
@@ -397,25 +397,24 @@ def copy_test_training_sets(src, dest, valid_filename_list=('test.in', 'training
 
 def create_all_input_files(num_simulations, results_dir, sets, original_input_path, cognate_experiment,
                            generate_num, l2_percentage):
-    for sim in range(num_simulations):  # first create all input files
-        rdir = "%s/%s" % (results_dir, sim)
+    for sim_num in range(num_simulations):  # first create all input files
+        rdir = "%s/%s" % (results_dir, sim_num)
         os.makedirs(rdir)
         if sets:  # generate new test/training sets
-            if sim == 0:  # copy the .in files under the /input folder
+            if sim_num == 0:  # copy the .in files under the /input folder
                 copy_test_training_sets(os.path.join("%s/input" % results_dir), rdir)
             else:
-                sets.results_dir = rdir
-                sets.seed = sim  # set new seed for language generator
+                sets.sets.results_dir = rdir
+                sets.sets.seed = sim_num  # set new seed for language generator
                 if cognate_experiment:
-                    sets.generate_sets_for_cognate_experiment(num_sentences=generate_num,
-                                                              percentage_L2=l2_percentage,
-                                                              save_files=False)
+                    sets.generate_for_cognate_experiment(num_sentences=generate_num,
+                                                         percentage_l2=l2_percentage,
+                                                         save_files=False)
                 else:
-                    sets.generate_sets(num_sentences=generate_num, percentage_L2=l2_percentage,
-                                       save_files=False)
-        elif original_input_path:
-            # use existing test/training set (copy them first)
-            copy_files_endwith(os.path.join(original_input_path, str(sim)), rdir)
+                    sets.sets.generate_general(num_sentences=generate_num, percentage_l2=l2_percentage,
+                                               save_files=False)
+        elif original_input_path:  # use existing test/training set (copy them first)
+            copy_files_endwith(os.path.join(original_input_path, str(sim_num)), rdir)
 
 
 if __name__ == "__main__":
@@ -542,16 +541,19 @@ if __name__ == "__main__":
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir
     else:
-        from modules.corpus_generator import SetsGenerator
+        from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
 
         args.input = "%s/input/" % results_dir
-        sets = SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
-                             monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
-                             cognate_percentage=args.cognate_percentage, allow_free_structure_production=args.free_pos)
+        input_sets = ExperimentSets(
+            sets_gen=SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
+                                   monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
+                                   cognate_percentage=args.cognate_percentage,
+                                   allow_free_structure_production=args.free_pos))
         if args.cognate_experiment:
-            sets.generate_sets_for_cognate_experiment(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
+            input_sets.generate_for_cognate_experiment(num_sentences=args.generate_num,
+                                                       percentage_l2=args.l2_percentage)
         else:
-            sets.generate_sets(num_sentences=args.generate_num, percentage_L2=args.l2_percentage)
+            input_sets.sets.generate_general(num_sentences=args.generate_num, percentage_l2=args.l2_percentage)
 
     if args.cognate_experiment and not args.exclude_lang:
         args.exclude_lang = True
@@ -598,9 +600,10 @@ if __name__ == "__main__":
                          check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
-        create_all_input_files(args.sim, results_dir, sets, original_input_path, args.cognate_experiment,
-                               args.generate_num, args.l2_percentage)
-        del sets  # we no longer need it
+        create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
+                               original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
+                               sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
+        del input_sets  # we no longer need it
         # now run the simulations
         if sys.version.startswith('3') and platform.system() != 'Linux':
             os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
