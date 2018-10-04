@@ -1,4 +1,4 @@
-from formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array
+from modules.formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array
 import matplotlib
 
 matplotlib.use('Agg')  # needed for the server only
@@ -15,8 +15,11 @@ class Plotter:
         self.results = []
         self.title = title
         self.summary_sim = summary_sim
+        # blue, orange, green, brown, purple, grey, red, yellowgreen
+        self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
         self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
-        self.color_bars = ['yellowgreen', 'g', 'greenyellow']
+        self.color_bars = ['#4daf4a', '#a65628', '#984ea3']
+        # self.color_bars = ['yellowgreen', 'g', 'greenyellow']
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
                                legend_loc='upper right'):
@@ -230,7 +233,7 @@ class Plotter:
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
         if ((isinstance(results['pronoun_errors']['test'], list) or is_nd_array(results['pronoun_errors']['test'])) and
                 (sum(results['pronoun_errors_flex']['test']) or sum(results['pronoun_errors']['test']))):
-            print "pronoun", type(results['pronoun_errors']['test'])
+            print("pronoun", type(results['pronoun_errors']['test']))
             self.plot_changes_over_time(items_to_plot=['pronoun_errors', 'pronoun_errors_flex'],
                                         label='Sum of subject pronoun errors', fname='pronoun_errors')
             # same using percentages

@@ -2,14 +2,13 @@
 import sys
 import os
 import numpy as np
-#import minpy.numpy as np
 from copy import deepcopy
-from plotter import Plotter
+from modules.plotter import Plotter
 from collections import defaultdict
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, dir, context_init_value=0.5, debug_messages=True, include_role_copy=False,
+    def __init__(self, learn_rate, momentum, rdir, context_init_value=0.5, debug_messages=True, include_role_copy=False,
                  include_input_copy=False):
         self.layers = []
         self.context_init_value = context_init_value  # Initial activations of context layer
@@ -22,9 +21,10 @@ class SimpleRecurrentNetwork:
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
         self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
-        self.dir = dir
+        self.dir = rdir
         self.mse = defaultdict(list)
         self.divergence_error = defaultdict(list)
+        self.python_version = sys.version
 
     def _complete_initialization(self):
         for layer in self.layers:  # if there are > 1 layers and if at least one has input weights
@@ -48,13 +48,14 @@ class SimpleRecurrentNetwork:
                       simulation_num=None):
         if not os.path.isdir('%s/weights' % results_dir):
             # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
-            # exception even though we have checked. Ss of Python >= 3.2 os.makedirs() takes optional argument
-            # "exist_ok", but for now include a try/except.
-            try:
-                os.mkdir('%s/weights' % results_dir)
-            except OSError, e:
-                if e.errno != os.errno.EEXIST:
-                    raise
+            # exception even though we have checked.
+            if self.python_version.startswith('3'):
+                os.makedirs('%s/weights' % results_dir, exist_ok=True)
+            else:
+                try:
+                    os.mkdir('%s/weights' % results_dir)
+                except IOError:
+                    print('%s/weights already exists' % results_dir)
         np.random.seed(simulation_num if not None else 18)  # set number of simulation as the seed
         stats = defaultdict(list)
         for layer in self.layers:
@@ -188,7 +189,7 @@ class SimpleRecurrentNetwork:
             elif layer.activation_function == "sigmoid":
                 layer.activation = sigmoid(np.dot(layer.in_activation, layer.in_weights))
             if self.debug_messages:
-                print "Layer: %s. Activation %s" % (layer.name, layer.activation)
+                print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
         hidden_layer = self.get_layer("hidden")
         hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
@@ -259,7 +260,7 @@ class SimpleRecurrentNetwork:
             self.current_layer.delta = np.true_divide(self.current_layer.delta, len_delta)
         self.current_layer.delta *= self.learn_rate
         if self.debug_messages:
-            print "%s delta (with learn rate): %s" % (self.current_layer.name, self.current_layer.delta)
+            print("%s delta (with learn rate): %s" % (self.current_layer.name, self.current_layer.delta))
 
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights

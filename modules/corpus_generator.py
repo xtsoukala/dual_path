@@ -5,11 +5,9 @@ import codecs
 from datetime import datetime
 import pandas as pd
 from copy import deepcopy
-import sys
 import numpy as np
-from formatter import is_not_nan
-reload(sys)
-sys.setdefaultencoding("utf-8")  # otherwise Spanish (non-ascii) characters throw an error
+from modules.formatter import is_not_nan
+import sys
 print_on_screen = False  # used only to debug, no need to add it as a called parameter
 
 
@@ -23,6 +21,7 @@ class SetsGenerator:
         :param allow_free_structure_production:
         :param use_full_verb_form:
         """
+        self.python_version = sys.version[0]
         self.lang = lang.lower()
         self.L1 = self.lang if len(lang) == 2 else self.lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else self.lang[2:]
@@ -106,7 +105,7 @@ class SetsGenerator:
         random.shuffle(all_test_sets)
         with codecs.open('%s/%s' % (self.results_dir, "test.in"), 'w', "utf-8") as f:
             for sentence, message in all_test_sets:
-                f.write(u"%s## %s\n" % (sentence, message))
+                f.write(u'%s## %s\n' % (sentence, message))
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=[], replace_with_cognates=True):
         """
@@ -211,7 +210,7 @@ class SetsGenerator:
         if fname:  # fname is None in the cognate experiment case
             with codecs.open('%s/%s' % (self.results_dir, fname), 'w', "utf-8") as f:
                 for sentence, message in generated_pairs:
-                    f.write(u"%s## %s\n" % (sentence, message))
+                    f.write(u'%s## %s\n' % (sentence, message))
         return generated_pairs
 
     def structures_to_sentences(self, sentence_structures, generated_pairs, exclude_test_sentences, exclude_cognates,
@@ -233,7 +232,10 @@ class SetsGenerator:
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
                 gender = self.get_df_gender(morpheme_df, prev_gender=gender)
-                sentence.append(morpheme_df.values[0])
+                if self.python_version.startswith('2'):
+                    sentence.append(morpheme_df.values[0].decode("utf-8"))  # otherwise non-ascii (es) chars throw error
+                else:
+                    sentence.append(morpheme_df.values[0])
                 if pos == 'pron':  # also choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender,
                                                                        exclude_cognates=exclude_cognates)
@@ -243,7 +245,7 @@ class SetsGenerator:
                     message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i+1] if i < len(pos_list) - 1 else 'NaN'
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
-            sentence = u"%s ." % " ".join(sentence)
+            sentence = u'%s .' % ' '.join(sentence)
             message = ";".join(message).upper()
 
             if self.sentence_is_unique(message, exclude_test_sentences, generated_pairs):
@@ -252,7 +254,7 @@ class SetsGenerator:
                 if not exclude_cognates and ',COG' in message:
                     sentences_with_cognates += 1
                 if print_on_screen:
-                    print u"%s## %s" % (sentence, message)
+                    print(u'%s## %s' % (sentence, message))
             else:  # find unique sentence, don't add it to the training set
                 remaining_structures.append((msg, pos_full))
         return remaining_structures, generated_pairs, max_cognate - sentences_with_cognates
@@ -439,7 +441,7 @@ class SetsGenerator:
             concept = morpheme_df['concept']
             if morpheme_df['is_cognate'] == 'Y':
                 concept += ",COG"
-            elif morpheme_df['is_false_friend'] == '1':
+            elif str(morpheme_df['is_false_friend']) == u'1':
                 concept += ",FF"
         elif morpheme_df['pos'] == 'det':
             concept = morpheme_df['type']

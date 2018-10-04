@@ -5,7 +5,7 @@ import itertools
 import pickle
 import pandas as pd
 import collections
-from elman_network import np
+from modules.elman_network import np
 
 
 class InputFormatter:
@@ -75,7 +75,7 @@ class InputFormatter:
                 L2 = None
             else:
                 L2 = [x for x in ['en', 'es'] if x != L1][0]
-                print "Will include L2 (%s) lexicon" % L2
+                print("Will include L2 (%s) lexicon" % L2)
         return L1, L2
 
     def update_sets(self, new_results_dir):
@@ -346,7 +346,7 @@ class InputFormatter:
 
     def _read_pickled_file(self, fname):
         if self.file_exists(fname, warning=False):
-            with open(os.path.join(self.input_dir, fname)) as f:
+            with open(os.path.join(self.input_dir, fname), 'rb') as f:
                 return pickle.load(f)
         return {}
 
@@ -438,7 +438,7 @@ class InputFormatter:
                             if lex in self.concepts:
                                 activation_vector = self.concepts[lex]
                             else:
-                                print "UNK: %s(%s)" % (lex, concept)
+                                print("UNK: %s(%s)" % (lex, concept))
 
                             for i, w2v_activation in enumerate(activation_vector):
                                 weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
@@ -447,7 +447,7 @@ class InputFormatter:
                                 idx_concept = self.identif_size + self.concepts.index(concept)
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
-                                print message, '#####', concept
+                                print(message, '#####', concept)
                                 import sys
                                 sys.exit()
         return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language.lower()
@@ -460,7 +460,7 @@ class InputFormatter:
     def training_is_successful(self, x, threshold=75):
         if x:
             return np.true_divide(x[-1] * 100, self.num_test) >= threshold
-        print "Training did not pass the threshold: %s / %s" % (x, threshold)
+        print("Training did not pass the threshold: %s / %s" % (x, threshold))
         return False
 
     def df_query_to_idx(self, query, lang=None):
@@ -488,6 +488,7 @@ def is_not_nan(x):
     if x == x:
         return True
     return False
+
 
 def take_average_of_valid_results(valid_results):
     """

@@ -2,7 +2,9 @@
 import shutil
 import logging
 import re
-from multiprocessing import Process, Manager
+import multiprocessing as mp
+import sys
+import platform
 from datetime import datetime
 from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, np, deepcopy
@@ -71,8 +73,9 @@ class DualPath:
         self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
-        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, dir=results_dir,
-                                          debug_messages=srn_debug, include_role_copy=role_copy,
+        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=results_dir,
+                                          debug_messages=srn_debug,
+                                          include_role_copy=role_copy,
                                           include_input_copy=input_copy)
         self.initialize_srn()
         self.results = {'correct_meaning': {'test': [], 'training': []},
@@ -187,7 +190,7 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         """
         if evaluate_test_set and evaluate_training_set:  # start multiprocessing when evaluating both
-            manager = Manager()
+            manager = mp.Manager()
             test_results = manager.dict()
             train_results = manager.dict()
         else:
@@ -207,19 +210,20 @@ class DualPath:
                                           self.inputs.num_test, self.check_pronouns if epoch > 0 else False)
                 else:
                     subprocesses = []
-                    subprocess = Process(target=self.evaluate_network, args=(test_results, epoch, self.inputs.testlines,
-                                                                             self.inputs.num_test,
-                                                                             self.check_pronouns
-                                                                             if epoch > 0 else False))
+                    subprocess = mp.Process(target=self.evaluate_network, args=(test_results, epoch,
+                                                                                self.inputs.testlines,
+                                                                                self.inputs.num_test,
+                                                                                self.check_pronouns
+                                                                                if epoch > 0 else False))
                     subprocess.start()
                     subprocesses.append(subprocess)
                     if evaluate_training_set:
-                        subprocess = Process(target=self.evaluate_network, args=(train_results, epoch,
-                                                                                 self.inputs.trainlines,
-                                                                                 self.inputs.num_train,
-                                                                                 self.check_pronouns
-                                                                                 if epoch > 0 else False,
-                                                                                 False))
+                        subprocess = mp.Process(target=self.evaluate_network, args=(train_results, epoch,
+                                                                                    self.inputs.trainlines,
+                                                                                    self.inputs.num_train,
+                                                                                    self.check_pronouns
+                                                                                    if epoch > 0 else False,
+                                                                                    False))
                         subprocess.start()
                         subprocesses.append(subprocess)
                     for sp in subprocesses:
@@ -246,7 +250,7 @@ class DualPath:
             self.results['all_cs_types'] = set([re.sub("es-|en-|-cog|-ff", "", k) for k in cs_keys])
 
             # write (single) simulation results to a pickled file
-            with open("%s/results.pickled" % self.inputs.results_dir, 'w') as pckl:
+            with open("%s/results.pickled" % self.inputs.results_dir, 'wb') as pckl:
                 pickle.dump(self.results, pckl)
 
             if plot_results:
@@ -257,9 +261,9 @@ class DualPath:
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     def update_results(self, temp_results, type_set='test'):
-        for sim in range(self.epochs):
+        for sim_id in range(self.epochs):
             for key in self.results.keys():
-                self.results[key][type_set].append(temp_results[sim][key] if key in temp_results[sim] else 0)
+                self.results[key][type_set].append(temp_results[sim_id][key] if key in temp_results[sim_id] else 0)
         self.aggregate_dict(type_set=type_set)
 
     def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, check_pron, is_test_set=True):
@@ -598,6 +602,9 @@ if __name__ == "__main__":
                                args.generate_num, args.l2_percentage)
         del sets  # we no longer need it
         # now run the simulations
+        if sys.version.startswith('3') and platform.system() != 'Linux':
+            os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
+
         if args.use_multiprocessing:
             processes = []
         for sim in range(args.sim):
@@ -614,7 +621,7 @@ if __name__ == "__main__":
                              ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
                              check_pronouns=args.check_pronouns, simulation_num=sim)
             if args.use_multiprocessing:
-                process = Process(target=dualp.train_network, args=(args.shuffle,))
+                process = mp.Process(target=dualp.train_network, args=(args.shuffle,))
                 process.start()
                 processes.append(process)
             else:
@@ -628,7 +635,7 @@ if __name__ == "__main__":
         all_results = []
         for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
-                with open('%s/%s/results.pickled' % (results_dir, sim), 'r') as f:
+                with open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
                     all_results.append(pickle.load(f))
             else:  # this would mean "missing data", we could raise a message
                 logging.warning('Simulation #%s was problematic' % sim)
@@ -650,7 +657,7 @@ if __name__ == "__main__":
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
-                with open("%s/summary_results.pickled" % results_dir, 'w') as pckl:
+                with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
                     pickle.dump(results_mean_and_std, pckl)
                 plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title)
                 plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
