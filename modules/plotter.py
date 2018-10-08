@@ -17,8 +17,9 @@ class Plotter:
         self.summary_sim = summary_sim
         # blue, orange, green, brown, purple, grey, red, yellowgreen
         self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
-        self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
-        self.color_bars = ['#4daf4a', '#a65628', '#984ea3']
+        #self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
+        self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999')]
+        self.color_bars = ['#4daf4a', '#984ea3', '#dede00']
         # self.color_bars = ['yellowgreen', 'g', 'greenyellow']
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
@@ -173,7 +174,7 @@ class Plotter:
                                                          self.cs_results['type_correct_test_es'][i]])
 
             ############################################################################################################
-            if True:  # cognate_experiment:
+            if cognate_experiment:
                 # for dataset_type in ['test']:  # ['training', 'test']:
                 include_ff = False
                 self.cs_results.update({'type_correct_test': [], 'type_correct_test-cog': [],

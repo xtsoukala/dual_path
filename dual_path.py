@@ -420,12 +420,18 @@ def create_all_input_files(num_simulations, results_dir, sets, original_input_pa
 if __name__ == "__main__":
     import argparse
 
+    def positive_int(value):
+        ivalue = int(value)
+        if ivalue <= 0:
+            raise argparse.ArgumentTypeError("%s is invalid: only use positive int value" % value)
+        return ivalue
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=int, default=90)
-    parser.add_argument('-compress', help='Number of compress layer units', type=int, default=60)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=90)
+    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=60)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
-                        type=int, default=20)
-    parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=int)
+                        type=positive_int, default=20)
+    parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments; ithey are probably redundant as all the user needs to specify is the input folder """
@@ -445,7 +451,7 @@ if __name__ == "__main__":
                         type=float, default=0.75)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('-set_weights_epoch', '-swe', type=int,
+    parser.add_argument('-set_weights_epoch', '-swe', type=positive_int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=float, default=25,
                         help='Fixed weight value for concept-role connections')
@@ -455,10 +461,10 @@ if __name__ == "__main__":
                         type=float, default=0.35)
     parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
-    parser.add_argument('-test_every', help='Test network every x epochs', type=int, default=1)
+    parser.add_argument('-test_every', help='Test network every x epochs', type=positive_int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=int, default=2, help='training several simulations (sim) at once to take the '
-                                                          'average of the results (Monte Carlo approach)')
+    parser.add_argument('-sim', type=positive_int, default=2,
+                        help="training several simulations at once to take the results' average (Monte Carlo approach)")
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in ES')

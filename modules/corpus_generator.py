@@ -40,15 +40,17 @@ class SetsGenerator:
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
         self.structures_df = self.get_structures(structures_csv, use_full_verb=use_full_verb_form)
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
-        # TODO: automate
-        self.event_sem = ['PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC']
-        self.roles = ['AGENT', 'PATIENT', 'ACTION', 'RECIPIENT', 'AGENT-MOD', 'PATIENT-MOD']
-        self.identifiability = ['EMPH', 'PRON', 'DEF', 'INDEF'] + self.genders
-        self.target_lang = ['EN', 'ES'] if not monolingual_only else [self.lang.upper()]
+        self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=;)')[1].unique()  # AGENT etc
+        # Matches strings between ;E= or ,    "?" is necessary for multiple matches
+        # E.g., 'PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC'
+        self.event_sem = self.structures_df['message'].str.extractall('(;E=|,)?([A-Z]*)(,|$)')[1].dropna().unique()
         if allow_free_structure_production:
             self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
             self.strip_structure_roles()
         self.df_cache = {}
+        # TODO: automate?
+        self.identifiability = ['EMPH', 'PRON', 'DEF', 'INDEF'] + self.genders
+        self.target_lang = ['EN', 'ES'] if not monolingual_only else [self.lang.upper()]
 
     def generate_general(self, num_sentences, percentage_l2, cognates_experiment=False, save_files=True):
         """
