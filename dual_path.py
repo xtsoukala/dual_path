@@ -434,8 +434,9 @@ if __name__ == "__main__":
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
-    """ input-related arguments; ithey are probably redundant as all the user needs to specify is the input folder """
-    parser.add_argument('-lexicon_csv', help='CSV file that contains the lexicon and concepts', default='lexicon.csv')
+    """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
+    parser.add_argument('-lexicon', help='CSV file that contains lexicon and concepts', default='corpus/lexicon.csv')
+    parser.add_argument('-structures', help='CSV file that contains the structures', default='corpus/structures.csv')
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
                                                           'training.', default="training.in")
     parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
@@ -532,7 +533,7 @@ if __name__ == "__main__":
                           'esen': 'Bilingual EN-ES model'}
     os.makedirs(results_dir)
     original_input_path = None  # keep track of the original input in case it was copied
-    sets = None
+    input_sets = None
     if args.input:  # generate a new set (unless "input" was also set)
         if not os.path.isfile(os.path.join(args.input, "test.in")) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
@@ -553,8 +554,8 @@ if __name__ == "__main__":
         input_sets = ExperimentSets(
             sets_gen=SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
-                                   cognate_percentage=args.cognate_percentage,
-                                   allow_free_structure_production=args.free_pos))
+                                   cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
+                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos))
         if args.cognate_experiment:
             input_sets.generate_for_cognate_experiment(num_sentences=args.generate_num,
                                                        percentage_l2=args.l2_percentage)
@@ -589,11 +590,11 @@ if __name__ == "__main__":
                             args.set_weights, args.set_weights_epoch, args.exclude_lang, args.shuffle, args.free_pos,
                             args.ignore_tense_and_det))
 
-    inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, lexicon_csv=args.lexicon_csv,
-                            language=args.lang, semantic_gender=args.gender, overt_pronouns=args.overt_pronouns,
-                            prodrop=args.prodrop, trainingset=args.trainingset, testset=args.testset,
-                            fixed_weights=args.fw, fixed_weights_identif=args.fwi,
-                            use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual)
+    inputs = InputFormatter(results_dir=results_dir, input_dir=args.input, language=args.lang,
+                            semantic_gender=args.gender, overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
+                            trainingset=args.trainingset, testset=args.testset, fixed_weights=args.fw,
+                            fixed_weights_identif=args.fwi, use_word_embeddings=args.word_embeddings,
+                            monolingual_only=args.monolingual)
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
@@ -606,10 +607,11 @@ if __name__ == "__main__":
                          check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
-        create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
-                               original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
-                               sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
-        del input_sets  # we no longer need it
+        if input_sets:  # generate the rest of the input files
+            create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
+                                   original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
+                                   sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
+            del input_sets  # we no longer need it
         # now run the simulations
         if sys.version.startswith('3') and platform.system() != 'Linux':
             os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS

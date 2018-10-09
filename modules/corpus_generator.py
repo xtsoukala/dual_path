@@ -12,8 +12,7 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 cognate_percentage, monolingual_only, lang, seed=0, lexicon_csv='../corpus/lexicon.csv',
-                 structures_csv='../corpus/structures.csv', include_ff=False):
+                 cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv, seed=0, include_ff=False):
         """
         :param results_dir:
         :param use_simple_semantics:

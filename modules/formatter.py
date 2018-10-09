@@ -9,14 +9,14 @@ from modules.elman_network import np
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, lexicon_csv, fixed_weights, fixed_weights_identif, language,
-                 trainingset, testset, semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only):
+    def __init__(self, results_dir, input_dir, fixed_weights, fixed_weights_identif, language, trainingset, testset,
+                 semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.lang = language.lower()
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2()
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
-        self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, lexicon_csv), sep=',', header=0)  # 1st line: header
+        self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         if use_word_embeddings:
             import word2vec
