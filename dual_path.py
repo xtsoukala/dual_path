@@ -427,8 +427,8 @@ if __name__ == "__main__":
         return ivalue
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=90)
-    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=60)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=100)
+    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=50)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
@@ -454,7 +454,7 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=positive_int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=float, default=25,
+    parser.add_argument('-fw', '-fixed_weights', type=float, default=30,
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
                         help='Fixed weight value for identif-role connections')
@@ -471,7 +471,7 @@ if __name__ == "__main__":
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in ES')
     parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
                                            ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=50)
+                        type=int, default=80)
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -546,7 +546,7 @@ if __name__ == "__main__":
         logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
         copy_dir(args.input, '%s/input' % results_dir)
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
-        args.input = '%s/input' % results_dir
+        args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
 
@@ -607,11 +607,10 @@ if __name__ == "__main__":
                          check_pronouns=args.check_pronouns)
         dualp.train_network(shuffle_set=args.shuffle)
     else:  # start batch training to take the average of results
-        if input_sets:  # generate the rest of the input files
-            create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
-                                   original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
-                                   sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
-            del input_sets  # we no longer need it
+        create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
+                               original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
+                               sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
+        del input_sets  # we no longer need it
         # now run the simulations
         if sys.version.startswith('3') and platform.system() != 'Linux':
             os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS

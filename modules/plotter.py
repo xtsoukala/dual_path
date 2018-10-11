@@ -107,7 +107,7 @@ class Plotter:
         plt.close()
 
     def plot_results(self, results, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
-                     cognate_experiment, plot_mse=False):
+                     cognate_experiment, plot_mse=True):
         correct_test = results['correct_meaning']['test']
         type_code_switches_test = results['type_code_switches']['test']
 

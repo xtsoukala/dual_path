@@ -231,9 +231,11 @@ class SetsGenerator:
                 query += " and is_cognate == 'Y'"
             elif only_get_false_fr:
                 query += " and is_false_friend == '1'"
-
             cache = self.lexicon_df.query(query)
             self.df_cache[params] = cache
+        if not cache.shape[0]:
+            print((query, params, cache))
+            sys.exit()  # throw an error if cache is empty
         selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
                           'is_cognate', 'is_false_friend', 'adj_es_female']].iloc[random.randint(0, cache.shape[0] - 1)]
         if pos == 'adj' and gender == 'F' and lang == 'es' and not pd.isnull(selected['adj_es_female']):

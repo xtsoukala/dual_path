@@ -227,7 +227,7 @@ class SimpleRecurrentNetwork:
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
-        self.mse[epoch].append(((target_activation - output_activation) ** 2).mean(axis=None))
+        self.mse[epoch].append(((target_activation - output_activation) ** 2).mean(axis=None))  # same as axis=0
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
                         divergence_err = np.sum(target_activation)

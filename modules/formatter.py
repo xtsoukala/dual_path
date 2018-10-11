@@ -457,7 +457,7 @@ class InputFormatter:
         return np.dot(self.concepts[first_word], self.concepts[second_word] /
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
-    def training_is_successful(self, x, threshold=75):
+    def training_is_successful(self, x, threshold):
         if x:
             return np.true_divide(x[-1] * 100, self.num_test) >= threshold
         print("Training did not pass the threshold: %s / %s" % (x, threshold))
