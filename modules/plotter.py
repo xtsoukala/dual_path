@@ -15,6 +15,7 @@ class Plotter:
         self.results = []
         self.title = title
         self.summary_sim = summary_sim
+        self.plot_detailed_cs = False
         # blue, orange, green, brown, purple, grey, red, yellowgreen
         self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
         #self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
@@ -167,11 +168,12 @@ class Plotter:
                                            (self.cs_results['type_correct_test_last_epoch_es'],
                                             self.cs_results['type_correct_test_last_epoch_en']))
                 # !------------ Now plot all CS types per epoch  ------------#
-                for i, cs_type in enumerate(results['all_cs_types']):
-                    self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
-                                                legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
-                                                results=[self.cs_results['type_correct_test_en'][i],
-                                                         self.cs_results['type_correct_test_es'][i]])
+                if self.plot_detailed_cs:
+                    for i, cs_type in enumerate(results['all_cs_types']):
+                        self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
+                                                    legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
+                                                    results=[self.cs_results['type_correct_test_en'][i],
+                                                             self.cs_results['type_correct_test_es'][i]])
 
             ############################################################################################################
             if cognate_experiment:
