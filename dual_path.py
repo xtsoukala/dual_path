@@ -161,19 +161,19 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.exclude_lang and prod_idx is None:
                     # TODO: play with activations, e.g. activate the target language slightly more
-                    lang_act = np.ones(2)  # [0.5, 0.5] if self.inputs.languages.index(lang) == 0 else [1, 1]
+                    lang_act = np.ones(2)  # [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
                     self.srn.update_layer_activation("target_lang", activation=lang_act)
                 prod_idx = self.srn.get_max_output_activation()
                 produced_sent_ids.append(prod_idx)
-                if prod_idx == self.inputs.period_idx:  # end sentence if a period was produced
+                if prod_idx == self.inputs.period_idx and len(produced_sent_ids) > 2:  # end sentence if period produced
                     break
             # boost after cognate
             if self.exclude_lang and prod_idx in self.inputs.cognate_idx and self.allow_cognate_boost:
-                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang.upper()))
+                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang))
 
         return produced_sent_ids, target_sentence_ids, message, lang
 
-    def train_network(self, shuffle_set, plot_results=True, evaluate_test_set=True, evaluate_training_set=False):
+    def start_network(self, shuffle_set, plot_results, evaluate_test_set, evaluate_training_set, training=True):
         """
         :param shuffle_set: Whether to shuffle the training set after each iteration
         :param plot_results: Whether to plot the performance
@@ -189,6 +189,8 @@ class DualPath:
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
+        # random.seed(self.simulation_num if self.simulation_num else 18)
+
         if evaluate_test_set and evaluate_training_set:  # start multiprocessing when evaluating both
             manager = mp.Manager()
             test_results = manager.dict()
@@ -198,11 +200,11 @@ class DualPath:
 
         epoch = 0
         while epoch < self.epochs:  # start training for x epochs
-            if epoch % 5 == 0 and epoch > 0:  # check whether to save weights or not (only every 5 epochs)
+            if epoch > 0 and training:
                 self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
 
             if shuffle_set:
-                np.random.shuffle(self.inputs.trainlines)  # minpy
+                np.random.shuffle(self.inputs.trainlines)  # np.random.shuffle
 
             if evaluate_test_set and epoch % self.test_every == 0:
                 if not evaluate_training_set:  # no need to run multiprocessing if we only evaluate the test set
@@ -228,14 +230,18 @@ class DualPath:
                         subprocesses.append(subprocess)
                     for sp in subprocesses:
                         sp.join()
-
-            for train_line in self.inputs.trainlines:  # start training
-                self.feed_line(train_line, epoch, backpropagate=True)
-                if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
-                    self.srn.learn_rate -= self.lrate_decrease_step
+            if training:
+                for train_line in self.inputs.trainlines:  # start training
+                    self.feed_line(train_line, epoch, backpropagate=True)
+                    if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
+                        self.srn.learn_rate -= self.lrate_decrease_step
+            else:  # load inputs
+                self.srn.reset_weights(set_weights_epoch=epoch, set_weights_folder=self.set_weights_folder,
+                                       simulation_num=self.simulation_num, results_dir=self.inputs.results_dir)
             epoch += 1  # increase number of epochs, begin new iteration
 
-        self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
+        if training:
+            self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
 
         if evaluate_test_set:
             self.update_results(test_results)
@@ -247,7 +253,7 @@ class DualPath:
                 cs_keys = self.results['type_code_switches']['test'].keys()
             if self.results['type_code_switches']['training']:
                 cs_keys += self.results['type_code_switches']['training'].keys()
-            self.results['all_cs_types'] = set([re.sub("es-|en-|-cog|-ff", "", k) for k in cs_keys])
+            self.results['all_cs_types'] = set([re.sub("ES-|EN-|-cog|-ff", "", k) for k in cs_keys])
 
             # write (single) simulation results to a pickled file
             with open("%s/results.pickled" % self.inputs.results_dir, 'wb') as pckl:
@@ -255,7 +261,7 @@ class DualPath:
 
             if plot_results:
                 self.results['mse'] = self.srn.mse
-                plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None)
+                plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None, title=None)
                 plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
                                  cognate_experiment=args.cognate_experiment, simulation_logger=simulation_logger,
                                  test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
@@ -357,8 +363,8 @@ class DualPath:
 
     def aggregate_dict(self, type_set):
         # convert "type_code_switches" from list of dicts
-        # (e.g, [[{'es-noun': 4, 'en-alternational': 1}][{'es-noun': 6, 'en-alternational': 8}]])
-        # to a single dict of list (e.g., {'en-alternational': [1, 6, 14], 'es-noun': [4, 8, 22]}
+        # (e.g, [[{'ES-noun': 4, 'EN-alternational': 1}][{'ES-noun': 6, 'EN-alternational': 8}]])
+        # to a single dict of list (e.g., {'EN-alternational': [1, 6, 14], 'ES-noun': [4, 8, 22]}
         types_dict = {}
         all_keys = sorted(set().union(*(d.keys() for d in self.results['type_code_switches'][type_set])))
         for key in all_keys:
@@ -420,30 +426,32 @@ def create_all_input_files(num_simulations, results_dir, sets, original_input_pa
 if __name__ == "__main__":
     import argparse
 
-    def positive_int(value):
-        ivalue = int(value)
-        if ivalue <= 0:
-            raise argparse.ArgumentTypeError("%s is invalid: only use positive int value" % value)
-        return ivalue
+
+    def positive_int(x):
+        pos_int = int(x)
+        if pos_int <= 0:
+            raise argparse.ArgumentTypeError("%s is invalid: only use positive int value" % x)
+        return pos_int
+
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=100)
-    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=50)
+    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
-    parser.add_argument('-lexicon', help='CSV file that contains lexicon and concepts', default='corpus/lexicon.csv')
-    parser.add_argument('-structures', help='CSV file that contains the structures', default='corpus/structures.csv')
+    parser.add_argument('-lexicon', help='CSV file that contains lexicon and concepts')
+    parser.add_argument('-structures', help='CSV file that contains the structures')
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
                                                           'training.', default="training.in")
     parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
-    parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any combination [enes, esen] for bilingual)', default='esen')
+    parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (EN, ES '
+                                      'or any combination [ENES, ESEN] for bilingual)', default='ESEN', type=str.upper)
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.15)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
@@ -452,7 +460,7 @@ if __name__ == "__main__":
                         type=float, default=0.75)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('-set_weights_epoch', '-swe', type=positive_int,
+    parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=float, default=30,
                         help='Fixed weight value for concept-role connections')
@@ -498,6 +506,18 @@ if __name__ == "__main__":
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
+    parser.add_argument('--noeval', dest='evaluate_sets', action='store_false',
+                        help='Do not evaluate test and training sets')
+    parser.set_defaults(evaluate_sets=True)
+    parser.add_argument('--noplot', dest='plot_results', action='store_false',
+                        help='Do not plot results')
+    parser.set_defaults(plot_results=True)
+    parser.add_argument('--eval_train', dest='eval_train', action='store_true',
+                        help='Evaluate training sets')
+    parser.set_defaults(eval_train=False)
+    parser.add_argument('--only_eval', dest='only_eval', action='store_true',
+                        help='Do not train, only evaluate test sets')
+    parser.set_defaults(only_eval=False)
     parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
                         help='Use full lexeme for verbs instead of splitting into lemma/suffix')
     parser.set_defaults(full_verb=False)
@@ -517,6 +537,9 @@ if __name__ == "__main__":
     parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment')
     parser.set_defaults(cognate_experiment=False)
+    parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
+                        help='Run auxiliary asymmetry experiment')
+    parser.set_defaults(auxiliary_experiment=False)
     parser.add_argument('--flex_eval', dest='ignore_tense_and_det', action='store_true',
                         help='Ignore mistakes on determiners (definiteness) and tense (past, present)')
     parser.set_defaults(ignore_tense_and_det=False)
@@ -524,14 +547,37 @@ if __name__ == "__main__":
                         help='Use multiprocessing for parallel simulations')
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
-    # create path to store results
-    results_dir = "simulations/%s%s_%s_%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
-                                                         datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
-                                                         args.lang, args.sim, args.hidden, args.compress)
-    lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
-                          'el': 'Greek monolingual model', 'enes': 'Bilingual EN-ES model',
-                          'esen': 'Bilingual EN-ES model'}
+
+    if args.only_eval and not (args.set_weights or args.set_weights_epoch):
+        sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
+                 '(args.set_weights_epoch: %s).' % (args.set_weights, args.set_weights_epoch))
+
+    if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
+        args.compress = args.hidden // 3
+    # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
+    results_dir = "simulations/%s%s/%s_%s_%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
+                                                            datetime.now().strftime("%Y-%m-%d"),
+                                                            datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
+                                                            args.lang, args.sim, args.hidden, args.compress)
+    lang_code_to_title = {'EN': 'English monolingual model', 'ES': 'Spanish monolingual model',
+                          'EL': 'Greek monolingual model', 'ENES': 'Bilingual EN-ES model',
+                          'ESEN': 'Bilingual EN-ES model'}
     os.makedirs(results_dir)
+
+    if args.auxiliary_experiment:
+        args.cognate_percentage = 0
+        args.exclude_lang = True
+        args.exclude_lang = True
+        args.full_verb = True
+        args.threshold = 20
+        if not args.input:
+            if not args.lexicon:
+                args.lexicon = 'corpus/lexicon_aux.csv'
+            if not args.structures:
+                args.structures = 'corpus/structures_aux.csv'
+    elif args.cognate_experiment:
+        args.exclude_lang = True
+
     original_input_path = None  # keep track of the original input in case it was copied
     input_sets = None
     if args.input:  # generate a new set (unless "input" was also set)
@@ -540,16 +586,18 @@ if __name__ == "__main__":
             if os.path.exists(corrected_dir):
                 args.input = corrected_dir
             else:
-                import sys
-
                 sys.exit('No input folder found in the path (%s)' % args.input)
-        logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
+        # TODO: logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
         copy_dir(args.input, '%s/input' % results_dir)
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
 
+        if not args.lexicon:
+            args.lexicon = 'corpus/lexicon.csv'
+        if not args.structures:
+            args.structures = 'corpus/structures.csv'
         args.input = "%s/input/" % results_dir
         input_sets = ExperimentSets(
             sets_gen=SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
@@ -561,9 +609,6 @@ if __name__ == "__main__":
                                                        percentage_l2=args.l2_percentage)
         else:
             input_sets.sets.generate_general(num_sentences=args.generate_num, percentage_l2=args.l2_percentage)
-
-    if args.cognate_experiment and not args.exclude_lang:
-        args.exclude_lang = True
 
     if not args.title:
         args.title = lang_code_to_title[args.lang]
@@ -598,15 +643,7 @@ if __name__ == "__main__":
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
-    if not args.sim or args.sim == 1:  # only run one simulation
-        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                         epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
-                         set_weights_folder=args.set_weights, set_weights_epoch=args.set_weights_epoch,
-                         ignore_tense_and_det=args.ignore_tense_and_det, input_class=inputs, momentum=args.momentum,
-                         check_pronouns=args.check_pronouns)
-        dualp.train_network(shuffle_set=args.shuffle)
-    else:  # start batch training to take the average of results
+    if args.sim > 1:
         create_all_input_files(num_simulations=args.sim, results_dir=results_dir,
                                original_input_path=original_input_path, cognate_experiment=args.cognate_experiment,
                                sets=input_sets, generate_num=args.generate_num, l2_percentage=args.l2_percentage)
@@ -614,34 +651,41 @@ if __name__ == "__main__":
         # now run the simulations
         if sys.version.startswith('3') and platform.system() != 'Linux':
             os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
+        elif platform.system() != 'Linux':
+            os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
 
-        if args.use_multiprocessing:
-            processes = []
-        for sim in range(args.sim):
+    if args.use_multiprocessing:
+        processes = []
+
+    for sim in range(args.sim):
+        if args.sim > 1:
             inputs.input_dir = "%s/%s" % (results_dir, sim)
             inputs.update_sets(new_results_dir=inputs.input_dir)
             simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
                                    (sim, sum(',COG' in l for l in inputs.trainlines) + sum(',FF' in l
                                                                                            for l in inputs.trainlines),
                                     inputs.num_train))
-            dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                             epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                             test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
-                             set_weights_folder=args.set_weights, momentum=args.momentum, input_class=inputs,
-                             ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
-                             check_pronouns=args.check_pronouns, simulation_num=sim)
-            if args.use_multiprocessing:
-                process = mp.Process(target=dualp.train_network, args=(args.shuffle,))
-                process.start()
-                processes.append(process)
-            else:
-                dualp.train_network(shuffle_set=args.shuffle)
+        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+                         epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
+                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
+                         set_weights_folder=args.set_weights, momentum=args.momentum, input_class=inputs,
+                         ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
+                         check_pronouns=args.check_pronouns, simulation_num=sim)
+        if args.use_multiprocessing and args.sim > 1:
+            process = mp.Process(target=dualp.start_network, args=(args.shuffle, args.plot_results, args.evaluate_sets,
+                                                                   args.eval_train, not args.only_eval))
+            process.start()
+            processes.append(process)
+        else:
+            dualp.start_network(shuffle_set=args.shuffle, plot_results=args.plot_results,
+                                evaluate_test_set=args.evaluate_sets, evaluate_training_set=args.eval_train,
+                                training=not args.only_eval)
 
-        if args.use_multiprocessing:
-            for p in processes:
-                p.join()
+    if args.use_multiprocessing:
+        for p in processes:
+            p.join()
 
-        # aggregate results
+    if args.sim > 1:  # aggregate results
         all_results = []
         for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
@@ -667,6 +711,7 @@ if __name__ == "__main__":
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
+                # print("%s -> %s" % (args.fw, results_mean_and_std['correct_meaning']['test'][-1]))
                 with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
                     pickle.dump(results_mean_and_std, pckl)
                 plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title)
@@ -678,7 +723,6 @@ if __name__ == "__main__":
                     simulation_logger.info("Code-switched percentage (test set): %s" %
                                            [percentage(x, inputs.num_test)
                                             for x in results_mean_and_std['correct_code_switches']['test']])
-
     layers_with_softmax_act_function = ""
     for layer in dualp.srn.get_layers_for_backpropagation():
         if layer.activation_function == 'softmax':

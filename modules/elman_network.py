@@ -75,17 +75,20 @@ class SimpleRecurrentNetwork:
                 # np.random.standard_normal has variance of 1, which is high,
                 # and np.random.uniform doesn't always have mean = 0.
                 mean = 0
-                layer.in_weights = np.random.normal(mean, layer.sd,
-                                                    size=[layer.in_size + int(layer.has_bias), layer.size])  # minpy
-                stats['means'].append(layer.in_weights.mean())
-                stats['std'].append(layer.in_weights.std())
+                layer.in_weights = np.random.normal(mean, layer.sd, size=[layer.in_size + int(layer.has_bias),
+                                                                          layer.size])
+                # np.random.normal(mean, layer.sd, size=[]) in numpy
+                #layer.in_weights = np.random_normal(mean, layer.sd,
+                #                                    shape=[layer.in_size + int(layer.has_bias), layer.size])
+                stats['means'].append(np.mean(layer.in_weights))
+                stats['std'].append(np.std(layer.in_weights))
                 stats['labels'].append(layer.name)
                 np.savez_compressed("%s/weights/weights_%s.npz" % (results_dir, layer.name), layer.in_weights)
                 if self.debug_messages:
                     with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
                         f.write("name, max, min, mean, std\n"
-                                "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
-                                                      layer.in_weights.mean(), layer.in_weights.std()))
+                                "%s,%g,%g,%g,%g\n" % (layer.name, np.max(layer.in_weights), np.min(layer.in_weights),
+                                                      stats['means'][-1], stats['std'][-1]))
                 if plot_stats:
                     plt = Plotter(results_dir=results_dir)
                     plt.plot_layer_stats(stats)
@@ -148,7 +151,11 @@ class SimpleRecurrentNetwork:
         if input_idx:  # at the beginning of sentence, input_idx is None
             input_layer.activation[input_idx] = 1
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
+            #print(input_layer.activation)
             input_layer.activation = convert_range(input_layer.activation)
+            #print(input_layer.activation)
+            #print('---------------------')
+
         if target_idx is not None:  # no need to set target when testing
             output_layer = self.get_layer("output")
             output_layer.target_activation = np.zeros(output_layer.size)
@@ -169,7 +176,7 @@ class SimpleRecurrentNetwork:
         for layer in self.layers:
             if not layer.in_layers:
                 continue  # skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
-            layer.in_activation = []
+            layer.in_activation = np.array([])  # minpy
             for incoming_layer in layer.in_layers:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
                 layer.in_activation = np.concatenate((layer.in_activation, incoming_layer.activation), axis=0)
@@ -357,8 +364,8 @@ def input_sd(number_of_inputs):
     return np.true_divide(1.0, number_of_inputs)
 
 
-def convert_range(matrix, min_val=-0.9, max_val=0.9):
-    """ Converts range to fit between min and max values """
+def convert_range(matrix, min_val=-1, max_val=1):
+    """ Converts range between min and max values. NOTE: This seems to be creating some issues during training. """
     if np.sum(matrix) == 0:
         return matrix + min_val
     else:

@@ -12,9 +12,8 @@ class InputFormatter:
     def __init__(self, results_dir, input_dir, fixed_weights, fixed_weights_identif, language, trainingset, testset,
                  semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
-        self.lang = language.lower()
         self.monolingual_only = monolingual_only
-        self.L1, self.L2 = self.get_l1_and_l2()
+        self.L1, self.L2 = self.get_l1_and_l2(language)
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
@@ -65,16 +64,16 @@ class InputFormatter:
 
         del self.lexicon_df  # remove it after the processing
 
-    def get_l1_and_l2(self):
-        if len(self.lang) == 4:
-            L1 = self.lang[:2]
-            L2 = self.lang[2:]
+    def get_l1_and_l2(self, lang_code):
+        if len(lang_code) == 4:
+            L1 = lang_code[:2]
+            L2 = lang_code[2:]
         else:
-            L1 = self.lang
+            L1 = lang_code
             if self.monolingual_only:
                 L2 = None
             else:
-                L2 = [x for x in ['en', 'es'] if x != L1][0]
+                L2 = [x for x in ['EN', 'ES'] if x != L1][0]
                 print("Will include L2 (%s) lexicon" % L2)
         return L1, L2
 
@@ -250,10 +249,10 @@ class InputFormatter:
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
-        idx_to_concept = []
-        l1_column = self.lexicon_df[['morpheme_%s' % self.L1, 'pos',
-                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1])
-        lex = list(l1_column['morpheme_%s' % self.L1])
+        idx_to_concept = []  # TODO: maybe change to dict
+        l1_column = self.lexicon_df[['morpheme_%s' % self.L1.lower(), 'pos',
+                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1.lower()])
+        lex = list(l1_column['morpheme_%s' % self.L1.lower()])
         pos = list(l1_column['pos'])
         l1_type = list(l1_column['type'])
         for i, concept in enumerate(list(l1_column['concept'])):
@@ -263,12 +262,12 @@ class InputFormatter:
                 idx_to_concept.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
         code_switched_idx = len(lex)
         if self.L2:
-            l2_column = self.lexicon_df[['morpheme_%s' % self.L2, 'pos',
-                                         'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2])
+            l2_column = self.lexicon_df[['morpheme_%s' % self.L2.lower(), 'pos',
+                                         'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2.lower()])
             l2_pos_list = list(l2_column['pos'])
             l2_concept_list = list(l2_column['concept'])
             l2_type_list = list(l2_column['type'])
-            for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2])):
+            for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2.lower()])):
                 if item not in lex:  # only get unique items. set() would change the order, do this instead
                     lex.append(item)
                     pos.append(l2_pos_list[i])
@@ -277,10 +276,10 @@ class InputFormatter:
                         idx_to_concept.append(l2_concept_list[i])
                     else:
                         idx_to_concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
-                                        else pos[-1])
+                                              else pos[-1])
         with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in lex)
-        return lex, pos, np.array(idx_to_concept), code_switched_idx  # idx_to_concept: minpy
+        return lex, pos, idx_to_concept, code_switched_idx  # idx_to_concept: nparray if we want to use "where"
 
     def get_lexicon_index(self, word):
         """
@@ -289,12 +288,21 @@ class InputFormatter:
         """
         return self.lexicon.index(word)
 
-    def concept_to_morphemes(self, concept, target_lang):
+    def concept_to_morphemes_OLD(self, concept, target_lang):
         morpheme_idx = np.where(self.idx_to_concept == concept)[0]
         if target_lang == self.L1:
             morph = list(morpheme_idx[morpheme_idx < self.code_switched_idx])
         else:  # L2
             morph = list(morpheme_idx[morpheme_idx >= self.code_switched_idx])
+        return morph
+
+    def concept_to_morphemes(self, concept_idx, target_lang):
+        lower_range = 0 if target_lang == self.L1 else self.code_switched_idx
+        upper_range = self.code_switched_idx if target_lang == self.L1 else len(self.idx_to_concept)
+        morph = []
+        for idx in range(lower_range, upper_range):
+            if self.idx_to_concept[concept_idx] == self.idx_to_concept[idx]:
+                morph.append(idx)
         return morph
 
     def _number_of_test_pronouns(self):
@@ -450,7 +458,7 @@ class InputFormatter:
                                 print(message, '#####', concept)
                                 import sys
                                 sys.exit()
-        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language.lower()
+        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
@@ -476,7 +484,7 @@ class InputFormatter:
         # ignore shared indeces (cognates/period)
         if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
                                             (lang == self.L2 and idx <= self.code_switched_idx))):
-            return self.concept_to_morphemes(concept=self.idx_to_concept[idx], target_lang=lang)
+            return self.concept_to_morphemes(concept_idx=idx, target_lang=lang)
         return [idx]
 
 
@@ -621,5 +629,5 @@ def compute_mean_and_std(valid_results, epochs):
                     np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
                     results_sum[key]["%s-std_error" % t] = np_std_err
                     results_sum[key][t] = np_mean
-    results_sum['all_cs_types'] = set([re.sub("es-|en-|-cog|-ff", "", x) for x in cs_keywords])
+    results_sum['all_cs_types'] = set([re.sub("EN-|ES-|-cog|-ff", "", x) for x in cs_keywords])
     return results_sum

@@ -234,13 +234,17 @@ class SetsGenerator:
             cache = self.lexicon_df.query(query)
             self.df_cache[params] = cache
         if not cache.shape[0]:
-            print((query, params, cache))
+            print(params, cache)
+            if query:
+                print(query)
             sys.exit()  # throw an error if cache is empty
-        selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
+        """selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
                           'is_cognate', 'is_false_friend', 'adj_es_female']].iloc[random.randint(0, cache.shape[0] - 1)]
         if pos == 'adj' and gender == 'F' and lang == 'es' and not pd.isnull(selected['adj_es_female']):
             selected = selected.columns.rename({'morpheme_%s' % lang: 'null',
-                                                'adj_es_female': 'morpheme_%s' % lang})
+                                                'adj_es_female': 'morpheme_%s' % lang})"""
+        selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
+                          'is_cognate', 'is_false_friend']].iloc[random.randint(0, cache.shape[0] - 1)]
         return selected
 
     def save_lexicon_and_structures_to_csv(self):
@@ -269,22 +273,33 @@ class SetsGenerator:
         structures = df.query(query)
         keys = ['message', 'percentage']
         labels = deepcopy(keys)
-        if use_full_verb:
-            if 'es' in self.lang:
-                keys.append('full_verb_es')
-                labels.append('es')
-            if 'en' in self.lang:
-                keys.append('full_verb_en')
-                labels.append('en')
-        else:  # return structures that split morpheme-suffix
-            if 'es' in self.lang:
-                keys.append('pos_es')
-                labels.append('es')
-            if 'en' in self.lang:
-                keys.append('pos_en')
-                labels.append('en')
+        if 'es' in self.lang:
+            keys.append('pos_es')
+            labels.append('es')
+        if 'en' in self.lang:
+            keys.append('pos_en')
+            labels.append('en')
         df = structures[keys]
         df.columns = labels  # rename to language code instead of e.g., pos_es and full_verb_es
+        if use_full_verb:
+            # replace all "verb_prefix verb_suffix" with "verb" and
+            df = df.replace({'verb(_prefix)?:intrans verb_suffix::present': 'verb:intrans:present'}, regex=True)
+            df = df.replace({'verb(_prefix)?:trans verb_suffix::present': 'verb:trans:present'}, regex=True)
+            df = df.replace({'verb(_prefix)?:double verb_suffix::present': 'verb:double:present'}, regex=True)
+
+            df = df.replace({'verb(_prefix)?:intrans verb_suffix::past': 'verb:intrans:past'}, regex=True)
+            df = df.replace({'verb(_prefix)?:trans verb_suffix::past': 'verb:trans:past'}, regex=True)
+            df = df.replace({'verb(_prefix)?:double verb_suffix::past': 'verb:double:past'}, regex=True)
+
+            df = df.replace({'verb(_prefix)?:trans participle_suffix::prog': 'participle:trans:prog'}, regex=True)
+            df = df.replace({'verb(_prefix)?:intrans participle_suffix::prog': 'participle:intrans:prog'}, regex=True)
+            df = df.replace({'verb(_prefix)?:double participle_suffix::prog': 'participle:double:prog'}, regex=True)
+
+            df = df.replace({'verb(_prefix)?:trans participle_suffix::perfect': 'participle:trans:perfect'}, regex=True)
+            df = df.replace({'verb(_prefix)?:intrans participle_suffix::perfect': 'participle:intrans:perfect'},
+                            regex=True)
+            df = df.replace({'verb(_prefix)?:double participle_suffix::perfect': 'participle:double:perfect'},
+                            regex=True)
         return df
 
     def get_num_structures_per_language(self):
@@ -324,7 +339,7 @@ class SetsGenerator:
         df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
         query = "inactive != 'Y'"  # remove inactive words
         if not false_friends:
-            query += " and is_false_friend != '1'"
+            query += " and is_false_friend != 'Y'"
         if not cognates:
             query += " and is_cognate != 'Y'"
         lex = df.query(query)
@@ -333,8 +348,7 @@ class SetsGenerator:
         else:
             lex.drop(['concept', 'inactive'], axis=1)
             lex = lex.rename(columns={'compositional_concept': 'concept'})
-        lex.drop(['full_verb_3rd_en', 'full_verb_3rd_es', 'participle_en', 'participle_es',
-                  'past_tense_en', 'past_tense_es'], axis=1)
+        # maybe lex.drop() full_verb etc?
         return lex
 
     @staticmethod

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 class Plotter:
-    def __init__(self, results_dir, summary_sim, title=None):
+    def __init__(self, results_dir, summary_sim, title):
         self.results_dir = results_dir
         self.epochs = []
         self.num_epochs = 0
@@ -135,10 +135,10 @@ class Plotter:
                                         label='%% CS among correctly produced %s set' % 'test')
 
             # !------------  code-switching ------------!
-            self.cs_results = {'type_correct_test_en': [], 'type_correct_test_es': [],
-                               'type_correct_test_last_epoch_en': [], 'type_correct_test_last_epoch_es': []}
+            self.cs_results = {'type_correct_test_EN': [], 'type_correct_test_ES': [],
+                               'type_correct_test_last_epoch_EN': [], 'type_correct_test_last_epoch_ES': []}
             for cs_type in results['all_cs_types']:
-                for lang in ['es', 'en']:
+                for lang in ['ES', 'EN']:
                     cs_type_per_lang = "%s-%s" % (lang, cs_type)
                     if cs_type_per_lang in type_code_switches_test:  # if we include training set we need to edit this
                         # all epochs
@@ -159,21 +159,21 @@ class Plotter:
                         self.cs_results['type_correct_test_last_epoch_%s' % lang].append((0, 0))
 
             # make sure there is still something to be plotted after the manipulations
-            if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
+            if self.cs_results['type_correct_test_last_epoch_ES'] or self.cs_results['type_correct_last_epoch_test_EN']:
                 self.plot_bar_chart(label='CS types (%% of correctly produced %s set - last epoch)' % 'test',
-                                    items_to_plot=['type_correct_test_last_epoch_es', 'type_correct_test_last_epoch_es']
+                                    items_to_plot=['type_correct_test_last_epoch_ES', 'type_correct_test_last_epoch_ES']
                                     , legend=('ES', 'EN'), fname='type_correct_test_last_epoch')
                 if self.summary_sim:
-                    simulation_logger.info("type_correct_last_epoch_test_es: %s\ntype_correct_test_last_epoch_en: %s" %
-                                           (self.cs_results['type_correct_test_last_epoch_es'],
-                                            self.cs_results['type_correct_test_last_epoch_en']))
+                    simulation_logger.info("type_correct_last_epoch_test_ES: %s\ntype_correct_test_last_epoch_EN: %s" %
+                                           (self.cs_results['type_correct_test_last_epoch_ES'],
+                                            self.cs_results['type_correct_test_last_epoch_EN']))
                 # !------------ Now plot all CS types per epoch  ------------#
                 if self.plot_detailed_cs:
                     for i, cs_type in enumerate(results['all_cs_types']):
                         self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
                                                     legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
-                                                    results=[self.cs_results['type_correct_test_en'][i],
-                                                             self.cs_results['type_correct_test_es'][i]])
+                                                    results=[self.cs_results['type_correct_test_EN'][i],
+                                                             self.cs_results['type_correct_test_ES'][i]])
 
             ############################################################################################################
             if cognate_experiment:
@@ -218,7 +218,7 @@ class Plotter:
                     self.plot_bar_chart(label='CS types (%% of %s set - last epoch)' % 'test', legend=legend,
                                         items_to_plot=items_to_plot, fname='type_cs_cognate_experiment_last_epoch')
                     if self.summary_sim:
-                        simulation_logger.info("type_test_enes: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
+                        simulation_logger.info("type_test_ENES: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
                                                (self.cs_results['type_correct_test_last_epoch'],
                                                 self.cs_results['type_correct_test_last_epoch-ff'],
                                                 self.cs_results['type_correct_test_last_epoch-cog']))
