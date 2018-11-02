@@ -1,4 +1,4 @@
-from modules.formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array
+from modules.formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array_or_list
 import matplotlib
 
 matplotlib.use('Agg')  # needed for the server only
@@ -18,43 +18,24 @@ class Plotter:
         self.plot_detailed_cs = False
         # blue, orange, green, brown, purple, grey, red, yellowgreen
         self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
-        #self.colors = [('darkslateblue', 'olivedrab'), ('deepskyblue', 'yellowgreen')]
         self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999')]
-        self.color_bars = ['#4daf4a', '#984ea3', '#dede00']
-        # self.color_bars = ['yellowgreen', 'g', 'greenyellow']
+        self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c','#377eb8', '#ff7f00', '#4daf4a',
+                           '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
                                legend_loc='upper right'):
         for item_idx, item_to_plot in enumerate(items_to_plot):
-            if isinstance(test_percentage, int):
-                test_value = [percentage(val, test_percentage)
-                              for val in self.results[item_to_plot]['test']]
-            elif is_nd_array(test_percentage) or isinstance(test_percentage, list):
-                test_value = [percentage(val, test_percentage[i])
-                              for i, val in enumerate(self.results[item_to_plot]['test'])]
-            else:
-                test_value = self.results[item_to_plot]['test']
+            test_value = percentage(self.results[item_to_plot]['test'], test_percentage)
             plt.plot(self.epochs, test_value, color=self.colors[item_idx][0], label=item_to_plot)
             if 'test-std_error' in self.results[item_to_plot]:
                 test_std_error = self.results[item_to_plot]['test-std_error']
-                lower_bound = self.results[item_to_plot]['test'] - test_std_error
-                upper_bound = self.results[item_to_plot]['test'] + test_std_error
-                if isinstance(test_percentage, int):
-                    lower_bound = [percentage(x, test_percentage)
-                                   for x in lower_bound]
-                    upper_bound = [percentage(x, test_percentage)
-                                   for x in upper_bound]
-                elif is_nd_array(test_percentage):
-                    lower_bound = [percentage(x, test_percentage[i])
-                                   for i, x in enumerate(lower_bound)]
-                    upper_bound = [percentage(x, test_percentage[i])
-                                   for i, x in enumerate(upper_bound)]
+                lower_bound = percentage(self.results[item_to_plot]['test'] - test_std_error, test_percentage)
+                upper_bound = percentage(self.results[item_to_plot]['test'] + test_std_error, test_percentage)
                 plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.colors[item_idx][0], alpha=0.1)
 
             if is_not_empty(self.results[item_to_plot]['training']):
                 if training_percentage:
-                    training_value = [percentage(val, training_percentage[i])
-                                      for i, val in enumerate(self.results[item_to_plot]['training'])]
+                    training_value = percentage(self.results[item_to_plot]['training'], training_percentage)
                 else:
                     training_value = self.results[item_to_plot]['training']
                 plt.plot(self.epochs, training_value, color=self.colors[item_idx][1],
@@ -70,12 +51,19 @@ class Plotter:
 
     def plot_cs_type_over_time(self, label, results, legend, fname, legend_loc='upper right', ylim=10):
         for i, result in enumerate(results):
-            if max(result[0]) > ylim:
-                ylim = max(result[0])
-            plt.plot(self.epochs, result[0], color=self.colors[i][0], label=legend[i])
-            lower_bound = [x - y for x, y in zip(result[0], result[1])]
-            upper_bound = [x + y for x, y in zip(result[0], result[1])]
-            plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.colors[i][0], alpha=0.1)
+            if is_nd_array_or_list(result):
+                if max(result) > ylim:
+                    ylim = max(result)
+                plt.plot(self.epochs, result, color=self.color_bars[i], label=legend[i])
+            else:
+                #print(result)
+                #print('ELSE')
+                if max(result[0]) > ylim:
+                    ylim = max(result[0])
+                plt.plot(self.epochs, result[0], color=self.color_bars[i], label=legend[i])
+                lower_bound = [x - y for x, y in zip(result[0], result[1])]
+                upper_bound = [x + y for x, y in zip(result[0], result[1])]
+                plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.color_bars[i], alpha=0.1)
         plt.xlabel('epochs')
         plt.ylabel(label)
         plt.ylim([0, ylim])
@@ -108,10 +96,9 @@ class Plotter:
         plt.close()
 
     def plot_results(self, results, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
-                     cognate_experiment, plot_mse=True):
+                     cognate_experiment, auxiliary_experiment, plot_mse=True):
         correct_test = results['correct_meaning']['test']
         type_code_switches_test = results['type_code_switches']['test']
-
         if not self.epochs:
             self.epochs = range(len(correct_test))
             self.num_epochs = len(self.epochs)
@@ -141,12 +128,10 @@ class Plotter:
                 for lang in ['ES', 'EN']:
                     cs_type_per_lang = "%s-%s" % (lang, cs_type)
                     if cs_type_per_lang in type_code_switches_test:  # if we include training set we need to edit this
-                        # all epochs
-                        cs_percentage_correct = [percentage(x, correct_test[i])
-                                                 for i, x in enumerate(type_code_switches_test[cs_type_per_lang])]
+                        cs_percentage_correct = percentage(type_code_switches_test[cs_type_per_lang], correct_test)
                         if self.summary_sim and "%s-std_error" % cs_type_per_lang in type_code_switches_test:
-                            std_err = [percentage(x, correct_test[i]) for i, x in
-                                       enumerate(type_code_switches_test["%s-std_error" % cs_type_per_lang])]
+                            std_err = percentage(type_code_switches_test["%s-std_error" % cs_type_per_lang],
+                                                 correct_test)
                         else:
                             std_err = [0] * len(correct_test)
                         self.cs_results['type_correct_test_%s' % lang].append((cs_percentage_correct, std_err))
@@ -175,6 +160,37 @@ class Plotter:
                                                     results=[self.cs_results['type_correct_test_EN'][i],
                                                              self.cs_results['type_correct_test_ES'][i]])
 
+                if auxiliary_experiment:
+                    #print(self.results)
+                    res = []
+                    legend = []
+                    for aux in ['is', 'has']:
+                        for point in ['participle', 'aux', 'after']:
+                            index = '%s_%s' % (aux, point)
+                            if index in self.results:
+                                legend.append(index)
+                                # normalize using correct_code_switches
+                                if 'test-std_error' in self.results[index]:
+                                    res.append((percentage(self.results[index]['test'], correct_code_switches),
+                                                percentage(self.results[index]['test-std_error'], correct_code_switches)
+                                                ))
+                                else:
+                                    res.append(percentage(self.results[index]['test'], correct_code_switches))
+
+                    if res:
+                        self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
+                                                    legend=legend,
+                                                    fname='auxiliary_test', results=res)
+                        # now exclude the _after categories:
+                        for keyword in ['has_after', 'is_after']:
+                            idx = legend.index(keyword)
+                            if idx:
+                                del legend[idx]
+                                del res[idx]
+                        self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
+                                                    legend=legend,
+                                                    fname='auxiliary_test_no_after', results=res)
+
             ############################################################################################################
             if cognate_experiment:
                 # for dataset_type in ['test']:  # ['training', 'test']:
@@ -188,12 +204,10 @@ class Plotter:
                         cs_type_per_key = "%s%s" % (cs_type, key)
                         if cs_type_per_key in type_code_switches_test:
                             # all epochs
-                            cs_percentage_correct = [percentage(x, correct_test[i])
-                                                     for i, x in
-                                                     enumerate(type_code_switches_test[cs_type_per_key])]
+                            cs_percentage_correct = percentage(type_code_switches_test[cs_type_per_key], correct_test)
                             if self.summary_sim and "%s-std_error" % cs_type_per_key in type_code_switches_test:
-                                std_err = [percentage(x, correct_test[i]) for i, x in
-                                           enumerate(type_code_switches_test["%s-std_error" % cs_type_per_key])]
+                                std_err = percentage(type_code_switches_test["%s-std_error" % cs_type_per_key],
+                                                     correct_test)
                             else:
                                 std_err = [0] * len(correct_test)
                             self.cs_results['type_correct_test%s' % key].append((cs_percentage_correct, std_err))
@@ -203,8 +217,8 @@ class Plotter:
                             if key == '-ff':
                                 include_ff = True
                         else:
-                            self.cs_results['type_correct_test%s' % key].append(
-                                ([0] * self.num_epochs, [0] * self.num_epochs))
+                            self.cs_results['type_correct_test%s' % key].append(([0] * self.num_epochs,
+                                                                                 [0] * self.num_epochs))
                             self.cs_results['type_correct_test_last_epoch%s' % key].append((0, 0))
 
                 # make sure there is still something to be plotted after the manipulations
@@ -232,10 +246,9 @@ class Plotter:
                         self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
                                                     fname='cognate_experiment_%s' % cs_type,
                                                     results=results_lst, legend=legend)
-
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
-        if ((isinstance(results['pronoun_errors']['test'], list) or is_nd_array(results['pronoun_errors']['test'])) and
-                (sum(results['pronoun_errors_flex']['test']) or sum(results['pronoun_errors']['test']))):
+        if (is_nd_array_or_list(results['pronoun_errors']['test']) and (sum(results['pronoun_errors_flex']['test']) or
+                                                                        sum(results['pronoun_errors']['test']))):
             print("pronoun", type(results['pronoun_errors']['test']))
             self.plot_changes_over_time(items_to_plot=['pronoun_errors', 'pronoun_errors_flex'],
                                         label='Sum of subject pronoun errors', fname='pronoun_errors')

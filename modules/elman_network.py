@@ -44,46 +44,31 @@ class SimpleRecurrentNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def reset_weights(self, results_dir, set_weights_folder=None, set_weights_epoch=0, plot_stats=False,
-                      simulation_num=None):
-        if not os.path.isdir('%s/weights' % results_dir):
-            # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
-            # exception even though we have checked.
-            if self.python_version.startswith('3'):
-                os.makedirs('%s/weights' % results_dir, exist_ok=True)
-            else:
-                try:
-                    os.mkdir('%s/weights' % results_dir)
-                except IOError:
-                    print('%s/weights already exists' % results_dir)
-        np.random.seed(simulation_num if not None else 18)  # set number of simulation as the seed
+    def load_weights(self, results_dir, set_weights_folder, plot_stats, set_weights_epoch, simulation_num=None):
+        if not set_weights_folder:
+            self._create_dir_if_not_exists(results_dir)
+            np.random.seed(simulation_num if not None else 18)  # set number of simulation as the seed
+
         stats = defaultdict(list)
         for layer in self.layers:
             if not layer.in_size:
                 continue
             # weights folder should contain the same num of simulations (or more)
-            if set_weights_folder and set_weights_epoch > 0:
-                w_dir = os.path.join(set_weights_folder, str(simulation_num) if simulation_num is not None else "",
-                                     "weights")
-                weights_fname = "weights_%s%s.npz" % (layer.name,
-                                                      "_%s" % set_weights_epoch
-                                                      if set_weights_epoch is not None else "")
+            if set_weights_folder:
+                w_dir = os.path.join(set_weights_folder, "weights")
+                weights_fname = "weights_%s_%s.npz" % (layer.name, set_weights_epoch)
                 layer.in_weights = np.load(os.path.join(w_dir, weights_fname))['arr_0']
             else:
                 layer.sd = 0.05  # or calculate according to input size: input_sd(layer.in_size)
-                # Using random weights with mean = 0 and low variance is CRUCIAL.
-                # np.random.standard_normal has variance of 1, which is high,
-                # and np.random.uniform doesn't always have mean = 0.
+                # Using random weights with μ = 0 and low variance is CRUCIAL.
+                # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 mean = 0
                 layer.in_weights = np.random.normal(mean, layer.sd, size=[layer.in_size + int(layer.has_bias),
                                                                           layer.size])
-                # np.random.normal(mean, layer.sd, size=[]) in numpy
-                #layer.in_weights = np.random_normal(mean, layer.sd,
-                #                                    shape=[layer.in_size + int(layer.has_bias), layer.size])
                 stats['means'].append(np.mean(layer.in_weights))
                 stats['std'].append(np.std(layer.in_weights))
                 stats['labels'].append(layer.name)
-                np.savez_compressed("%s/weights/weights_%s.npz" % (results_dir, layer.name), layer.in_weights)
+                np.savez_compressed("%s/weights/weights_%s_0.npz" % (results_dir, layer.name), layer.in_weights)
                 if self.debug_messages:
                     with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
                         f.write("name, max, min, mean, std\n"
@@ -96,9 +81,9 @@ class SimpleRecurrentNetwork:
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
-    def save_weights(self, results_dir, epochs=0):
+    def save_weights(self, results_dir, epoch):
         for layer in self.get_layers_for_backpropagation():
-            np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epochs), layer.in_weights)
+            np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
 
     def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act, reset=True):
         weights_concept_role = updated_role_concept.T
@@ -120,7 +105,6 @@ class SimpleRecurrentNetwork:
             event_sem.activation = convert_range(event_sem_activations)
         else:
             event_sem.activation = event_sem_activations
-
         self.update_layer_activation("target_lang", activation=target_lang_act)
 
         if reset:
@@ -151,10 +135,7 @@ class SimpleRecurrentNetwork:
         if input_idx:  # at the beginning of sentence, input_idx is None
             input_layer.activation[input_idx] = 1
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
-            #print(input_layer.activation)
             input_layer.activation = convert_range(input_layer.activation)
-            #print(input_layer.activation)
-            #print('---------------------')
 
         if target_idx is not None:  # no need to set target when testing
             output_layer = self.get_layer("output")
@@ -171,7 +152,7 @@ class SimpleRecurrentNetwork:
     def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
             sys.exit('The network was not been initialized correctly. Make sure you have added layers (add_layer), '
-                     'connected them (connect_layers) and reset the weights (reset_weights)')
+                     'connected them (connect_layers) and (re)set the weights')
 
         for layer in self.layers:
             if not layer.in_layers:
@@ -295,6 +276,18 @@ class SimpleRecurrentNetwork:
                 error = self.current_layer.total_error[layer_start:layer_start + prev_layer.size]
                 prev_layer.error_out.append(error)
             layer_start += prev_layer.size
+
+    def _create_dir_if_not_exists(self, results_dir):
+        if not os.path.isdir('%s/weights' % results_dir):
+            # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
+            # exception even though we have checked.
+            if self.python_version.startswith('3'):
+                os.makedirs('%s/weights' % results_dir, exist_ok=True)
+            else:
+                try:
+                    os.mkdir('%s/weights' % results_dir)
+                except IOError:
+                    print('%s/weights already exists' % results_dir)
 
     def get_layer(self, layer_name):
         layer = [x for x in self.layers if x.name is layer_name]

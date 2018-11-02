@@ -38,10 +38,6 @@ class InputFormatter:
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
-        """self.translation_dict = {'-a': '-s', '-ó': '-ed', 'a_': 'to', '.': '.', 'está': 'is', 'estaba': 'was',
-                                 'un': 'a', 'una': 'a', 'el': 'the', 'la': 'the',
-                                 '-ando': '-ing', 'ella': 'she', 'él': 'he'}
-        self.reverse_translation_dict = {v: k for k, v in self.translation_dict.iteritems()}"""
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -187,7 +183,8 @@ class InputFormatter:
             cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
                 return cs_type
-        return False  # no CS type found
+        # no CS type found. Either the meaning was incorrect or the produced lang was different than the "target" one
+        return False
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
         if trg_lang_word_idx < self.code_switched_idx:
@@ -222,7 +219,7 @@ class InputFormatter:
                 cs_type = "congruent lex."
         return cs_type
 
-    def is_code_switched(self, sentence_indeces, target_lang):
+    def is_code_switched(self, sentence_indeces, target_lang_idx):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
         # skip indeces that are common in all lang
@@ -231,17 +228,30 @@ class InputFormatter:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
         if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-             all(x < self.code_switched_idx for x in min_and_max_idx)) and
-                self.morpheme_is_from_target_lang(clean_sentence[0], target_lang)):
+                all(x < self.code_switched_idx for x in min_and_max_idx))
+                and self.morpheme_is_from_target_lang(clean_sentence[0], target_lang_idx)):
             return False
         return True
 
-    def morpheme_is_from_target_lang(self, morpheme_idx, target_lang):
+    def check_switch_points(self, sentence_indeces, pos_of_interest='aux'):
+        pos = self.sentence_indeces_pos(sentence_indeces)
+        pos_idx = pos.index(pos_of_interest)
+
+        # check switch before pos_of_interest
+        at = self.is_code_switched(sentence_indeces[:pos_idx+1], target_lang_idx=sentence_indeces[0])
+        # check switch right after (e.g. between aux and participle)
+        right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx+2],
+                                            target_lang_idx=sentence_indeces[pos_idx])
+        # check switch at the end (e.g. after aux and participle)
+        after = self.is_code_switched(sentence_indeces[pos_idx+2:], target_lang_idx=sentence_indeces[pos_idx+1])
+        return at, right_after, after
+
+    def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
         """
         Assumption: this doesn't check for shared indeces (period/congates) because they have already been stripped
         """
-        if ((target_lang == self.L1 and morpheme_idx < self.code_switched_idx) or
-                (target_lang == self.L2 and morpheme_idx >= self.code_switched_idx)):
+        if (all(x >= self.code_switched_idx for x in [morpheme_idx, target_idx]) or
+                all(x < self.code_switched_idx for x in [morpheme_idx, target_idx])):
             return True
         return False
 
@@ -563,8 +573,8 @@ def get_np_mean(x, summary_sim=None):
     return 0
 
 
-def is_nd_array(x):
-    if isinstance(x, np.ndarray):
+def is_nd_array_or_list(x):
+    if isinstance(x, (list, np.ndarray)):
         return True
     return False
 
@@ -574,9 +584,16 @@ def standard_error(std, num_simulations):
 
 
 def percentage(x, total):
-    if total == 0:
+    if isinstance(total, int) and total == 0:
         return float('NaN')
-    return np.true_divide(x * 100, total)
+    if isinstance(x, list):
+        x = np.array(x)
+    with np.errstate(divide='raise'):
+        try:
+            np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
+        except:
+            print(x, total)
+    return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
 
 
 def numpy_arange_len(x):
@@ -590,6 +607,7 @@ def compute_mean_and_std(valid_results, epochs):
     """
     results_sum = {}
     all_keys = valid_results[0].keys()
+    # print(all_keys)
     cs_keywords = []
     for sim in valid_results:
         for t in ['test', 'training']:
@@ -597,10 +615,8 @@ def compute_mean_and_std(valid_results, epochs):
                 cs_keywords.extend(sim['type_code_switches'][t].keys())
     cs_keywords = set(cs_keywords)
     for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
-        if key == 'type_code_switches':
-            results_sum[key] = {'training': {}, 'test': {}}
-        else:
-            results_sum[key] = {'training': [], 'test': []}
+        results_sum[key] = {'training': {} if key == 'type_code_switches' else [],
+                            'test': {} if key == 'type_code_switches' else []}
         for simulation in valid_results:  # go through all simulations
             for t in ['training', 'test']:
                 if t in simulation[key] and simulation[key][t]:
@@ -616,6 +632,7 @@ def compute_mean_and_std(valid_results, epochs):
                         results_sum[key][t].append(simulation[key][t])
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in all_keys:
+        # print(key)
         for t in ['training', 'test']:
             if t in results_sum[key] and results_sum[key][t]:
                 if type(results_sum[key][t]) is dict:

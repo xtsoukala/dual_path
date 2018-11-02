@@ -28,7 +28,8 @@ class DualPath:
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, exclude_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
-                 input_class, check_pronouns, ignore_tense_and_det, allow_cognate_boost=False, simulation_num=None):
+                 input_class, pronoun_experiment, auxiliary_experiment, ignore_tense_and_det, only_evaluate,
+                 allow_cognate_boost=False, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -43,7 +44,7 @@ class DualPath:
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
         :param input_class: Instance of InputFormatter Class (contains all the input for the model)
-        :param check_pronouns: Whether to evaluate pronoun production
+        :param pronoun_experiment: Whether to evaluate pronoun production
         :param simulation_num: Number of simulation (useful in case we run several simulations in parallel)
         :param allow_cognate_boost: Whether the non-target language will be boosted after the model produces a cognate
         """
@@ -53,6 +54,7 @@ class DualPath:
         self.simulation_num = simulation_num
         self.training_logger = self.init_logger('training')
         self.test_logger = self.init_logger('test')
+        self.only_evaluate = only_evaluate
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -65,8 +67,11 @@ class DualPath:
         self.ignore_tense_and_det = ignore_tense_and_det
         self.allow_cognate_boost = allow_cognate_boost
         self.exclude_lang = exclude_lang
-        self.check_pronouns = check_pronouns
-        if check_pronouns:
+        self.pronoun_experiment = pronoun_experiment
+        self.auxiliary_experiment = auxiliary_experiment
+        if self.auxiliary_experiment:
+            self.auxiliary_logger = self.init_logger('auxiliary')
+        if pronoun_experiment:
             self.pronoun_logger = self.init_logger('pronouns')
         self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
@@ -78,13 +83,6 @@ class DualPath:
                                           include_role_copy=role_copy,
                                           include_input_copy=input_copy)
         self.initialize_srn()
-        self.results = {'correct_meaning': {'test': [], 'training': []},
-                        'correct_pos': {'test': [], 'training': []},
-                        'pronoun_errors_flex': {'test': [], 'training': []},
-                        'pronoun_errors': {'test': [], 'training': []},
-                        'correct_code_switches': {'test': [], 'training': []},
-                        'all_code_switches': {'test': [], 'training': []},
-                        'type_code_switches': {'test': [], 'training': []}}
 
     def init_logger(self, name):
         logger = logging.getLogger("%s_%s" % (name, self.simulation_num))
@@ -136,8 +134,10 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        self.srn.reset_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
-                               simulation_num=self.simulation_num, results_dir=self.inputs.results_dir)
+        if not self.only_evaluate:  # else they will be loaded again at the evaluate_network phrase
+            self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
+                                  results_dir=self.inputs.results_dir, plot_stats=False,
+                                  simulation_num=self.simulation_num)
 
     def feed_line(self, line, epoch=None, backpropagate=False):
         produced_sent_ids = []
@@ -173,7 +173,7 @@ class DualPath:
 
         return produced_sent_ids, target_sentence_ids, message, lang
 
-    def start_network(self, shuffle_set, plot_results, evaluate_test_set, evaluate_training_set, training=True):
+    def start_network(self, shuffle_set, plot_results, evaluate_test_set, evaluate_training_set):
         """
         :param shuffle_set: Whether to shuffle the training set after each iteration
         :param plot_results: Whether to plot the performance
@@ -189,192 +189,189 @@ class DualPath:
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         """
-        # random.seed(self.simulation_num if self.simulation_num else 18)
+        if not self.only_evaluate:
+            epoch = 0
+            while epoch < self.epochs:  # start training for x epochs
+                if shuffle_set:
+                    np.random.shuffle(self.inputs.trainlines)
 
-        if evaluate_test_set and evaluate_training_set:  # start multiprocessing when evaluating both
-            manager = mp.Manager()
-            test_results = manager.dict()
-            train_results = manager.dict()
-        else:
-            test_results = {}
-
-        epoch = 0
-        while epoch < self.epochs:  # start training for x epochs
-            if epoch > 0 and training:
-                self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)
-
-            if shuffle_set:
-                np.random.shuffle(self.inputs.trainlines)  # np.random.shuffle
-
-            if evaluate_test_set and epoch % self.test_every == 0:
-                if not evaluate_training_set:  # no need to run multiprocessing if we only evaluate the test set
-                    self.evaluate_network(test_results, epoch, self.inputs.testlines,
-                                          self.inputs.num_test, self.check_pronouns if epoch > 0 else False)
-                else:
-                    subprocesses = []
-                    subprocess = mp.Process(target=self.evaluate_network, args=(test_results, epoch,
-                                                                                self.inputs.testlines,
-                                                                                self.inputs.num_test,
-                                                                                self.check_pronouns
-                                                                                if epoch > 0 else False))
-                    subprocess.start()
-                    subprocesses.append(subprocess)
-                    if evaluate_training_set:
-                        subprocess = mp.Process(target=self.evaluate_network, args=(train_results, epoch,
-                                                                                    self.inputs.trainlines,
-                                                                                    self.inputs.num_train,
-                                                                                    self.check_pronouns
-                                                                                    if epoch > 0 else False,
-                                                                                    False))
-                        subprocess.start()
-                        subprocesses.append(subprocess)
-                    for sp in subprocesses:
-                        sp.join()
-            if training:
                 for train_line in self.inputs.trainlines:  # start training
                     self.feed_line(train_line, epoch, backpropagate=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
                         self.srn.learn_rate -= self.lrate_decrease_step
-            else:  # load inputs
-                self.srn.reset_weights(set_weights_epoch=epoch, set_weights_folder=self.set_weights_folder,
-                                       simulation_num=self.simulation_num, results_dir=self.inputs.results_dir)
-            epoch += 1  # increase number of epochs, begin new iteration
+                epoch += 1  # increase number of epochs, begin new iteration
+                self.srn.save_weights(results_dir=self.inputs.results_dir, epoch=epoch)
 
-        if training:
-            self.srn.save_weights(results_dir=self.inputs.results_dir, epochs=epoch)  # save the last weights
-
+        if evaluate_training_set:
+            self.evaluate_network(set_name='training', plot_results=plot_results)
         if evaluate_test_set:
-            self.update_results(test_results)
-            if evaluate_training_set:
-                self.update_results(train_results, type_set='training')
+            self.evaluate_network(set_name='test', plot_results=plot_results)
 
-            cs_keys = []
-            if self.results['type_code_switches']['test']:
-                cs_keys = self.results['type_code_switches']['test'].keys()
-            if self.results['type_code_switches']['training']:
-                cs_keys += self.results['type_code_switches']['training'].keys()
-            self.results['all_cs_types'] = set([re.sub("ES-|EN-|-cog|-ff", "", k) for k in cs_keys])
-
-            # write (single) simulation results to a pickled file
-            with open("%s/results.pickled" % self.inputs.results_dir, 'wb') as pckl:
-                pickle.dump(self.results, pckl)
-
-            if plot_results:
-                self.results['mse'] = self.srn.mse
-                plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None, title=None)
-                plt.plot_results(self.results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
-                                 cognate_experiment=args.cognate_experiment, simulation_logger=simulation_logger,
-                                 test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
-
-    def update_results(self, temp_results, type_set='test'):
-        for sim_id in range(self.epochs):
-            for key in self.results.keys():
-                self.results[key][type_set].append(temp_results[sim_id][key] if key in temp_results[sim_id] else 0)
-        self.aggregate_dict(type_set=type_set)
-
-    def evaluate_network(self, results_dict, epoch, set_lines, num_sentences, check_pron, is_test_set=True):
+    def evaluate_network(self, set_name, plot_results):
         """
-        :param results_dict: Dictionary that contains evaluation results for all epochs
-        :param epoch: Number of epoch
-        :param set_lines: the set lines (message+sentence) that are used for the evaluation
-        :param num_sentences: the size of set_lines
-        :param check_pron: Whether to evaluate pronoun production
-        :param is_test_set: Whether it is a test set (otherwise a training set is used)
+        :param set_name: 'test' or 'training'
+        :param plot_results: whether to plot results
         """
-        counter = defaultdict(int)
-        counter['type_code_switches'] = defaultdict(int)
-        logger = self.test_logger if is_test_set else self.training_logger
-        cs_cog = 0
-        cs_enes = 0
-        for line in set_lines:
-            produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
-            has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = False, False, False, False, None
-            is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_sentence_idx,
-                                                                                        target_sentence_idx)
-            code_switched = self.inputs.is_code_switched(produced_sentence_idx, target_lang=lang)
-            if code_switched:
-                counter['all_code_switches'] += 1
-                if ',COG' in message:
-                    cs_cog += 1
-                else:
-                    cs_enes += 1
-            if is_grammatical:
-                counter['correct_pos'] += 1
-                has_correct_pos = True
+        results = {'correct_meaning': {'test': [], 'training': []},
+                   'correct_pos': {'test': [], 'training': []},
+                   'pronoun_errors_flex': {'test': [], 'training': []},
+                   'pronoun_errors': {'test': [], 'training': []},
+                   'correct_code_switches': {'test': [], 'training': []},
+                   'all_code_switches': {'test': [], 'training': []},
+                   'type_code_switches': {'test': [], 'training': []}}
+        if self.auxiliary_experiment:
+            for aux in ['is', 'has']:
+                for point in ['participle', 'aux', 'after']:
+                    results['%s_%s' % (aux, point)] = {'test': [], 'training': []}
 
-                if code_switched:  # only count grammatically correct sentences
-                    # determine CS type here
-                    cs_type = self.inputs.get_code_switched_type(produced_sentence_idx, target_sentence_idx)
-                    if cs_type:  # TODO: it could be interesting to check the failed sentences too
-                        correct_meaning = True
-                        counter['correct_code_switches'] += 1
-                        cs_type_with_lang = "%s-%s" % (lang, cs_type)
-                        counter['type_code_switches'][cs_type_with_lang] += 1
+        if set_name == 'test':
+            set_lines = self.inputs.testlines
+            num_sentences = self.inputs.num_test
+        else:
+            set_lines = self.inputs.trainlines
+            num_sentences = self.inputs.num_train
 
-                        # check for cognates vs FFs vs regular (no lang)
-                        if ',COG' in message:
-                            cs_type_with_cognate_status = "%s-cog" % cs_type
-                        elif ',FF' in message:
-                            cs_type_with_cognate_status = "%s-ff" % cs_type
-                        else:  # no cognates or false friends
-                            cs_type_with_cognate_status = cs_type
-                        counter['type_code_switches'][cs_type_with_cognate_status] += 1
-                else:
-                    correct_meaning = self.inputs.has_correct_meaning(produced_sentence_idx, target_sentence_idx)
+        logger = self.test_logger if set_name == 'test' else self.training_logger
+        epoch = 0
+        while epoch < self.epochs:  # start training for x epochs
+            counter = defaultdict(int)
+            counter['type_code_switches'] = defaultdict(int)
+            self.srn.load_weights(results_dir=self.inputs.results_dir, set_weights_folder=self.inputs.results_dir,
+                                  set_weights_epoch=epoch, plot_stats=False)
+            for line in set_lines:
+                produced_sentence_idx, target_sentence_idx, message, lang = self.feed_line(line)
+                has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
+                                                                                             False, None)
+                is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_sentence_idx,
+                                                                                            target_sentence_idx)
+                code_switched = self.inputs.is_code_switched(produced_sentence_idx,
+                                                             target_lang_idx=target_sentence_idx[0])
+                if code_switched:
+                    counter['all_code_switches'] += 1
+                    if ',COG' in message:
+                        counter['cs_cog'] += 1
+                    else:
+                        counter['cs_nongcog'] += 1
+                if is_grammatical:
+                    counter['correct_pos'] += 1
+                    has_correct_pos = True
 
-                if correct_meaning:
-                    counter['correct_meaning'] += 1
-                else:
-                    has_wrong_det = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
-                                                                     feature="determiners")
-                    has_wrong_tense = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
-                                                                       feature="tense")
-                    if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
-                        counter['correct_meaning'] += 1  # if the only mistake was the determiner, count it as correct
+                    if code_switched:  # only count grammatically correct sentences
+                        # determine CS type here
+                        cs_type = self.inputs.get_code_switched_type(produced_sentence_idx, target_sentence_idx)
+                        if cs_type:  # TODO: it could be interesting to check the failed sentences too
+                            correct_meaning = True
+                            counter['correct_code_switches'] += 1
+                            cs_type_with_lang = "%s-%s" % (lang, cs_type)
+                            counter['type_code_switches'][cs_type_with_lang] += 1
 
-                if check_pron:  # only check the grammatical sentences
-                    correctedness_status = ""
-                    if self.inputs.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
-                        if self.inputs.test_meaning_without_pronouns(produced_sentence_idx, target_sentence_idx):
-                            counter['pronoun_errors'] += 1
-                        else:
-                            correctedness_status = "(POS only)"
-                            # flex: grammatically correct sentences with gender error that convey wrong meaning
-                            counter['pronoun_errors_flex'] += 1
+                            # check for cognates vs FFs vs regular (no lang)
+                            if ',COG' in message:
+                                cs_type_with_cognate_status = "%s-cog" % cs_type
+                            elif ',FF' in message:
+                                cs_type_with_cognate_status = "%s-ff" % cs_type
+                            else:  # no cognates or false friends
+                                cs_type_with_cognate_status = cs_type
+                            counter['type_code_switches'][cs_type_with_cognate_status] += 1
 
-                        self.pronoun_logger.info("--------%s (%s)--------%s\nOUT:%s\nTRG:%s\n%s\n" %
-                                                 (epoch, "test" if is_test_set else "training", correctedness_status,
-                                                  self.inputs.sentence_from_indeces(produced_sentence_idx),
-                                                  self.inputs.sentence_from_indeces(target_sentence_idx), message))
-            if epoch > 0:
-                suffix = ("flex-" if (flexible_order and correct_meaning) or has_wrong_det or has_wrong_tense
-                          else "in" if not correct_meaning else "")
-                logger.info("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s Meaning:"
-                            "%scorrect %s\n%s" %
-                            (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
-                             self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
-                             not has_wrong_tense, not has_wrong_det,
-                             suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
-                                             if code_switched else ""), message))
-        # on the set level
-        logger.info("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s" %
-                    (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))
-        results_dict[epoch] = counter
+                            if self.auxiliary_experiment:
+                                if ',PERFECT' in message or ',PROG' in message:
+                                    switched_at, switched_participle, switched_after = self.inputs.check_switch_points(produced_sentence_idx)
+                                    self.auxiliary_logger.info("%s - %s - %s (%s %s %s) - %s" %
+                                                               (epoch,
+                                                                self.inputs.sentence_from_indeces(produced_sentence_idx)
+                                                                , cs_type, switched_at, switched_participle, switched_after, message))
+                                    if 'PRESENT,PERFECT' in message:
+                                        aux = 'has'
+                                    else:
+                                        aux = 'is'
 
-    def aggregate_dict(self, type_set):
-        # convert "type_code_switches" from list of dicts
-        # (e.g, [[{'ES-noun': 4, 'EN-alternational': 1}][{'ES-noun': 6, 'EN-alternational': 8}]])
-        # to a single dict of list (e.g., {'EN-alternational': [1, 6, 14], 'ES-noun': [4, 8, 22]}
-        types_dict = {}
-        all_keys = sorted(set().union(*(d.keys() for d in self.results['type_code_switches'][type_set])))
-        for key in all_keys:
-            val = []
-            for epoch in range(self.epochs):
-                v = self.results['type_code_switches'][type_set][epoch][key] \
-                    if key in self.results['type_code_switches'][type_set][epoch] else 0
-                val.append(v)
-            types_dict[key] = val
-        self.results['type_code_switches'][type_set] = types_dict
+                                    if switched_participle:
+                                        counter['%s_participle' % aux] += 1
+                                    elif switched_at:
+                                        counter['%s_aux' % aux] += 1
+                                    else:
+                                        counter['%s_after' % aux] += 1
+                    else:
+                        correct_meaning = self.inputs.has_correct_meaning(produced_sentence_idx, target_sentence_idx)
+
+                    if correct_meaning:
+                        counter['correct_meaning'] += 1
+                    else:
+                        has_wrong_det = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
+                                                                         feature="determiners")
+                        has_wrong_tense = self.inputs.test_without_feature(produced_sentence_idx, target_sentence_idx,
+                                                                           feature="tense")
+                        if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
+                            counter['correct_meaning'] += 1  # if the only mistake is the determiner count it as correct
+
+                    if epoch > 0 and self.pronoun_experiment:  # only check the grammatical sentences
+                        if self.inputs.has_pronoun_error(produced_sentence_idx, target_sentence_idx):
+                            meaning = False
+                            if self.inputs.test_meaning_without_pronouns(produced_sentence_idx, target_sentence_idx):
+                                counter['pronoun_errors'] += 1
+                                meaning = True
+                            else:  # flex: grammatically correct sentences with gender error that convey wrong meaning
+                                counter['pronoun_errors_flex'] += 1
+                            self.pronoun_logger.info("--------%s--------\nOUT:%s\nTRG:%s\n(Correct meaning: %s) %s" %
+                                                     (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
+                                                      self.inputs.sentence_from_indeces(target_sentence_idx), meaning,
+                                                      message))
+                if epoch > 0:
+                    suffix = ("flex-" if (flexible_order and correct_meaning) or has_wrong_det or has_wrong_tense
+                              else "in" if not correct_meaning else "")
+                    logger.info("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s Meaning:"
+                                "%scorrect %s\n%s" %
+                                (epoch, self.inputs.sentence_from_indeces(produced_sentence_idx),
+                                 self.inputs.sentence_from_indeces(target_sentence_idx), has_correct_pos,
+                                 not has_wrong_tense, not has_wrong_det,
+                                 suffix, "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
+                                                 if code_switched else ""), message))
+            # on the set level
+            logger.info("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s" %
+                        (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))
+            for key in results.keys():
+                results[key][set_name].append(counter[key])
+
+            epoch += 1
+
+        results['type_code_switches'][set_name] = aggregate_dict(self.epochs, results['type_code_switches'][set_name])
+        results['all_cs_types'] = extract_cs_keys(results['type_code_switches'])
+
+        # write (single) simulation results to a pickled file
+        with open("%s/results.pickled" % self.inputs.results_dir, 'wb') as pckl:
+            pickle.dump(results, pckl)
+
+        if plot_results:
+            results['mse'] = self.srn.mse
+            plt = Plotter(results_dir=self.inputs.results_dir, summary_sim=None, title=None)
+            plt.plot_results(results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
+                             cognate_experiment=args.cognate_experiment, simulation_logger=simulation_logger,
+                             test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun,
+                             auxiliary_experiment=self.auxiliary_experiment)
+
+
+def extract_cs_keys(type_code_switches):
+    cs_keys = []
+    for set_type in ['test', 'training']:
+        if type_code_switches[set_type]:
+            cs_keys += type_code_switches['test'].keys()
+    return set([re.sub("ES-|EN-|-cog|-ff", "", k) for k in cs_keys])
+
+
+def aggregate_dict(epochs, results_type_code_switches):
+    # convert "type_code_switches" from list of dicts
+    # (e.g, [[{'ES-noun': 4, 'EN-alternational': 1}][{'ES-noun': 6, 'EN-alternational': 8}]])
+    # to a single dict of list (e.g., {'EN-alternational': [1, 6, 14], 'ES-noun': [4, 8, 22]}
+    types_dict = {}
+    all_keys = sorted(set().union(*(d.keys() for d in results_type_code_switches)))
+    for key in all_keys:
+        val = []
+        for epoch in range(epochs):
+            v = results_type_code_switches[epoch][key] if key in results_type_code_switches[epoch] else 0
+            val.append(v)
+        types_dict[key] = val
+    return types_dict
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -462,9 +459,9 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=float, default=30,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=30,
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=float, default=10,
+    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
@@ -477,9 +474,9 @@ if __name__ == "__main__":
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in ES')
-    parser.add_argument('-threshold', help='Threshold for performance of simulations. Any simulations that performs has'
-                                           ' a percentage of correct sentences < threshold are discarded',
-                        type=int, default=80)
+    parser.add_argument('-threshold', type=int, default=50,
+                        help='Threshold for performance of simulations. Any simulations that performs has a percentage '
+                             'of correct sentences < threshold are discarded')
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -506,9 +503,9 @@ if __name__ == "__main__":
     parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
                         help='Do not shuffle training set after every epoch')
     parser.set_defaults(shuffle=True)
-    parser.add_argument('--noeval', dest='evaluate_sets', action='store_false',
-                        help='Do not evaluate test and training sets')
-    parser.set_defaults(evaluate_sets=True)
+    parser.add_argument('--noeval', dest='eval_test', action='store_false',
+                        help='Do not evaluate test set')
+    parser.set_defaults(eval_test=True)
     parser.add_argument('--noplot', dest='plot_results', action='store_false',
                         help='Do not plot results')
     parser.set_defaults(plot_results=True)
@@ -525,9 +522,6 @@ if __name__ == "__main__":
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
-    parser.add_argument('--gender_error_experiment', dest='check_pronouns', action='store_true',
-                        help='Evaluate pronoun production')
-    parser.set_defaults(check_pronouns=False)
     parser.add_argument('--filler', dest='filler', action='store_true',
                         help='Add filler word ("actually", "pues") at the beginning of the sentence')
     parser.set_defaults(filler=False)
@@ -540,6 +534,9 @@ if __name__ == "__main__":
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
                         help='Run auxiliary asymmetry experiment')
     parser.set_defaults(auxiliary_experiment=False)
+    parser.add_argument('--gender_error_experiment', dest='pronoun_experiment', action='store_true',
+                        help='Evaluate pronoun production')
+    parser.set_defaults(pronoun_experiment=False)
     parser.add_argument('--flex_eval', dest='ignore_tense_and_det', action='store_true',
                         help='Ignore mistakes on determiners (definiteness) and tense (past, present)')
     parser.set_defaults(ignore_tense_and_det=False)
@@ -552,13 +549,18 @@ if __name__ == "__main__":
         sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
                  '(args.set_weights_epoch: %s).' % (args.set_weights, args.set_weights_epoch))
 
+    if args.set_weights and not args.only_eval and not args.set_weights_epoch:
+        args.set_weights_epoch = 0
+        logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
+
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
-        args.compress = args.hidden // 3
+        args.compress = args.hidden // 2
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = "simulations/%s%s/%s_%s_%ssim_h%s_c%s" % ((args.resdir if args.resdir else ""),
-                                                            datetime.now().strftime("%Y-%m-%d"),
-                                                            datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
-                                                            args.lang, args.sim, args.hidden, args.compress)
+    results_dir = "simulations/%s%s/%s_%s_%ssim_h%s_c%s_fw%s" % ((args.resdir if args.resdir else ""),
+                                                                 datetime.now().strftime("%Y-%m-%d"),
+                                                                 datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
+                                                                 args.lang, args.sim, args.hidden, args.compress,
+                                                                 args.fw)
     lang_code_to_title = {'EN': 'English monolingual model', 'ES': 'Spanish monolingual model',
                           'EL': 'Greek monolingual model', 'ENES': 'Bilingual EN-ES model',
                           'ESEN': 'Bilingual EN-ES model'}
@@ -567,14 +569,8 @@ if __name__ == "__main__":
     if args.auxiliary_experiment:
         args.cognate_percentage = 0
         args.exclude_lang = True
-        args.exclude_lang = True
         args.full_verb = True
-        args.threshold = 20
-        if not args.input:
-            if not args.lexicon:
-                args.lexicon = 'corpus/lexicon_aux.csv'
-            if not args.structures:
-                args.structures = 'corpus/structures_aux.csv'
+        args.threshold = 30
     elif args.cognate_experiment:
         args.exclude_lang = True
 
@@ -587,7 +583,7 @@ if __name__ == "__main__":
                 args.input = corrected_dir
             else:
                 sys.exit('No input folder found in the path (%s)' % args.input)
-        # TODO: logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
+        logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
         copy_dir(args.input, '%s/input' % results_dir)
         original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
         args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
@@ -665,21 +661,23 @@ if __name__ == "__main__":
                                    (sim, sum(',COG' in l for l in inputs.trainlines) + sum(',FF' in l
                                                                                            for l in inputs.trainlines),
                                     inputs.num_train))
+        if args.set_weights:
+            copy_dir(os.path.join(args.set_weights, "%s/weights" % sim), '%s/weights' % inputs.input_dir)
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
-                         set_weights_folder=args.set_weights, momentum=args.momentum, input_class=inputs,
-                         ignore_tense_and_det=args.ignore_tense_and_det, set_weights_epoch=args.set_weights_epoch,
-                         check_pronouns=args.check_pronouns, simulation_num=sim)
+                         set_weights_folder=inputs.input_dir if args.set_weights else None, momentum=args.momentum,
+                         input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
+                         set_weights_epoch=args.set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
         if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.shuffle, args.plot_results, args.evaluate_sets,
-                                                                   args.eval_train, not args.only_eval))
+            process = mp.Process(target=dualp.start_network, args=(args.shuffle, args.plot_results, args.eval_test,
+                                                                   args.eval_train))
             process.start()
             processes.append(process)
         else:
             dualp.start_network(shuffle_set=args.shuffle, plot_results=args.plot_results,
-                                evaluate_test_set=args.evaluate_sets, evaluate_training_set=args.eval_train,
-                                training=not args.only_eval)
+                                evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_train)
 
     if args.use_multiprocessing:
         for p in processes:
@@ -711,18 +709,18 @@ if __name__ == "__main__":
                                                  sum(simulation['pronoun_errors_flex']['test']) > 0])
                 inputs.results_dir = os.path.split(inputs.results_dir)[0]  # go one folder up and save plot
                 results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
-                # print("%s -> %s" % (args.fw, results_mean_and_std['correct_meaning']['test'][-1]))
+                print("%s -> %s" % (args.fw, results_mean_and_std['correct_meaning']['test'][-1]))
                 with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
                     pickle.dump(results_mean_and_std, pckl)
                 plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title)
                 plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
                                   num_test=inputs.num_test, num_train=inputs.num_train,
-                                  simulation_logger=simulation_logger)
+                                  simulation_logger=simulation_logger, auxiliary_experiment=args.auxiliary_experiment)
                 if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                     simulation_logger.info("Code-switched percentage (test set): %s" %
-                                           [percentage(x, inputs.num_test)
-                                            for x in results_mean_and_std['correct_code_switches']['test']])
+                                           percentage(results_mean_and_std['correct_code_switches']['test'],
+                                                      inputs.num_test))
     layers_with_softmax_act_function = ""
     for layer in dualp.srn.get_layers_for_backpropagation():
         if layer.activation_function == 'softmax':

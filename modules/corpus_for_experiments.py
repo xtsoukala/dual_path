@@ -6,6 +6,9 @@ class ExperimentSets:
     def __init__(self, sets_gen):
         self.sets = sets_gen
 
+    def generate_test_set_for_auxiliary(self, num_test_sentences, percentage_l2):
+        pass
+
     def generate_for_cognate_experiment(self, num_sentences, percentage_l2, include_ff=False, seed=0,
                                         save_files=True):
         random.seed(seed)  # change the seed each time we run a new simulation
@@ -56,6 +59,7 @@ class ExperimentSets:
                 pos_to_replace = "%s:%sanimate" % (pos_w, "" if is_not_nan(semantic_gender_w) else "in")
             replace_with_word = self.sets.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                           gender=syntactic_gender_w,
+                                                                          exclude_cognates=False,
                                                                           only_get_false_fr=not replace_with_cognates,
                                                                           only_get_cognate=replace_with_cognates)
             all_roles[role_idx_to_replace] = all_roles[role_idx_to_replace].replace(concept_to_replace,
