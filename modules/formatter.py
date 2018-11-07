@@ -4,7 +4,7 @@ import os
 import itertools
 import pickle
 import pandas as pd
-import collections
+from collections import defaultdict, Counter
 from modules.elman_network import np
 
 
@@ -37,7 +37,7 @@ class InputFormatter:
         self.testlines = self.read_set(test=True)
         self.num_test = len(self.testlines)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
-        self.same_unordered_lists = lambda x, y: collections.Counter(x) == collections.Counter(y)
+        self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -259,37 +259,31 @@ class InputFormatter:
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
-        idx_to_concept = []  # TODO: maybe change to dict
-        l1_column = self.lexicon_df[['morpheme_%s' % self.L1.lower(), 'pos',
-                                     'concept', 'type']].dropna(subset=['morpheme_%s' % self.L1.lower()])
-        lex = list(l1_column['morpheme_%s' % self.L1.lower()])
-        pos = list(l1_column['pos'])
-        l1_type = list(l1_column['type'])
-        for i, concept in enumerate(list(l1_column['concept'])):
-            if is_not_nan(concept):
-                idx_to_concept.append(concept)
-            else:
-                idx_to_concept.append("%s::%s" % (pos[i], l1_type[i]) if is_not_nan(l1_type[i]) else pos[i])
-        code_switched_idx = len(lex)
-        if self.L2:
-            l2_column = self.lexicon_df[['morpheme_%s' % self.L2.lower(), 'pos',
-                                         'concept', 'type']].dropna(subset=['morpheme_%s' % self.L2.lower()])
-            l2_pos_list = list(l2_column['pos'])
-            l2_concept_list = list(l2_column['concept'])
-            l2_type_list = list(l2_column['type'])
-            for i, item in enumerate(list(l2_column['morpheme_%s' % self.L2.lower()])):
-                if item not in lex:  # only get unique items. set() would change the order, do this instead
-                    lex.append(item)
-                    pos.append(l2_pos_list[i])
-                    # add concept info
-                    if is_not_nan(l2_concept_list[i]):
-                        idx_to_concept.append(l2_concept_list[i])
-                    else:
-                        idx_to_concept.append("%s::%s" % (pos[-1], l2_type_list[i]) if is_not_nan(l2_type_list[i])
-                                              else pos[-1])
+        info = defaultdict(list)
+        for lang in [self.L1, self.L2]:
+            if lang:
+                lang = lang.lower()
+                column = self.lexicon_df[['morpheme_%s' % lang, 'pos',
+                                          'concept', 'type']].dropna(subset=['morpheme_%s' % lang])
+                pos_list = list(column['pos'])
+                concept_list = list(column['concept'])
+                type_list = list(column['type'])
+                for i, item in enumerate(list(column['morpheme_%s' % lang])):
+                    if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
+                        info['lex'].append(item)
+                        info['pos'].append(pos_list[i])
+                        # add concept info
+                        if is_not_nan(concept_list[i]):  # TODO: maybe change to dict
+                            info['idx_to_concept'].append(concept_list[i])
+                        else:
+                            info['idx_to_concept'].append("%s::%s" % (info['pos'][-1], type_list[i])
+                                                          if is_not_nan(type_list[i]) else info['pos'][-1])
+                    # else: print(item, pos_list[i])
+            info['code_switched_idx'].append(len(info['lex']))
         with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
-            f.writelines("%s\n" % w for w in lex)
-        return lex, pos, idx_to_concept, code_switched_idx  # idx_to_concept: nparray if we want to use "where"
+            f.writelines("%s\n" % w for w in info['lex'])
+        # idx_to_concept: nparray if we want to use "where"
+        return info['lex'], info['pos'], info['idx_to_concept'], info['code_switched_idx'][0]
 
     def get_lexicon_index(self, word):
         """

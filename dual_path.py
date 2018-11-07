@@ -432,7 +432,7 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=100)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=120)
     parser.add_argument('-compress', help='Number of compress layer units', type=positive_int)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
@@ -545,6 +545,12 @@ if __name__ == "__main__":
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
 
+    """args.sim = 4
+    args.nolang = True
+    args.input = "simulations/2018-11-04/2018-11-04t12.58.51_ESEN_4sim_h100_c50_fw30/input"
+    args.swe = 20
+    args.sw = "simulations/2018-11-04/2018-11-04t13.25.26_ES_4sim_h100_c50_fw30"""""
+
     if args.only_eval and not (args.set_weights or args.set_weights_epoch):
         sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
                  '(args.set_weights_epoch: %s).' % (args.set_weights, args.set_weights_epoch))
@@ -554,17 +560,24 @@ if __name__ == "__main__":
         logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
 
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
-        args.compress = args.hidden // 2
+        if sys.version[0].startswith('3'):
+            args.compress = int(args.hidden * (2 / 3))
+        else:
+            import math
+
+            args.compress = int(math.ceil(120 * 0.66))
+    # if not args.hidden: we could measure the lexicon size and compute the number of layers by dividing by 2
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
     results_dir = "simulations/%s%s/%s_%s_%ssim_h%s_c%s_fw%s" % ((args.resdir if args.resdir else ""),
                                                                  datetime.now().strftime("%Y-%m-%d"),
                                                                  datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
                                                                  args.lang, args.sim, args.hidden, args.compress,
                                                                  args.fw)
+    os.makedirs(results_dir)
+
     lang_code_to_title = {'EN': 'English monolingual model', 'ES': 'Spanish monolingual model',
                           'EL': 'Greek monolingual model', 'ENES': 'Bilingual EN-ES model',
                           'ESEN': 'Bilingual EN-ES model'}
-    os.makedirs(results_dir)
 
     if args.auxiliary_experiment:
         args.cognate_percentage = 0
@@ -647,7 +660,7 @@ if __name__ == "__main__":
         # now run the simulations
         if sys.version.startswith('3') and platform.system() != 'Linux':
             os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
-        elif platform.system() != 'Linux':
+        elif platform.system() == 'Linux':
             os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
 
     if args.use_multiprocessing:

@@ -5,6 +5,7 @@ import codecs
 from datetime import datetime
 import pandas as pd
 import sys
+import re
 
 print_on_screen = False  # used only to debug, no need to add it as a called parameter
 
@@ -19,6 +20,7 @@ class SetsGenerator:
         :param use_full_verb_form:
         """
         self.python_version = sys.version[0]
+        self.allow_free_structure_production = allow_free_structure_production
         self.lang = lang.upper()
         self.L1 = self.lang if len(lang) == 2 else self.lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else self.lang[2:]
@@ -28,6 +30,10 @@ class SetsGenerator:
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
                                                  cognates=True if cognate_percentage > 0 else False,
                                                  use_simple_semantics=use_simple_semantics)
+        """self.lexicon_size = len(pd.unique(self.lexicon_df[["morpheme_%s" % self.L1.lower(),
+                                                           "morpheme_%s" % self.L2.lower()]
+                                          if self.L2 or not monolingual_only
+                                          else ["morpheme_%s" % self.L1.lower()]].values.ravel('K')))"""
         self.results_dir = results_dir
         if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
             self.results_dir += datetime.now().strftime(".%S")
@@ -40,12 +46,6 @@ class SetsGenerator:
         self.structures_df = self.get_structures(structures_csv)
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
         self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=;)')[1].unique()  # AGENT etc
-        # Matches strings between ;E= or ,    "?" is necessary for multiple matches
-        # E.g., 'PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGT', 'PAT', 'REC'
-        self.event_sem = self.structures_df['message'].str.extractall('(;E=|,)?([A-Z]*)(,|$)')[1].dropna().unique()
-        if allow_free_structure_production:
-            self.event_sem = [evsem for evsem in self.event_sem if evsem not in ['AGT', 'PAT', 'REC']]
-            self.strip_structure_roles()
         self.df_cache = {}
         # TODO: automate?
         self.identifiability = ['EMPH', 'PRON', 'DEF', 'INDEF'] + self.genders
@@ -87,6 +87,7 @@ class SetsGenerator:
     def generate_auxiliary_experiment_sentences(self, num_test_sentences, percentage_l2):
         num_perfect = num_test_sentences // 2
         num_progressive = num_perfect
+
 
         perfect_structures = self.generate_sentence_structures(num_perfect, percentage_l2=percentage_l2)
 
@@ -180,7 +181,7 @@ class SetsGenerator:
                     sentence.append(morpheme_df.values[0].decode("utf-8"))  # otherwise non-ascii (es) chars throw error
                 else:
                     sentence.append(morpheme_df.values[0])
-                if pos == 'pron':  # also choose a random concept -- only constraint: gender
+                if pos == 'pron':  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender,
                                                                        exclude_cognates=exclude_cognates)
                 concept = self.get_df_concept(morpheme_df)
@@ -191,7 +192,6 @@ class SetsGenerator:
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
             sentence = u'%s .' % ' '.join(sentence)
             message = ";".join(message).upper()
-
             if self.sentence_is_unique(message, exclude_test_sentences, generated_pairs):
                 generated_pairs.append((sentence, message))
                 sentence_idx += 1
@@ -254,21 +254,30 @@ class SetsGenerator:
         return selected
 
     def save_lexicon_and_structures_to_csv(self):
+        # Matches strings between ;E= or ,           E.g., 'PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
+        # "?" is necessary for multiple matches
+        event_semantics = self.structures_df['message'].str.extractall(';E=|,?([A-Z-]*)(,|$)')[0].dropna().unique()
+        if self.allow_free_structure_production:
+            event_semantics = [event_sem for event_sem in event_semantics if event_sem not in self.roles]
+            self.strip_structure_roles()
+        self.list_to_file("event_semantics", event_semantics)
+        self.list_to_file("identifiability", self.identifiability)
+        self.list_to_file("target_lang", set(self.target_lang))
+        self.list_to_file("roles", self.roles)
         self.lexicon_df.to_csv('%s/lexicon.csv' % self.results_dir, encoding='utf-8', index=False)
         self.structures_df.to_csv('%s/structures.csv' % self.results_dir, encoding='utf-8', index=False)
-        with codecs.open('%s/identifiability.in' % self.results_dir, 'w', "utf-8") as f:
-            f.write("%s" % "\n".join(self.identifiability))
-        with open('%s/event_semantics.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.event_sem))
-        with open('%s/target_lang.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(set(self.target_lang)))
-        with open('%s/roles.in' % self.results_dir, 'w') as f:
-            f.write("%s" % "\n".join(self.roles))
+
+    def list_to_file(self, fname, content):
+        with open('%s/%s.in' % (self.results_dir, fname), 'w') as f:
+            f.write("%s" % "\n".join(content))
 
     def get_determiners_from_lexicon(self):
         return pd.unique(self.lexicon_df.query("pos == 'det'")[['morpheme_en', 'morpheme_es']].values.ravel())
 
     def strip_structure_roles(self):
+        self.structures_df.message = self.structures_df.message.str.replace(',-1|,AGT|,PAT|,REC', '')
+
+    def replace_double_dative_activation(self):
         self.structures_df.message = self.structures_df.message.str.replace(',-1|,AGT|,PAT|,REC', '')
 
     def get_structures(self, structures_csv, sep=","):
@@ -304,6 +313,8 @@ class SetsGenerator:
                             regex=True)
             df = df.replace({'verb(_prefix)?:double participle_suffix:::perfect': 'participle:double::perfect'},
                             regex=True)
+
+        df['message'] = df['message'].apply(self.extract_and_apend_event_semantics)
         return df
 
     def get_num_structures_per_language(self):
@@ -333,6 +344,12 @@ class SetsGenerator:
             lex.drop(['concept', 'inactive'], axis=1)
             lex = lex.rename(columns={'compositional_concept': 'concept'})
         return lex
+
+    @staticmethod
+    def extract_and_apend_event_semantics(msg_str):
+        event_sem_roles = [re.sub("=(PRON)?", "", m) for m in msg_str.split(';') if not m.startswith(("E=", "AAL="))]
+        new_msg = "%s,%s" % (msg_str, ",".join(event_sem_roles))
+        return new_msg.replace("RECIPIENT,PATIENT", "RECIPIENT,-1,PATIENT")
 
     @staticmethod
     def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
@@ -415,7 +432,7 @@ class SetsGenerator:
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     res_dir = "../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M")
-    sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0.2, use_full_verb_form=False, monolingual_only=False,
+    sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0, use_full_verb_form=True, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='esen',
                          lexicon_csv='../corpus/lexicon.csv', structures_csv='../corpus/structures.csv')
     sets.generate_general(num_sentences=2500, percentage_l2=0.3)
