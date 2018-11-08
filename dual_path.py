@@ -386,7 +386,7 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
             shutil.copy2(s, d)
 
 
-def copy_files_endwith(src, dest, ends_with=".in"):
+def copy_files_endswith(src, dest, ends_with=".in"):
     for filename in os.listdir(src):
         if filename.endswith(ends_with):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
@@ -417,7 +417,7 @@ def create_all_input_files(num_simulations, results_dir, sets, original_input_pa
                     sets.sets.generate_general(num_sentences=generate_num, percentage_l2=l2_percentage,
                                                save_files=False)
         elif original_input_path:  # use existing test/training set (copy them first)
-            copy_files_endwith(os.path.join(original_input_path, str(sim_num)), rdir)
+            copy_files_endswith(os.path.join(original_input_path, str(sim_num)), rdir)
 
 
 if __name__ == "__main__":
@@ -534,6 +534,9 @@ if __name__ == "__main__":
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
                         help='Run auxiliary asymmetry experiment')
     parser.set_defaults(auxiliary_experiment=False)
+    parser.add_argument('--tener', dest='replace_haber', action='store_true',
+                        help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
+    parser.set_defaults(replace_haber=False)
     parser.add_argument('--gender_error_experiment', dest='pronoun_experiment', action='store_true',
                         help='Evaluate pronoun production')
     parser.set_defaults(pronoun_experiment=False)
@@ -544,12 +547,6 @@ if __name__ == "__main__":
                         help='Use multiprocessing for parallel simulations')
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
-
-    """args.sim = 4
-    args.nolang = True
-    args.input = "simulations/2018-11-04/2018-11-04t12.58.51_ESEN_4sim_h100_c50_fw30/input"
-    args.swe = 20
-    args.sw = "simulations/2018-11-04/2018-11-04t13.25.26_ES_4sim_h100_c50_fw30"""""
 
     if args.only_eval and not (args.set_weights or args.set_weights_epoch):
         sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
@@ -648,7 +645,7 @@ if __name__ == "__main__":
                             semantic_gender=args.gender, overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
                             trainingset=args.trainingset, testset=args.testset, fixed_weights=args.fw,
                             fixed_weights_identif=args.fwi, use_word_embeddings=args.word_embeddings,
-                            monolingual_only=args.monolingual)
+                            monolingual_only=args.monolingual, replace_haber_tener=args.replace_haber)
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
@@ -669,13 +666,21 @@ if __name__ == "__main__":
     for sim in range(args.sim):
         if args.sim > 1:
             inputs.input_dir = "%s/%s" % (results_dir, sim)
-            inputs.update_sets(new_results_dir=inputs.input_dir)
+            inputs.update_sets(new_results_dir=inputs.input_dir, replace_haber_tener=args.replace_haber)
             simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
                                    (sim, sum(',COG' in l for l in inputs.trainlines) + sum(',FF' in l
                                                                                            for l in inputs.trainlines),
                                     inputs.num_train))
         if args.set_weights:
-            copy_dir(os.path.join(args.set_weights, "%s/weights" % sim), '%s/weights' % inputs.input_dir)
+            if args.only_eval:  # copy all weights, otherwise only copy the epoch we wanted (as epoch 0)
+                copy_dir(os.path.join(args.set_weights, "%s/weights" % sim), '%s/weights' % inputs.input_dir)
+            else:
+                destination_folder = '%s/weights' % inputs.input_dir
+                os.makedirs(destination_folder)
+                copy_files_endswith(src=os.path.join(args.set_weights, "%s/weights" % sim),
+                                    dest=destination_folder, ends_with="_%s.npz" % args.set_weights_epoch)
+                if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
+                    os.system("rename s/_%s/_0/ %s/*.npz" % (args.set_weights_epoch, '%s/weights' % inputs.input_dir))
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,

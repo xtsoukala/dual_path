@@ -10,7 +10,7 @@ from modules.elman_network import np
 
 class InputFormatter:
     def __init__(self, results_dir, input_dir, fixed_weights, fixed_weights_identif, language, trainingset, testset,
-                 semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only):
+                 semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -30,6 +30,8 @@ class InputFormatter:
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis_percentage = overt_pronouns
+        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % input_dir)
         self.testset = testset
         self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
@@ -73,8 +75,10 @@ class InputFormatter:
                 print("Will include L2 (%s) lexicon" % L2)
         return L1, L2
 
-    def update_sets(self, new_results_dir):
+    def update_sets(self, new_results_dir, replace_haber_tener=False):
         self.results_dir = new_results_dir
+        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_results_dir)
         self.trainlines = self.read_set()  # re-read files
         self.num_train = len(self.trainlines)
         self.testlines = self.read_set(test=True)

@@ -49,17 +49,15 @@ class Plotter:
                                      "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
         plt.close()
 
-    def plot_cs_type_over_time(self, label, results, legend, fname, legend_loc='upper right', ylim=10):
+    def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='upper right'):
         for i, result in enumerate(results):
             if is_nd_array_or_list(result):
                 if max(result) > ylim:
                     ylim = max(result)
                 plt.plot(self.epochs, result, color=self.color_bars[i], label=legend[i])
             else:
-                #print(result)
-                #print('ELSE')
                 if max(result[0]) > ylim:
-                    ylim = max(result[0])
+                    ylim = self.adjust_y_axis(result[0])
                 plt.plot(self.epochs, result[0], color=self.color_bars[i], label=legend[i])
                 lower_bound = [x - y for x, y in zip(result[0], result[1])]
                 upper_bound = [x + y for x, y in zip(result[0], result[1])]
@@ -72,6 +70,12 @@ class Plotter:
         plt.savefig("%s/%s%s.pdf" % (self.results_dir,
                                      "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
         plt.close()
+
+    @staticmethod
+    def adjust_y_axis(result):
+        if max(result) + 5 <= 100:
+            return max(result) + 5
+        return max(result)
 
     def plot_bar_chart(self, label, items_to_plot, legend, fname):
         cs_indeces = numpy_arange_len(self.results['all_cs_types'])
@@ -111,11 +115,11 @@ class Plotter:
         correct_code_switches = results['correct_code_switches']['test']
         if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             self.plot_changes_over_time(items_to_plot=['correct_code_switches', 'all_code_switches'],
-                                        test_percentage=num_test, training_percentage=num_train, ylim=80,
+                                        test_percentage=num_test, training_percentage=num_train, ylim=60,
                                         label='%% CS among %s set' % 'test',
                                         fname='code_switches_%s_set' % 'test')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
-            self.plot_changes_over_time(ylim=80, items_to_plot=['correct_code_switches'],
+            self.plot_changes_over_time(ylim=60, items_to_plot=['correct_code_switches'],
                                         test_percentage=correct_test,
                                         training_percentage=results['correct_meaning']['training'],
                                         fname="code_switches_correct_%s_set" % 'test',
@@ -156,7 +160,7 @@ class Plotter:
                 if self.plot_detailed_cs:
                     for i, cs_type in enumerate(results['all_cs_types']):
                         self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
-                                                    legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
+                                                    ylim=15, legend=('EN', 'ES'), fname='cs_type_%s' % cs_type,
                                                     results=[self.cs_results['type_correct_test_EN'][i],
                                                              self.cs_results['type_correct_test_ES'][i]])
 
@@ -179,7 +183,7 @@ class Plotter:
 
                     if res:
                         self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
-                                                    legend=legend,
+                                                    legend=legend, ylim=15,
                                                     fname='auxiliary_test', results=res)
                         # now exclude the _after categories:
                         for keyword in ['has_after', 'is_after']:
@@ -188,7 +192,7 @@ class Plotter:
                                 del legend[idx]
                                 del res[idx]
                         self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
-                                                    legend=legend,
+                                                    legend=legend, ylim=15,
                                                     fname='auxiliary_test_no_after', results=res)
 
             ############################################################################################################
@@ -244,7 +248,7 @@ class Plotter:
                         if include_ff:
                             results_lst.append(self.cs_results['type_correct_test-ff'][i])
                         self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
-                                                    fname='cognate_experiment_%s' % cs_type,
+                                                    fname='cognate_experiment_%s' % cs_type, ylim=15,
                                                     results=results_lst, legend=legend)
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
         if (is_nd_array_or_list(results['pronoun_errors']['test']) and (sum(results['pronoun_errors_flex']['test']) or

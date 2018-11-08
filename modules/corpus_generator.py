@@ -51,7 +51,7 @@ class SetsGenerator:
         self.identifiability = ['EMPH', 'PRON', 'DEF', 'INDEF'] + self.genders
         self.target_lang = ['EN', 'ES'] if not monolingual_only else [self.lang]
 
-    def generate_general(self, num_sentences, percentage_l2, cognates_experiment=False, save_files=True):
+    def generate_general(self, num_sentences, percentage_l2, cognates_experiment=False, save_files=True, aux_experiment=False):
         """
         :param num_sentences: number of training AND test sentences to be generated
         :param percentage_l2: percentage of L2 (e.g., English) vs L1
@@ -79,18 +79,21 @@ class SetsGenerator:
                                                exclude_test_sentences=test_set,
                                                max_cognate=num_train * self.cognate_percentage)
         assert num_test == len(test_set) and num_train == len(training_set)
-        if cognates_experiment:  # return sets of message/sentence pairs (no need to save them yet)
+        if cognates_experiment or aux_experiment:  # return sets of message/sentence pairs (no need to save them yet)
             return test_set, training_set
         if save_files:
             self.save_lexicon_and_structures_to_csv()
 
-    def generate_auxiliary_experiment_sentences(self, num_test_sentences, percentage_l2):
+    def generate_auxiliary_experiment_sentences(self, training_sentences, percentage_l2, num_test_sentences=1000):
         num_perfect = num_test_sentences // 2
         num_progressive = num_perfect
 
+        perfect_structures = self.generate_aux_perfect_sentence_structures(num_perfect, percentage_l2=percentage_l2)
 
-        perfect_structures = self.generate_sentence_structures(num_perfect, percentage_l2=percentage_l2)
-
+        aux_test_perfect = self.generate_sentences(perfect_structures, fname="test_aux.in",
+                                           exclude_test_sentences=training_sentences,
+                                           max_cognate=num_perfect * self.cognate_percentage)
+        print(aux_test_perfect)
         # replace perfect with progressive:
 
     def generate_sentence_structures(self, num_sentences, percentage_l2):
@@ -130,6 +133,59 @@ class SetsGenerator:
         assert num_sentences == len(sentence_structures)
         random.shuffle(sentence_structures)
         return sentence_structures
+
+
+
+    def generate_aux_perfect_sentence_structures(self, num_sentences, percentage_l2):
+        """
+        :param num_sentences: number of message/sentence pairs that need to be generated
+        :param percentage_l2: percentage of L2 structures
+        :return:
+        """
+        aux_structures = self.structures_df[self.structures_df['message'].str.contains("PERFECT,")]
+        num_structures_L1 = aux_structures[self.L1].count()
+        if self.L2:
+            num_structures_L2 = aux_structures[self.L2].count()
+
+        print(aux_structures)
+        num_l2 = percentage_l2 * num_sentences
+        num_l1 = num_sentences - num_l2
+        # if percentages are not set, distribute equally
+        # calculate structures for L1
+        l1_times_repeat = int(num_l1 // num_structures_L1)
+        l1_mod_repeat = int(num_l1 % num_structures_L1)
+        # TODO: take percentages into consideration if not set to NaN
+        sentence_structures = pd.concat([aux_structures[['message', self.L1]]] * l1_times_repeat,
+                                        ignore_index=True, sort=False)
+        sentence_structures = list(sentence_structures.itertuples(index=False, name=None))
+        for i in range(l1_mod_repeat):
+            row = random.randint(0, num_structures_L1 - 1)  # select random row
+            sentence_structures.append((aux_structures['message'].iloc[row], aux_structures[self.L1].iloc[row]))
+
+        sentence_structures = [("%s,%s" % (i[0], self.L1), i[1]) for i in sentence_structures]
+        if self.L2 and percentage_l2 > 0:
+            l2_times_repeat = int(num_l2 // num_structures_L2)
+            l2_mod_repeat = int(num_l2 % num_structures_L2)
+            if l2_times_repeat:
+                l2_df = pd.concat([aux_structures[['message', self.L2]]] * l2_times_repeat,
+                                  ignore_index=True, sort=False)
+                l2_structures = [("%s,%s" % (i[0], self.L2), i[1])
+                                 for i in list(l2_df.itertuples(index=False, name=None))]
+                sentence_structures.extend(l2_structures)
+            for i in range(l2_mod_repeat):
+                row = random.randint(0, num_structures_L2 - 1)
+                sentence_structures.append((aux_structures['message'].iloc[row] + "," + self.L2,
+                                            aux_structures[self.L2].iloc[row]))
+        assert num_sentences == len(sentence_structures)
+        random.shuffle(sentence_structures)
+        return sentence_structures
+
+
+
+
+
+
+
 
     def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=[],
                            exclude_cognates=False):
@@ -268,6 +324,7 @@ class SetsGenerator:
         self.structures_df.to_csv('%s/structures.csv' % self.results_dir, encoding='utf-8', index=False)
 
     def list_to_file(self, fname, content):
+        print(content)
         with open('%s/%s.in' % (self.results_dir, fname), 'w') as f:
             f.write("%s" % "\n".join(content))
 
@@ -435,4 +492,6 @@ if __name__ == "__main__":
     sets = SetsGenerator(results_dir=res_dir, cognate_percentage=0, use_full_verb_form=True, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='esen',
                          lexicon_csv='../corpus/lexicon.csv', structures_csv='../corpus/structures.csv')
-    sets.generate_general(num_sentences=2500, percentage_l2=0.3)
+    # sets.generate_general(num_sentences=2500, percentage_l2=0.5)
+    test, train = sets.generate_general(num_sentences=2500, percentage_l2=0.5, aux_experiment=True)
+    sets.generate_auxiliary_experiment_sentences(num_test_sentences=1000, training_sentences=train, percentage_l2=0.5)
