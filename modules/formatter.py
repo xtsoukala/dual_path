@@ -609,7 +609,6 @@ def compute_mean_and_std(valid_results, epochs):
     """
     results_sum = {}
     all_keys = valid_results[0].keys()
-    # print(all_keys)
     cs_keywords = []
     for sim in valid_results:
         for t in ['test', 'training']:
@@ -634,7 +633,6 @@ def compute_mean_and_std(valid_results, epochs):
                         results_sum[key][t].append(simulation[key][t])
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in all_keys:
-        # print(key)
         for t in ['training', 'test']:
             if t in results_sum[key] and results_sum[key][t]:
                 if type(results_sum[key][t]) is dict:
