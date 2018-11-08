@@ -666,7 +666,7 @@ if __name__ == "__main__":
     for sim in range(args.sim):
         if args.sim > 1:
             inputs.input_dir = "%s/%s" % (results_dir, sim)
-            inputs.update_sets(new_results_dir=inputs.input_dir, replace_haber_tener=args.replace_haber)
+            inputs.update_sets(new_results_dir=inputs.input_dir)
             simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
                                    (sim, sum(',COG' in l for l in inputs.trainlines) + sum(',FF' in l
                                                                                            for l in inputs.trainlines),

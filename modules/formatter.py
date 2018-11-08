@@ -17,6 +17,9 @@ class InputFormatter:
         self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
         self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.replace_haber_tener = replace_haber_tener
+        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % input_dir)
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -30,8 +33,6 @@ class InputFormatter:
         self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis_percentage = overt_pronouns
-        if replace_haber_tener:  # call sed to replace training and test files with "tener"
-            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % input_dir)
         self.testset = testset
         self.trainingset = trainingset  # names of training and test set file names
         self.trainlines = self.read_set()
@@ -75,9 +76,9 @@ class InputFormatter:
                 print("Will include L2 (%s) lexicon" % L2)
         return L1, L2
 
-    def update_sets(self, new_results_dir, replace_haber_tener=False):
+    def update_sets(self, new_results_dir):
         self.results_dir = new_results_dir
-        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+        if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_results_dir)
         self.trainlines = self.read_set()  # re-read files
         self.num_train = len(self.trainlines)
@@ -239,7 +240,10 @@ class InputFormatter:
 
     def check_switch_points(self, sentence_indeces, pos_of_interest='aux'):
         pos = self.sentence_indeces_pos(sentence_indeces)
-        pos_idx = pos.index(pos_of_interest)
+        if pos_of_interest in pos:
+            pos_idx = pos.index(pos_of_interest)
+        elif self.replace_haber_tener:
+            pos_idx = pos.index('verb')
 
         # check switch before pos_of_interest
         at = self.is_code_switched(sentence_indeces[:pos_idx+1], target_lang_idx=sentence_indeces[0])
