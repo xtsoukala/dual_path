@@ -43,7 +43,7 @@ class ExperimentSets:
         replacement_sets = []
         new_replacement_idx = []
         for idx, (sentence, message) in enumerate(original_sets):
-            lang = message[-2:].lower()
+            lang = message[-2:]
             all_roles = message.split(';')
             if replacement_idx:
                 role_idx_to_replace = all_roles[replacement_idx[idx]]

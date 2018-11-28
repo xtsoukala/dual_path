@@ -1,15 +1,16 @@
-from modules.formatter import get_np_mean_and_std_err, percentage, numpy_arange_len, is_not_empty, is_nd_array_or_list
 import matplotlib
+from modules.formatter import is_not_empty, get_np_mean_and_std_err, np
+
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
 
 
 class Plotter:
-    def __init__(self, results_dir, summary_sim, title):
+    def __init__(self, results_dir, summary_sim, title, epochs=0):
         self.results_dir = results_dir
-        self.epochs = []
-        self.num_epochs = 0
+        self.num_epochs = epochs
+        self.epoch_range = range(epochs)
         self.bar_width = 0.35
         self.cs_results = {}
         self.results = []
@@ -19,31 +20,31 @@ class Plotter:
         # blue, orange, green, brown, purple, grey, red, yellowgreen
         self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
         self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999')]
-        self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c','#377eb8', '#ff7f00', '#4daf4a',
+        self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c', '#377eb8', '#ff7f00', '#4daf4a',
                            '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
                                legend_loc='upper right'):
         for item_idx, item_to_plot in enumerate(items_to_plot):
-            test_value = percentage(self.results[item_to_plot]['test'], test_percentage)
-            plt.plot(self.epochs, test_value, color=self.colors[item_idx][0], label=item_to_plot)
+            test_value = self.percentage(self.results[item_to_plot]['test'], test_percentage)
+            plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0], label=item_to_plot)
             if 'test-std_error' in self.results[item_to_plot]:
                 test_std_error = self.results[item_to_plot]['test-std_error']
-                lower_bound = percentage(self.results[item_to_plot]['test'] - test_std_error, test_percentage)
-                upper_bound = percentage(self.results[item_to_plot]['test'] + test_std_error, test_percentage)
-                plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.colors[item_idx][0], alpha=0.1)
+                lower_bound = self.percentage(self.results[item_to_plot]['test'] - test_std_error, test_percentage)
+                upper_bound = self.percentage(self.results[item_to_plot]['test'] + test_std_error, test_percentage)
+                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.colors[item_idx][0], alpha=0.1)
 
             if is_not_empty(self.results[item_to_plot]['training']):
-                if training_percentage:
-                    training_value = percentage(self.results[item_to_plot]['training'], training_percentage)
+                if training_percentage != []:
+                    training_value = self.percentage(self.results[item_to_plot]['training'], training_percentage)
                 else:
                     training_value = self.results[item_to_plot]['training']
-                plt.plot(self.epochs, training_value, color=self.colors[item_idx][1],
+                plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
                          label="%s (Training)" % item_to_plot, linestyle='--')
         plt.xlabel('epochs')
         plt.ylabel(label)
         plt.ylim([0, ylim])
-        plt.xlim(0 if fname == "performance" else 1, max(self.epochs))  # only start from epoch 0 for performance.png
+        plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for performance.png
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig("%s/%s%s.pdf" % (self.results_dir,
                                      "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
@@ -51,21 +52,21 @@ class Plotter:
 
     def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='upper right'):
         for i, result in enumerate(results):
-            if is_nd_array_or_list(result):
+            if self.is_nd_array_or_list(result):
                 if max(result) > ylim:
                     ylim = max(result)
-                plt.plot(self.epochs, result, color=self.color_bars[i], label=legend[i])
+                plt.plot(self.epoch_range, result, color=self.color_bars[i], label=legend[i])
             else:
                 if max(result[0]) > ylim:
                     ylim = self.adjust_y_axis(result[0])
-                plt.plot(self.epochs, result[0], color=self.color_bars[i], label=legend[i])
+                plt.plot(self.epoch_range, result[0], color=self.color_bars[i], label=legend[i])
                 lower_bound = [x - y for x, y in zip(result[0], result[1])]
                 upper_bound = [x + y for x, y in zip(result[0], result[1])]
-                plt.fill_between(self.epochs, lower_bound, upper_bound, facecolor=self.color_bars[i], alpha=0.1)
+                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.color_bars[i], alpha=0.1)
         plt.xlabel('epochs')
         plt.ylabel(label)
         plt.ylim([0, ylim])
-        plt.xlim(1, max(self.epochs))  # only start from epoch 0 for performance.png
+        plt.xlim(1, max(self.epoch_range))  # only start from epoch 0 for performance.png
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig("%s/%s%s.pdf" % (self.results_dir,
                                      "%s" % (("summary_%s_" % self.summary_sim) if self.summary_sim else ""), fname))
@@ -78,7 +79,7 @@ class Plotter:
         return max(result)
 
     def plot_bar_chart(self, label, items_to_plot, legend, fname):
-        cs_indeces = numpy_arange_len(self.results['all_cs_types'])
+        cs_indeces = self.numpy_arange_len(self.results['all_cs_types'])
         fig, ax = plt.subplots()
         rects = []
         for i, item in enumerate(items_to_plot):
@@ -99,15 +100,11 @@ class Plotter:
         plt.savefig(fname)
         plt.close()
 
-    def plot_results(self, results, num_train, num_test, test_sentences_with_pronoun, simulation_logger,
-                     cognate_experiment, auxiliary_experiment, plot_mse=True):
+    def plot_results(self, results, num_train, num_test, test_sentences_with_pronoun,
+                     cognate_experiment, auxiliary_experiment, simulation_logger=None, plot_mse=True):
         correct_test = results['correct_meaning']['test']
         type_code_switches_test = results['type_code_switches']['test']
-        if not self.epochs:
-            self.epochs = range(len(correct_test))
-            self.num_epochs = len(self.epochs)
         self.results = results
-
         self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], label='Percentage correct (%)',
                                     test_percentage=num_test, training_percentage=num_train, ylim=100,
                                     fname="performance", legend_loc='lower right')
@@ -132,10 +129,10 @@ class Plotter:
                 for lang in ['ES', 'EN']:
                     cs_type_per_lang = "%s-%s" % (lang, cs_type)
                     if cs_type_per_lang in type_code_switches_test:  # if we include training set we need to edit this
-                        cs_percentage_correct = percentage(type_code_switches_test[cs_type_per_lang], correct_test)
+                        cs_percentage_correct = self.percentage(type_code_switches_test[cs_type_per_lang], correct_test)
                         if self.summary_sim and "%s-std_error" % cs_type_per_lang in type_code_switches_test:
-                            std_err = percentage(type_code_switches_test["%s-std_error" % cs_type_per_lang],
-                                                 correct_test)
+                            std_err = self.percentage(type_code_switches_test["%s-std_error" % cs_type_per_lang],
+                                                      correct_test)
                         else:
                             std_err = [0] * len(correct_test)
                         self.cs_results['type_correct_test_%s' % lang].append((cs_percentage_correct, std_err))
@@ -152,7 +149,7 @@ class Plotter:
                 self.plot_bar_chart(label='CS types (%% of correctly produced %s set - last epoch)' % 'test',
                                     items_to_plot=['type_correct_test_last_epoch_ES', 'type_correct_test_last_epoch_ES']
                                     , legend=('ES', 'EN'), fname='type_correct_test_last_epoch')
-                if self.summary_sim:
+                if simulation_logger:
                     simulation_logger.info("type_correct_last_epoch_test_ES: %s\ntype_correct_test_last_epoch_EN: %s" %
                                            (self.cs_results['type_correct_test_last_epoch_ES'],
                                             self.cs_results['type_correct_test_last_epoch_EN']))
@@ -165,7 +162,7 @@ class Plotter:
                                                              self.cs_results['type_correct_test_ES'][i]])
 
                 if auxiliary_experiment:
-                    #print(self.results)
+                    # print(self.results)
                     res = []
                     legend = []
                     for aux in ['is', 'has']:
@@ -175,11 +172,11 @@ class Plotter:
                                 legend.append(index)
                                 # normalize using correct_code_switches
                                 if 'test-std_error' in self.results[index]:
-                                    res.append((percentage(self.results[index]['test'], correct_code_switches),
-                                                percentage(self.results[index]['test-std_error'], correct_code_switches)
-                                                ))
+                                    res.append((self.percentage(self.results[index]['test'], correct_code_switches),
+                                                self.percentage(self.results[index]['test-std_error'],
+                                                                correct_code_switches)))
                                 else:
-                                    res.append(percentage(self.results[index]['test'], correct_code_switches))
+                                    res.append(self.percentage(self.results[index]['test'], correct_code_switches))
 
                     if res:
                         self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
@@ -208,10 +205,11 @@ class Plotter:
                         cs_type_per_key = "%s%s" % (cs_type, key)
                         if cs_type_per_key in type_code_switches_test:
                             # all epochs
-                            cs_percentage_correct = percentage(type_code_switches_test[cs_type_per_key], correct_test)
+                            cs_percentage_correct = self.percentage(type_code_switches_test[cs_type_per_key],
+                                                                    correct_test)
                             if self.summary_sim and "%s-std_error" % cs_type_per_key in type_code_switches_test:
-                                std_err = percentage(type_code_switches_test["%s-std_error" % cs_type_per_key],
-                                                     correct_test)
+                                std_err = self.percentage(type_code_switches_test["%s-std_error" % cs_type_per_key],
+                                                          correct_test)
                             else:
                                 std_err = [0] * len(correct_test)
                             self.cs_results['type_correct_test%s' % key].append((cs_percentage_correct, std_err))
@@ -235,7 +233,7 @@ class Plotter:
                         legend.append('FF')
                     self.plot_bar_chart(label='CS types (%% of %s set - last epoch)' % 'test', legend=legend,
                                         items_to_plot=items_to_plot, fname='type_cs_cognate_experiment_last_epoch')
-                    if self.summary_sim:
+                    if simulation_logger:
                         simulation_logger.info("type_test_ENES: %s\ntype_test_ff: %s\ntype_test_cog: %s" %
                                                (self.cs_results['type_correct_test_last_epoch'],
                                                 self.cs_results['type_correct_test_last_epoch-ff'],
@@ -251,8 +249,7 @@ class Plotter:
                                                     fname='cognate_experiment_%s' % cs_type, ylim=15,
                                                     results=results_lst, legend=legend)
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
-        if (is_nd_array_or_list(results['pronoun_errors']['test']) and (sum(results['pronoun_errors_flex']['test']) or
-                                                                        sum(results['pronoun_errors']['test']))):
+        if 'pronoun_errors' in results:
             print("pronoun", type(results['pronoun_errors']['test']))
             self.plot_changes_over_time(items_to_plot=['pronoun_errors', 'pronoun_errors_flex'],
                                         label='Sum of subject pronoun errors', fname='pronoun_errors')
@@ -264,8 +261,8 @@ class Plotter:
                                             test_percentage=test_sentences_with_pronoun, ylim=15)
 
         if plot_mse and not self.summary_sim and results['mse']:  # no need to plot an average of all the simulations
-            mse_list = [get_np_mean_and_std_err(results['mse'][epoch])[0] for epoch in self.epochs]
-            plt.plot(self.epochs, mse_list, color='darkslateblue', label='MSE')
+            mse_list = [get_np_mean_and_std_err(results['mse'][epoch])[0] for epoch in self.epoch_range]
+            plt.plot(self.epoch_range, mse_list, color='darkslateblue', label='MSE')
             plt.xlabel('epochs')
             plt.ylabel('Mean Square Error')
             plt.ylim([0, 0.007])
@@ -277,7 +274,7 @@ class Plotter:
         :param stats: dict of lists that contain means, std and labels
         :return:
         """
-        layers = numpy_arange_len(stats['labels'])
+        layers = self.numpy_arange_len(stats['labels'])
         fig, ax = plt.subplots()
         ax.bar(layers, stats['means'], color='r', yerr=stats['std'])
         ax.set_xticklabels(stats['labels'])
@@ -300,55 +297,25 @@ class Plotter:
         plt.savefig('%s/%s_connection_weights.pdf' % (self.results_dir, layer_name))
         plt.close()
 
+    @staticmethod
+    def percentage(x, total):
+        if isinstance(total, int) and total == 0:
+            return float('NaN')
+        if isinstance(x, list):
+            x = np.array(x)
+        with np.errstate(divide='raise'):
+            try:
+                np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
+            except:
+                print(x, total)
+        return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
 
-def plot_layers(srn, fig, plot_weights=False):
-    """
-    Not used (plotting slows down the simulations), will refactor later
-    :param plot_weights: by default it only plots activations. Set to True if you want the weights as well.
-    """
-    import numpy as np
-    if fig is None:  # init fig
-        fig = plt.figure(figsize=(14, 8.2))  # (width, height)
-        cax = fig.add_axes([0.5, 0.8, 1.95, 0.85])  # [r l w h]
-        cax.get_xaxis().set_visible(False)
-        cax.get_yaxis().set_visible(False)
-        cax.patch.set_alpha(0)
-        cax.set_frame_on(False)  # removes borders around plot
-        for idx, layer in enumerate(srn.get_layers_for_backpropagation()):
-            ax = fig.add_subplot("24%s" % idx)
-            ax.set_title(layer.name)
-            if plot_weights:
-                plt.imshow(layer.in_weights)
-                plt.colorbar(orientation='vertical')
-            else:
-                if layer.name == "output":
-                    continue
-                if idx > 9:
-                    ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                else:
-                    ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                ax.set_title(layer.name)
-                ax.get_yaxis().set_visible(False)
-                # plt.step(-1, 1)
-                plt.imshow(np.atleast_2d(layer.activation))
-                if idx == 0:
-                    plt.colorbar(orientation='vertical')  # show colorbar
-        plt.show(block=False)  # doesn't work for all Python versions. If plot doesn't show, set block to True
-    else:
-        if plot_weights:
-            # 8 layers, plot 4 + 4
-            for idx, layer in enumerate(srn.get_layers_for_backpropagation()):
-                ax = fig.add_subplot("24%s" % idx)
-                ax.set_title(layer.name)
-                plt.imshow(layer.in_weights)
-        else:
-            for idx, layer in enumerate(srn.layers):
-                if idx > 9:
-                    ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                else:
-                    ax = fig.add_subplot("34%s" % (idx if idx < 10 else int(idx / 2)))
-                ax.clear()  # otherwise it shows previous activations
-                ax.set_title(layer.name)
-                plt.imshow(np.atleast_2d(layer.activation))
-    plt.draw()
-    return fig
+    @staticmethod
+    def numpy_arange_len(x):
+        return np.arange(len(x))
+
+    @staticmethod
+    def is_nd_array_or_list(x):
+        if isinstance(x, (list, np.ndarray)):
+            return True
+        return False

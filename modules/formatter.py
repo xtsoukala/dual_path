@@ -4,22 +4,27 @@ import os
 import itertools
 import pickle
 import pandas as pd
+import numpy as np
 from collections import defaultdict, Counter
-from modules.elman_network import np
+
+try:
+    from itertools import zip_longest as zp
+except:  # python 2
+    from itertools import izip as zp
 
 
 class InputFormatter:
-    def __init__(self, results_dir, input_dir, fixed_weights, fixed_weights_identif, language, trainingset, testset,
+    def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset,
                  semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
-        self.input_dir = input_dir  # folder that contains training/test files, the lexicon, roles and event-sem
-        self.lexicon_df = pd.read_csv(os.path.join(self.input_dir, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
+        self.directory = directory  # folder that contains input files and where the results are saved
+        self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.replace_haber_tener = replace_haber_tener
         if replace_haber_tener:  # call sed to replace training and test files with "tener"
-            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % input_dir)
+            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -30,17 +35,8 @@ class InputFormatter:
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list('roles.in')
         self.event_semantics = self._read_file_to_list('event_semantics.in')
-        self.results_dir = results_dir  # directory where the results are saved
         self.prodrop = prodrop
         self.emphasis_percentage = overt_pronouns
-        self.testset = testset
-        self.trainingset = trainingset  # names of training and test set file names
-        self.trainlines = self.read_set()
-        self.num_train = len(self.trainlines)
-        self.testlines = self.read_set(test=True)
-        self.num_test = len(self.testlines)
-        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
-        self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -52,15 +48,24 @@ class InputFormatter:
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang='en')
-        self.false_friend_idx = self.df_query_to_idx("is_false_friend == '1'", lang='en')
+        self.false_friend_idx = self.df_query_to_idx("is_false_friend == 'Y'", lang='en')
         self.shared_idx = [self.period_idx] + self.cognate_idx + self.false_friend_idx
-        self.allowed_structures = self._read_allowed_structures()  # all allowed POS structures (in the training file)
         self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
         self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
         self.identif_size = len(self.identifiability)
+        self.identif_and_concept_size = self.concept_size + self.identif_size
         self.roles_size = len(self.roles)
-
+        self.languages_size = len(self.languages)
+        self.training_set = trainingset
+        self.trainlines_df = self.read_set_to_df()
+        self.num_train = len(self.trainlines_df)
+        self.allowed_structures = self.read_allowed_pos()
+        self.testset = testset
+        self.testlines_df = self.read_set_to_df(test=True)
+        self.num_test = len(self.testlines_df)
+        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+        self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
         del self.lexicon_df  # remove it after the processing
 
     def get_l1_and_l2(self, lang_code):
@@ -72,18 +77,18 @@ class InputFormatter:
             if self.monolingual_only:
                 L2 = None
             else:
-                L2 = [x for x in ['EN', 'ES'] if x != L1][0]
+                L2 = [x for x in ['en', 'es'] if x != L1][0]
                 print("Will include L2 (%s) lexicon" % L2)
         return L1, L2
 
-    def update_sets(self, new_results_dir):
-        self.results_dir = new_results_dir
+    def update_sets(self, new_directory):
+        self.directory = new_directory
         if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
-            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_results_dir)
-        self.trainlines = self.read_set()  # re-read files
-        self.num_train = len(self.trainlines)
-        self.testlines = self.read_set(test=True)
-        self.num_test = len(self.testlines)
+            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
+        self.trainlines_df = self.read_set_to_df()  # re-read files
+        self.num_train = len(self.trainlines_df)
+        self.testlines_df = self.read_set_to_df(test=True)
+        self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
@@ -96,7 +101,7 @@ class InputFormatter:
             return True
         return False
 
-    def is_sentence_gramatical_or_flex(self, out_sentence_idx, trg_sentence_idx):
+    def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos):
         """
         Check a sentence's grammaticality. If the target and output sentences don't have identical POS but differ only
         on the double object expression (e.g., gives the book to him/gives him the book) then return flex_order = True
@@ -106,22 +111,18 @@ class InputFormatter:
         """
         is_grammatical = True
         has_flex_order = True
-        if out_sentence_idx == trg_sentence_idx:  # if sentences are identical no need to check further
+        if out_sentence_pos == trg_sentence_pos:  # if POS is identical then the sentence is definitely grammatical
             return is_grammatical, not has_flex_order
-        out_pos = self.sentence_indeces_pos(out_sentence_idx)
-        trg_pos = self.sentence_indeces_pos(trg_sentence_idx)
-        if out_pos == trg_pos:  # if POS is identical then the sentence is definitely grammatical
-            return is_grammatical, not has_flex_order
-        if out_pos in self.allowed_structures:  # if sentence in list of existing POS
+        if out_sentence_pos in self.allowed_structures:  # if sentence in list of existing POS
             return is_grammatical, has_flex_order
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
-        if not out_pos[-1] == 'prep':  # it shouldn't end with 'to'
-            if 'prep' in out_pos and 'prep' not in trg_pos:
-                trg_pos.append('prep')
-            elif 'prep' in trg_pos and 'prep' not in out_pos:
-                out_pos.append('prep')
+        if not out_sentence_pos[-1] == 'prep':  # it shouldn't end with 'to'
+            if 'prep' in out_sentence_pos and 'prep' not in trg_sentence_pos:
+                trg_sentence_pos.append('prep')
+            elif 'prep' in trg_sentence_pos and 'prep' not in out_sentence_pos:
+                out_sentence_pos.append('prep')
             # TODO: If the verb is Spanish we shouldn't allow double datives
-            if self.same_unordered_lists(out_pos, trg_pos):
+            if self.same_unordered_lists(out_sentence_pos, trg_sentence_pos):
                 return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
@@ -184,7 +185,6 @@ class InputFormatter:
         translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
                                                                                         trg_sentence_idx[0])
         for translated_sentence_idx in translated_sentence_candidates:
-            # print translated_sentence_idx, self.sentence_from_indeces(translated_sentence_idx)
             cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
                 return cs_type
@@ -219,7 +219,7 @@ class InputFormatter:
         else:
             check_idx_pos = [self.pos_lookup(w) for w in check_idx]
             if len(set(check_idx_pos)) == 1:
-                cs_type = "%s" % check_idx_pos[0].lower()
+                cs_type = "%s" % check_idx_pos[0]
             else:
                 cs_type = "congruent lex."
         return cs_type
@@ -233,25 +233,24 @@ class InputFormatter:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
         if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-                all(x < self.code_switched_idx for x in min_and_max_idx))
+             all(x < self.code_switched_idx for x in min_and_max_idx))
                 and self.morpheme_is_from_target_lang(clean_sentence[0], target_lang_idx)):
             return False
         return True
 
-    def check_switch_points(self, sentence_indeces, pos_of_interest='aux'):
-        pos = self.sentence_indeces_pos(sentence_indeces)
-        if pos_of_interest in pos:
-            pos_idx = pos.index(pos_of_interest)
+    def check_switch_points(self, sentence_indeces, sentence_indeced_pos, pos_of_interest='aux'):
+        if pos_of_interest in sentence_indeced_pos:
+            pos_idx = sentence_indeced_pos.index(pos_of_interest)
         elif self.replace_haber_tener:
-            pos_idx = pos.index('verb')
+            pos_idx = sentence_indeced_pos.index('verb')
 
         # check switch before pos_of_interest
-        at = self.is_code_switched(sentence_indeces[:pos_idx+1], target_lang_idx=sentence_indeces[0])
+        at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
         # check switch right after (e.g. between aux and participle)
-        right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx+2],
+        right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
                                             target_lang_idx=sentence_indeces[pos_idx])
         # check switch at the end (e.g. after aux and participle)
-        after = self.is_code_switched(sentence_indeces[pos_idx+2:], target_lang_idx=sentence_indeces[pos_idx+1])
+        after = self.is_code_switched(sentence_indeces[pos_idx + 2:], target_lang_idx=sentence_indeces[pos_idx + 1])
         return at, right_after, after
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
@@ -268,9 +267,11 @@ class InputFormatter:
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
         info = defaultdict(list)
+        lex_append = info['lex'].append
+        pos_append = info['pos'].append
+        concept_append = info['idx_to_concept'].append
         for lang in [self.L1, self.L2]:
             if lang:
-                lang = lang.lower()
                 column = self.lexicon_df[['morpheme_%s' % lang, 'pos',
                                           'concept', 'type']].dropna(subset=['morpheme_%s' % lang])
                 pos_list = list(column['pos'])
@@ -278,17 +279,17 @@ class InputFormatter:
                 type_list = list(column['type'])
                 for i, item in enumerate(list(column['morpheme_%s' % lang])):
                     if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
-                        info['lex'].append(item)
-                        info['pos'].append(pos_list[i])
+                        lex_append(item)
+                        pos_append(pos_list[i])
                         # add concept info
                         if is_not_nan(concept_list[i]):  # TODO: maybe change to dict
-                            info['idx_to_concept'].append(concept_list[i])
+                            concept_append(concept_list[i])
                         else:
-                            info['idx_to_concept'].append("%s::%s" % (info['pos'][-1], type_list[i])
-                                                          if is_not_nan(type_list[i]) else info['pos'][-1])
+                            concept_append("%s::%s" % (info['pos'][-1], type_list[i])
+                                           if is_not_nan(type_list[i]) else info['pos'][-1])
                     # else: print(item, pos_list[i])
             info['code_switched_idx'].append(len(info['lex']))
-        with open(os.path.join(self.input_dir, "lexicon.in"), 'w') as f:
+        with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in info['lex'])
         # idx_to_concept: nparray if we want to use "where"
         return info['lex'], info['pos'], info['idx_to_concept'], info['code_switched_idx'][0]
@@ -312,29 +313,25 @@ class InputFormatter:
         lower_range = 0 if target_lang == self.L1 else self.code_switched_idx
         upper_range = self.code_switched_idx if target_lang == self.L1 else len(self.idx_to_concept)
         morph = []
+        append = morph.append
         for idx in range(lower_range, upper_range):
             if self.idx_to_concept[concept_idx] == self.idx_to_concept[idx]:
-                morph.append(idx)
+                append(idx)
         return morph
 
     def _number_of_test_pronouns(self):
-        regexp = re.compile(r'(^| )(s)?he ')  # looks for "he /she / he / she "
-        return len([line for line in self.testlines if regexp.search(line)])
+        return sum(self.testlines_df.target_sentence.str.count('(^| )(s)?he '))
 
-    def read_set(self, test=False):
-        """
-        :param test: if file name is not provided, we need to specify whether it's a testset (test=True) or trainingset
+    """"def read_set(self, set_name):
+        ""
+        :param set_name: filename, testset or trainingset
         :return:
-        """
-        if test:
-            set_name = self.testset
-        else:
-            set_name = self.trainingset
+        ""
         lines = self._read_file_to_list(set_name)
 
         if self.prodrop:  # make pro-drop
             if self.emphasis_percentage > 0:  # keep pronoun if emphasized
-                es_line_idx = [idx for idx, x in enumerate(lines) if 'ES,' in x]
+                es_line_idx = [idx for idx, x in enumerate(lines) if 'es,' in x]
                 num_emphasized = len(es_line_idx) * self.emphasis_percentage / 100
                 for es_idx in np.random.choice(es_line_idx, num_emphasized, replace=False):
                     lines[es_idx] = lines[es_idx].replace('AGENT=', 'AGENT=EMPH,')
@@ -346,13 +343,32 @@ class InputFormatter:
         if not self.semantic_gender:
             lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]
 
-        return lines
+        return lines"""
 
-    def _read_allowed_structures(self):
-        all_pos = [self.sentence_indeces_pos(sentence.split("##")[0].split(), convert_to_idx=True)
-                   for sentence in self.trainlines]
-        all_pos.sort()
-        return list(all_pos for all_pos, _ in itertools.groupby(all_pos))
+    def read_set_to_df(self, test=False):
+        set_name = self.testset if test else self.training_set
+        df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
+                         sep='## ', engine='python')
+        if self.prodrop:  # TODO: make pro-drop
+            if self.emphasis_percentage > 0:  # keep pronoun if emphasized
+                # find num of lines that are in ES. decide on num that will be emphasized:
+                number_emphasized = len([]) * self.emphasis_percentage / 100  # replace('AGENT=', 'AGENT=EMPH,')
+            else:
+                df.line.str.replace('(^| )(él|ella) ', ' ', regex=True)
+        # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
+
+        if not self.semantic_gender:
+            df.message.str.replace(',(M|F);', ';', regex=True)
+
+        df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a.split()))
+        df['target_sentence_pos'] = df.target_sentence_idx.map(lambda a: self.pos_of_sentence(a))
+        df['event_sem_activations'], df['target_lang_act'], df['lang'] = zp(*df.message.map(lambda a:
+                                                                                            self.get_message_info(a)))
+        return df
+
+    def read_allowed_pos(self):
+        """ returns all allowed POS structures in the training file """
+        return [list(x) for x in set(tuple(x) for x in self.trainlines_df.target_sentence_pos)]
 
     def _read_file_to_list(self, fname):
         """
@@ -360,21 +376,21 @@ class InputFormatter:
         :return: Simply reads a file into a list while stripping newlines
         """
         if self.file_exists(fname):
-            with open(os.path.join(self.input_dir, fname)) as f:
+            with open(os.path.join(self.directory, fname)) as f:
                 lines = [line.rstrip('\n') for line in f]
             return lines
 
     def _read_pickled_file(self, fname):
         if self.file_exists(fname, warning=False):
-            with open(os.path.join(self.input_dir, fname), 'rb') as f:
+            with open(os.path.join(self.directory, fname), 'rb') as f:
                 return pickle.load(f)
         return {}
 
     def file_exists(self, fname, warning=True):
-        if not os.path.isfile(os.path.join(self.input_dir, fname)):  # make sure the file exists
+        if not os.path.isfile(os.path.join(self.directory, fname)):  # make sure the file exists
             if warning:
                 import warnings
-                warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.input_dir, fname))
+                warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.directory, fname))
             return False
         return True
 
@@ -399,18 +415,14 @@ class InputFormatter:
         """
         return [self.get_lexicon_index(w) for w in sentence_lst]
 
-    # TODO: remove_period: True
-    def sentence_indeces_pos(self, sentence_idx_lst, remove_period=False, convert_to_idx=False):
+    # TODO: remove_period?
+    def pos_of_sentence(self, sentence_idx_lst, remove_period=False):
         """
         :param sentence_idx_lst: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
         :param remove_period: whether to remove the period (last element) from the sentence (useful when checking POS)
-        :param convert_to_idx: if sentence_idx contains list of words, they first need to be converted to the
-        respective indeces
         :return:
         """
-        if convert_to_idx:
-            sentence_idx_lst = self.sentence_indeces(sentence_idx_lst)
         if remove_period and sentence_idx_lst[-1] == self.period_idx:
             sentence_idx_lst = sentence_idx_lst[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
@@ -420,12 +432,11 @@ class InputFormatter:
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 1  # 0.5 ? 1?
-        reduced_activation = 0.2  # 0.1-4
-        event_sem_activations = np.array([-1] * self.event_sem_size)
+        norm_activation = 1  # 0.5 ?
+        reduced_activation = 0.4  # 0.1-4
+        event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.zeros((self.roles_size, self.identif_size + self.concept_size))
-        target_lang_activations = np.zeros(len(self.languages))
+        target_lang_activations = np.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -434,16 +445,28 @@ class InputFormatter:
                 for event in what.split(","):
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
                         activation = reduced_activation
+                        continue  # otherwise activation will revert to default
                     elif event in self.languages:
                         target_language = event
                         target_lang_activations[self.languages.index(event)] = activation
-                    elif event == 'ENES':
+                    elif event == 'enes':
                         target_language = event
                         target_lang_activations = [0.5, 0.5]
                     else:
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
-            else:
+        return event_sem_activations, target_lang_activations, target_language
+
+    def get_weights_role_concept(self, message):
+        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
+                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+                            gives information about the event-semantics (E)
+        """
+        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
+        weights_role_concept = np.zeros((self.roles_size, self.identif_and_concept_size))
+        for info in message.split(';'):
+            role, what = info.split("=")
+            if role != "E":  # retrieve activations for the event-sem layer
                 # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
@@ -470,7 +493,7 @@ class InputFormatter:
                                 print(message, '#####', concept)
                                 import sys
                                 sys.exit()
-        return weights_role_concept, event_sem_activations, target_lang_activations, message, target_language
+        return weights_role_concept
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
@@ -489,8 +512,7 @@ class InputFormatter:
         else:
             languages = ['morpheme_en', 'morpheme_es']
         q = self.lexicon_df.query(query)[languages].values.ravel()
-        q = [x for x in list(q) if is_not_nan(x)]
-        return self.sentence_indeces(q)
+        return [self.get_lexicon_index(x) for x in list(q) if is_not_nan(x)]
 
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indeces (cognates/period)
@@ -544,13 +566,7 @@ def take_average_of_valid_results(valid_results):
 
 
 def is_not_empty(x):
-    if x != [] and sum_list_greater_than_zero(x):  # do not simplify
-        return True
-    return False
-
-
-def sum_list_greater_than_zero(x):
-    if sum([sum(i) for i in x]) > 0:
+    if x != [] and sum(x) > 0:  # do not simplify
         return True
     return False
 
@@ -575,31 +591,8 @@ def get_np_mean(x, summary_sim=None):
     return 0
 
 
-def is_nd_array_or_list(x):
-    if isinstance(x, (list, np.ndarray)):
-        return True
-    return False
-
-
 def standard_error(std, num_simulations):
     return np.true_divide(std, np.sqrt(num_simulations))
-
-
-def percentage(x, total):
-    if isinstance(total, int) and total == 0:
-        return float('NaN')
-    if isinstance(x, list):
-        x = np.array(x)
-    with np.errstate(divide='raise'):
-        try:
-            np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
-        except:
-            print(x, total)
-    return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
-
-
-def numpy_arange_len(x):
-    return np.arange(len(x))
 
 
 def compute_mean_and_std(valid_results, epochs):
@@ -615,6 +608,7 @@ def compute_mean_and_std(valid_results, epochs):
             if sim['type_code_switches'][t]:
                 cs_keywords.extend(sim['type_code_switches'][t].keys())
     cs_keywords = set(cs_keywords)
+    results_sum['all_cs_types'] = strip_language_info(cs_keywords)
     for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
         results_sum[key] = {'training': {} if key == 'type_code_switches' else [],
                             'test': {} if key == 'type_code_switches' else []}
@@ -646,5 +640,8 @@ def compute_mean_and_std(valid_results, epochs):
                     np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
                     results_sum[key]["%s-std_error" % t] = np_std_err
                     results_sum[key][t] = np_mean
-    results_sum['all_cs_types'] = set([re.sub("EN-|ES-|-cog|-ff", "", x) for x in cs_keywords])
     return results_sum
+
+
+def strip_language_info(keyword_list):
+    return set([re.sub("en-|es-|-cog|-ff", "", x) for x in keyword_list])

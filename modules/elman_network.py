@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
-import numpy as np
 from copy import deepcopy
-from modules.plotter import Plotter
+from modules.plotter import Plotter, np
 from collections import defaultdict
 
 
@@ -11,6 +10,9 @@ class SimpleRecurrentNetwork:
     def __init__(self, learn_rate, momentum, rdir, context_init_value=0.5, debug_messages=True, include_role_copy=False,
                  include_input_copy=False):
         self.layers = []
+        self.layer_idx = defaultdict(int)
+        self.backpropagated_layers = []
+        self.feedforward_layers = []
         self.context_init_value = context_init_value  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
         self.momentum = momentum
@@ -27,16 +29,18 @@ class SimpleRecurrentNetwork:
         self.python_version = sys.version
 
     def _complete_initialization(self):
+        self.feedforward_layers = self.get_feedforward_layers()
+        self.backpropagated_layers = self.get_backpropagation_layers()
         for layer in self.layers:  # if there are > 1 layers and if at least one has input weights
             if all(layer.in_weights):
                 self.initialization_completed = True
                 break
 
-    def add_layer(self, name, size, has_bias=False, activation_function="tanh",
-                  convert_input=False, is_recurrent=False):
+    def add_layer(self, name, size, has_bias=False, activation_function="tanh", convert_input=False, recurrent=False):
         self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
-                                       is_recurrent=is_recurrent, activation_function=activation_function,
+                                       is_recurrent=recurrent, activation_function=activation_function,
                                        context_init_value=self.context_init_value))
+        self.layer_idx[name] = len(self.layers) - 1
 
     def connect_layers(self, first_layer_name, second_layer_name):
         first = self.get_layer(first_layer_name)
@@ -62,9 +66,7 @@ class SimpleRecurrentNetwork:
                 layer.sd = 0.05  # or calculate according to input size: input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
-                mean = 0
-                layer.in_weights = np.random.normal(mean, layer.sd, size=[layer.in_size + int(layer.has_bias),
-                                                                          layer.size])
+                layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
                 stats['means'].append(np.mean(layer.in_weights))
                 stats['std'].append(np.std(layer.in_weights))
                 stats['labels'].append(layer.name)
@@ -82,10 +84,10 @@ class SimpleRecurrentNetwork:
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
-        for layer in self.get_layers_for_backpropagation():
+        for layer in self.backpropagated_layers:
             np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
 
-    def set_message_reset_context(self, updated_role_concept, event_sem_activations, target_lang_act, reset=True):
+    def set_message_reset_context(self, updated_role_concept, info):
         weights_concept_role = updated_role_concept.T
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
@@ -102,13 +104,11 @@ class SimpleRecurrentNetwork:
 
         event_sem = self.get_layer("eventsem")
         if event_sem.convert_input:
-            event_sem.activation = convert_range(event_sem_activations)
+            event_sem.activation = convert_range(info.event_sem_activations)
         else:
-            event_sem.activation = event_sem_activations
-        self.update_layer_activation("target_lang", activation=target_lang_act)
-
-        if reset:
-            self.reset_context_delta_and_crole()
+            event_sem.activation = info.event_sem_activations
+        self.update_layer_activation("target_lang", activation=info.target_lang_act)
+        self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
         target_lang = self.get_layer("target_lang")
@@ -121,7 +121,7 @@ class SimpleRecurrentNetwork:
     def reset_context_delta_and_crole(self):
         recurrent_layer = self.get_layer("hidden")
         recurrent_layer.context_activation = np.array([self.context_init_value] * recurrent_layer.size)
-        for layer in self.get_layers_for_backpropagation():  # Also reset the previous delta values
+        for layer in self.backpropagated_layers:  # Also reset the previous delta values
             layer.previous_delta = np.empty([])
 
         if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
@@ -153,10 +153,7 @@ class SimpleRecurrentNetwork:
         if not self.initialization_completed:
             sys.exit('The network was not been initialized correctly. Make sure you have added layers (add_layer), '
                      'connected them (connect_layers) and (re)set the weights')
-
-        for layer in self.layers:
-            if not layer.in_layers:
-                continue  # skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
+        for layer in self.feedforward_layers:
             layer.in_activation = np.array([])  # minpy
             for incoming_layer in layer.in_layers:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
@@ -190,8 +187,7 @@ class SimpleRecurrentNetwork:
 
     def backpropagate(self, epoch):
         self._compute_output_error(epoch)
-        # Propagate error back to the previous layers
-        for self.current_layer in self.get_layers_for_backpropagation():
+        for self.current_layer in self.backpropagated_layers:  # Propagate error back to the previous layers
             self._compute_current_layer_gradient()
             self._compute_current_delta_weight_matrix()
             self._update_total_error_for_backpropagation()
@@ -290,26 +286,25 @@ class SimpleRecurrentNetwork:
                     print('%s/weights already exists' % results_dir)
 
     def get_layer(self, layer_name):
-        layer = [x for x in self.layers if x.name is layer_name]
-        return layer[0] if layer else layer
+        return self.layers[self.layer_idx[layer_name]]
 
-    def get_layers_for_backpropagation(self):
+    def get_feedforward_layers(self):
         """
         Returns only the layers that have incoming activations (and can therefore backpropagate the error)
+        Skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
         """
+        return [layer for layer in self.layers if layer.in_layers]
+
+    def get_backpropagation_layers(self):
         return [layer for layer in reversed(self.layers) if layer.in_layers]
 
     def get_max_output_activation(self):
-        output = self.get_layer("output")
-        return int(output.activation.argmax())  # convert output to integer
+        return int(self.get_layer_activation("output").argmax())
+        #output = self.get_layer("output")
+        #return int(output.activation.argmax())  # convert output to integer
 
     def get_layer_activation(self, layer_name):
-        layer = self.get_layer(layer_name)
-        return layer.activation
-
-    def get_predconcept_activation(self):
-        output = self.get_layer("pred_concept")
-        return output.activation, output.in_activation
+        return self.layers[self.layer_idx[layer_name]].activation
 
 
 class NeuronLayer:
