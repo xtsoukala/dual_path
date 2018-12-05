@@ -25,6 +25,8 @@ class InputFormatter:
         self.replace_haber_tener = replace_haber_tener
         if replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
+            self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
+                                (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -57,12 +59,13 @@ class InputFormatter:
         self.identif_and_concept_size = self.concept_size + self.identif_size
         self.roles_size = len(self.roles)
         self.languages_size = len(self.languages)
+        self.weights_role_concept = {'training': [], 'test': []}
         self.training_set = trainingset
-        self.trainlines_df = self.read_set_to_df()
+        self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()
         self.num_train = len(self.trainlines_df)
         self.allowed_structures = self.read_allowed_pos()
         self.testset = testset
-        self.testlines_df = self.read_set_to_df(test=True)
+        self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
@@ -85,9 +88,9 @@ class InputFormatter:
         self.directory = new_directory
         if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
-        self.trainlines_df = self.read_set_to_df()  # re-read files
+        self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()  # re-read files
         self.num_train = len(self.trainlines_df)
-        self.testlines_df = self.read_set_to_df(test=True)
+        self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
@@ -322,29 +325,6 @@ class InputFormatter:
     def _number_of_test_pronouns(self):
         return sum(self.testlines_df.target_sentence.str.count('(^| )(s)?he '))
 
-    """"def read_set(self, set_name):
-        ""
-        :param set_name: filename, testset or trainingset
-        :return:
-        ""
-        lines = self._read_file_to_list(set_name)
-
-        if self.prodrop:  # make pro-drop
-            if self.emphasis_percentage > 0:  # keep pronoun if emphasized
-                es_line_idx = [idx for idx, x in enumerate(lines) if 'es,' in x]
-                num_emphasized = len(es_line_idx) * self.emphasis_percentage / 100
-                for es_idx in np.random.choice(es_line_idx, num_emphasized, replace=False):
-                    lines[es_idx] = lines[es_idx].replace('AGENT=', 'AGENT=EMPH,')
-                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) if 'EMPH,' not in line else line for line in lines]
-            else:
-                lines = [re.sub(r'(^| )(él|ella) ', ' ', line) for line in lines]
-        # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
-
-        if not self.semantic_gender:
-            lines = [re.sub(',(M|F)(,|;|$)', r'\2', line) for line in lines]
-
-        return lines"""
-
     def read_set_to_df(self, test=False):
         set_name = self.testset if test else self.training_set
         df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
@@ -360,15 +340,15 @@ class InputFormatter:
         if not self.semantic_gender:
             df.message.str.replace(',(M|F);', ';', regex=True)
 
-        df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a.split()))
-        df['target_sentence_pos'] = df.target_sentence_idx.map(lambda a: self.pos_of_sentence(a))
-        df['event_sem_activations'], df['target_lang_act'], df['lang'] = zp(*df.message.map(lambda a:
-                                                                                            self.get_message_info(a)))
-        return df
+        df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a))
+        df['target_pos'] = df.target_sentence_idx.map(lambda a: self.pos_of_sentence(a))
+        (df['event_sem_activations'], df['target_lang_act'], df['lang'],
+         weights_role_concept) = zp(*df.message.map(lambda a: self.get_message_info(a)))
+        return df, weights_role_concept
 
     def read_allowed_pos(self):
         """ returns all allowed POS structures in the training file """
-        return [list(x) for x in set(tuple(x) for x in self.trainlines_df.target_sentence_pos)]
+        return [list(x) for x in set(tuple(x) for x in self.trainlines_df.target_pos)]
 
     def _read_file_to_list(self, fname):
         """
@@ -408,12 +388,12 @@ class InputFormatter:
         """
         return " ".join([self.lexicon[idx] for idx in sentence_idx])
 
-    def sentence_indeces(self, sentence_lst):
+    def sentence_indeces(self, sentence):
         """
-        :param sentence_lst: intended sentence in a list (split string) format, e.g., ['the', 'cat', 'walk', '-s']
+        :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walk', '-s'])
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
         """
-        return [self.get_lexicon_index(w) for w in sentence_lst]
+        return [self.get_lexicon_index(w) for w in sentence.split()]
 
     # TODO: remove_period?
     def pos_of_sentence(self, sentence_idx_lst, remove_period=False):
@@ -427,7 +407,7 @@ class InputFormatter:
             sentence_idx_lst = sentence_idx_lst[:-1]
         return [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
 
-    def get_message_info(self, message):
+    def get_message_info_OLD(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
@@ -456,6 +436,64 @@ class InputFormatter:
                         event_sem_activations[self.event_semantics.index(event)] = activation
                     activation = norm_activation  # reset activation levels to maximum
         return event_sem_activations, target_lang_activations, target_language
+
+    def get_message_info(self, message):
+        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
+                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+                            gives information about the event-semantics (E)
+        """
+        norm_activation = 1  # 0.5 ?
+        reduced_activation = 0.4  # 0.1-4
+        event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
+        weights_role_concept = np.zeros((self.roles_size, self.identif_and_concept_size))
+        target_lang_activations = np.zeros(self.languages_size)
+        target_language = None
+        for info in message.split(';'):
+            role, what = info.split("=")
+            if role == "E":  # retrieve activations for the event-sem layer
+                activation = norm_activation
+                for event in what.split(","):
+                    if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
+                        activation = reduced_activation
+                        continue  # otherwise activation will revert to default
+                    elif event in self.languages:
+                        target_language = event
+                        target_lang_activations[self.languages.index(event)] = activation
+                    elif event == 'enes':
+                        target_language = event
+                        target_lang_activations = [0.5, 0.5]
+                    else:
+                        event_sem_activations[self.event_semantics.index(event)] = activation
+                    activation = norm_activation  # reset activation levels to maximum
+            else:
+                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
+                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
+                for concept in what.split(","):
+                    if concept in self.identifiability:
+                        weights_role_concept[self.roles.index(role)][
+                            self.identifiability.index(concept)] = self.fixed_identif
+                    elif concept not in ['COG', 'FF']:
+                        if self.use_word_embeddings:
+                            activation_vector = self.concepts['unknown']
+                            # FIXME
+                            lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
+                            if lex in self.concepts:
+                                activation_vector = self.concepts[lex]
+                            else:
+                                print("UNK: %s(%s)" % (lex, concept))
+
+                            for i, w2v_activation in enumerate(activation_vector):
+                                weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
+                        else:
+                            if concept in self.concepts:
+                                idx_concept = self.identif_size + self.concepts.index(concept)
+                                weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                            else:
+                                print(message, '#####', concept)
+                                import sys
+                                sys.exit()
+        return event_sem_activations, target_lang_activations, target_language, weights_role_concept
 
     def get_weights_role_concept(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF

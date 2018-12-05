@@ -411,7 +411,7 @@ class SetsGenerator:
 
     @staticmethod
     def extract_and_append_event_semantics(msg_str):
-        event_sem_roles = [re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith(("E=", "AAL="))]
+        event_sem_roles = [re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")] #, "AAL="))]
         new_msg = "%s,%s" % (msg_str, ",".join(event_sem_roles))
         return new_msg.replace("RECIPIENT,PATIENT", "RECIPIENT,-1,PATIENT")
 

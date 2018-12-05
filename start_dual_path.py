@@ -69,8 +69,8 @@ if __name__ == "__main__":
         return pos_int
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=120)
-    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=90)
+    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
@@ -137,9 +137,6 @@ if __name__ == "__main__":
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
                         help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
     parser.set_defaults(simple_semantics=True)
-    parser.add_argument('--no-shuffle', dest='shuffle', action='store_false',
-                        help='Do not shuffle training set after every epoch')
-    parser.set_defaults(shuffle=True)
     parser.add_argument('--noeval', dest='eval_test', action='store_false',
                         help='Do not evaluate test set')
     parser.set_defaults(eval_test=True)
@@ -196,17 +193,17 @@ if __name__ == "__main__":
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
         if sys.version[0] == '3':
             args.compress = int(args.hidden * (2 / 3))
-        else:
+        else:  # Python 2
             import math
 
             args.compress = int(math.ceil(120 * 0.66))
     # if not args.hidden: we could measure the lexicon size and compute the number of layers by dividing by 2
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = "simulations/%s%s/%s_%s_sim%s_h%s_c%s_fw%s" % ((args.resdir if args.resdir else ""),
-                                                                 datetime.now().strftime("%Y-%m-%d"),
-                                                                 datetime.now().strftime("%Y-%m-%dt%H.%M.%S"),
-                                                                 args.lang, args.sim, args.hidden, args.compress,
-                                                                 args.fw)
+    results_dir = "simulations/%s%s/%s_%s_sim%s_h%s_c%s_fw%s_e%s" % ((args.resdir if args.resdir else ""),
+                                                                     datetime.now().strftime("%Y-%m-%d"),
+                                                                     datetime.now().strftime("%H.%M.%S"),
+                                                                     args.lang, args.sim, args.hidden, args.compress,
+                                                                     args.fw, args.epochs)
     os.makedirs(results_dir)
 
     if args.auxiliary_experiment:
@@ -273,13 +270,12 @@ if __name__ == "__main__":
                             "Compress: %s\nCopy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse "
                             "gender info:%s\novert_pronouns (overt es pronouns):%s%%\nFixed weights: concept-role: %s, "
                             "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
-                            "Shuffle set after each epoch: %s\nAllow free structure production:%s\nIgnore tense and "
-                            "determiners when evaluating:%s") %
+                            "Allow free structure production:%s\nIgnore tense and determiners when evaluating:%s") %
                            (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.np, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
-                            args.set_weights, args.set_weights_epoch, args.exclude_lang, args.shuffle, args.free_pos,
+                            args.set_weights, args.set_weights_epoch, args.exclude_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(directory=args.input, language=args.lang, semantic_gender=args.gender,
@@ -299,6 +295,11 @@ if __name__ == "__main__":
         # now run the simulations
         if platform.system() == 'Linux':
             os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
+        else:  # Mac OS
+            os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
+            os.environ["MKL_NUM_THREADS"] = "1"
+            os.environ["NUMEXPR_NUM_THREADS"] = "1"
+            os.environ["OMP_NUM_THREADS"] = "1"
 
     if args.use_multiprocessing:
         processes = []
@@ -328,13 +329,12 @@ if __name__ == "__main__":
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
                          cognate_experiment=args.cognate_experiment)
         if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.shuffle, args.plot_results, args.eval_test,
-                                                                   args.eval_train))
+            process = mp.Process(target=dualp.start_network, args=(args.plot_results, args.eval_test, args.eval_train))
             process.start()
             processes.append(process)
         else:
-            dualp.start_network(shuffle_set=args.shuffle, plot_results=args.plot_results,
-                                evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_train)
+            dualp.start_network(plot_results=args.plot_results, evaluate_test_set=args.eval_test,
+                                evaluate_training_set=args.eval_train)
 
     if args.use_multiprocessing:
         for p in processes:

@@ -162,7 +162,6 @@ class Plotter:
                                                              self.cs_results['type_correct_test_ES'][i]])
 
                 if auxiliary_experiment:
-                    # print(self.results)
                     res = []
                     legend = []
                     for aux in ['is', 'has']:
@@ -183,14 +182,14 @@ class Plotter:
                                                     legend=legend, ylim=15,
                                                     fname='auxiliary_test', results=res)
                         # now exclude the _after categories:
-                        for keyword in ['has_after', 'is_after']:
+                        for keyword in ['has_after', 'is_after', 'is_aux', 'has_aux']:
                             idx = legend.index(keyword)
                             if idx:
                                 del legend[idx]
                                 del res[idx]
                         self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
                                                     legend=legend, ylim=15,
-                                                    fname='auxiliary_test_no_after', results=res)
+                                                    fname='auxiliary_participle', results=res)
 
             ############################################################################################################
             if cognate_experiment:

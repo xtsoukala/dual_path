@@ -63,7 +63,7 @@ class SimpleRecurrentNetwork:
                 weights_fname = "weights_%s_%s.npz" % (layer.name, set_weights_epoch)
                 layer.in_weights = np.load(os.path.join(w_dir, weights_fname))['arr_0']
             else:
-                layer.sd = 0.05  # or calculate according to input size: input_sd(layer.in_size)
+                layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
@@ -300,11 +300,16 @@ class SimpleRecurrentNetwork:
 
     def get_max_output_activation(self):
         return int(self.get_layer_activation("output").argmax())
-        #output = self.get_layer("output")
-        #return int(output.activation.argmax())  # convert output to integer
 
     def get_layer_activation(self, layer_name):
         return self.layers[self.layer_idx[layer_name]].activation
+
+    @staticmethod
+    def input_sd(number_of_inputs):
+        """
+        As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
+        """
+        return np.true_divide(1.0, number_of_inputs)
 
 
 class NeuronLayer:
@@ -343,13 +348,6 @@ class NeuronLayer:
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
         self.context_activation = np.array([context_init_value] * self.size)
-
-
-def input_sd(number_of_inputs):
-    """
-    As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
-    """
-    return np.true_divide(1.0, number_of_inputs)
 
 
 def convert_range(matrix, min_val=-1, max_val=1):
