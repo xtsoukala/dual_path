@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 import sys
 import re
+import time
 
 print_on_screen = False  # used only to debug, no need to add it as a called parameter
 
@@ -88,6 +89,7 @@ class SetsGenerator:
         return test_set, training_set
 
     def generate_auxiliary_experiment_sentences(self, training_sentences, percentage_l2, num_test_sentences=1000):
+        sys.exit('DA GUK')
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            percentage_l2=percentage_l2)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_sentences,
@@ -185,7 +187,6 @@ class SetsGenerator:
                 row = random.randint(0, num_structures_L2 - 1)
                 sentence_structures.append((aux_structures['message'].iloc[row] + "," + self.L2,
                                             aux_structures[self.L2].iloc[row]))
-        assert num_sentences == len(sentence_structures)
         random.shuffle(sentence_structures)
         return sentence_structures
 
@@ -203,8 +204,19 @@ class SetsGenerator:
         # keep track of training sentences (messages) that are identical to test ones and exclude them
         generated_pairs = []
         remaining_structures = sentence_structures
-        # the while loop is needed because of the unique sentence restriction.
-        while remaining_structures:
+        time_start = time.time()
+        while remaining_structures:  # while loop needed because of the unique sentence restriction
+            if time.time() - time_start > 60:
+                if self.aux_experiment and len(self.lang) == 2:
+                    print("You might want to increase the size of the lexicon or the number of allowed structures; the "
+                          "generator doesn't have enough material to generate %s more structures: %s (total: %s). "
+                          "fname: %s. Simulation: %s" % (len(remaining_structures), remaining_structures,
+                                                         len(sentence_structures), fname, self.seed))
+                    exclude_test_sentences = []
+                else:
+                    sys.exit("You might want to increase the size of the lexicon or the number of allowed structures; "
+                             "the generator doesn't have enough material to generate %s more structures: %s" %
+                             (len(remaining_structures), remaining_structures))
             remaining_structures, generated_pairs, max_cognate = self.structures_to_sentences(remaining_structures,
                                                                                               generated_pairs,
                                                                                               exclude_test_sentences,
@@ -497,8 +509,9 @@ if __name__ == "__main__":
     # store under "generated/" if folder was not specified
     sets = SetsGenerator(results_dir="../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M"),
                          cognate_percentage=0, use_full_verb_form=True, monolingual_only=False,
-                         use_simple_semantics=True, allow_free_structure_production=False, lang='esen',
-                         lexicon_csv='../corpus/lexicon.csv', structures_csv='../corpus/structures.csv')
+                         use_simple_semantics=True, allow_free_structure_production=False, lang='en',
+                         lexicon_csv='../corpus/lexicon_aux_limited.csv', structures_csv='../corpus/structures.csv')
     # sets.generate_general(num_sentences=2500, percentage_l2=0.5)
-    test, train = sets.generate_general(num_sentences=2500, percentage_l2=0.5)
-    sets.generate_auxiliary_experiment_sentences(num_test_sentences=1000, training_sentences=train, percentage_l2=0.5)
+    test, train = sets.generate_general(num_sentences=3500, percentage_l2=0.5)
+    if len(sets.lang) > 2:
+        sets.generate_auxiliary_experiment_sentences(num_test_sentences=1000, training_sentences=train, percentage_l2=0)

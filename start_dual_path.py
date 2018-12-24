@@ -55,8 +55,9 @@ def create_all_input_files(num_simulations, directory, sets, original_input_path
                                                              save_files=False)
                     if auxiliary_experiment:
                         sets.sets.aux_experiment = True
-                        sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
-                                                                          percentage_l2=l2_percentage)
+                        if len(args.lang) > 2:
+                            sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
+                                                                              percentage_l2=l2_percentage)
         elif original_input_path:  # use existing test/training set (copy them first)
             copy_files_endswith(os.path.join(original_input_path, str(sim_num)), rdir)
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
         return pos_int
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=90)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)
     parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
@@ -81,17 +82,17 @@ if __name__ == "__main__":
     parser.add_argument('-structures', help='CSV file that contains the structures')
     parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
                                                           'training.', default="training.in")
-    parser.add_argument('-testset', '-test', help='Test set file name', default="test.in")
+    parser.add_argument('-testset', '-test', help='Test set file name')
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.15)
+                                      'or any combination [enes, esen] for bilingual)', default='enes', type=str.lower)
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.10)#0.15)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.02)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
-                        type=float, default=0.75)
+                        type=float, default=0.9)#0.75)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
@@ -102,7 +103,7 @@ if __name__ == "__main__":
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('-generate_num', type=int, default=2500, help='Sum of test/training sentences to be generated '
+    parser.add_argument('-generate_num', type=int, default=3500, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=positive_int, default=1)
     parser.add_argument('-title', help='Title for the plots')
@@ -182,12 +183,13 @@ if __name__ == "__main__":
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
 
-    if args.only_eval and not (args.set_weights or args.set_weights_epoch):
+    set_weights_epoch = args.set_weights_epoch
+    if args.only_eval and not (args.set_weights or set_weights_epoch):
         sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
-                 '(args.set_weights_epoch: %s).' % (args.set_weights, args.set_weights_epoch))
+                 '(set_weights_epoch: %s).' % (args.set_weights, set_weights_epoch))
 
-    if args.set_weights and not args.only_eval and not args.set_weights_epoch:
-        args.set_weights_epoch = 0
+    if args.set_weights and not args.only_eval and not set_weights_epoch:
+        set_weights_epoch = 0
         logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
 
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
@@ -211,11 +213,15 @@ if __name__ == "__main__":
         args.exclude_lang = True
         args.full_verb = True
         args.threshold = 30
+        if not args.testset:
+            args.testset = 'test_aux.in'
     elif args.cognate_experiment:
         args.exclude_lang = True
 
     original_input_path = None  # keep track of the original input in case it was copied
     input_sets = None
+    if not args.testset:
+        args.testset = 'test.in'
     if args.input:  # generate a new set (unless "input" was also set)
         if not os.path.isfile(os.path.join(args.input, "test.in")) and 'input' not in args.input:
             corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
@@ -248,8 +254,9 @@ if __name__ == "__main__":
                                                            percentage_l2=args.l2_percentage)
             if args.auxiliary_experiment:
                 input_sets.sets.aux_experiment = True
-                input_sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
-                                                                        percentage_l2=args.l2_percentage)
+                if len(args.lang) > 2:
+                    input_sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
+                                                                            percentage_l2=args.l2_percentage)
 
     if not args.title:
         lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
@@ -275,7 +282,7 @@ if __name__ == "__main__":
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.np, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
-                            args.set_weights, args.set_weights_epoch, args.exclude_lang, args.free_pos,
+                            args.set_weights, set_weights_epoch, args.exclude_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(directory=args.input, language=args.lang, semantic_gender=args.gender,
@@ -317,15 +324,16 @@ if __name__ == "__main__":
             else:
                 os.makedirs(destination_folder)
                 copy_files_endswith(src=src_folder, dest=destination_folder,
-                                    ends_with="_%s.npz" % args.set_weights_epoch)
-                if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
-                    os.system("rename s/_%s/_0/ %s/*.npz" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
+                                    ends_with="_%s.npz" % set_weights_epoch)
+                if set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
+                    os.system("rename s/_%s/_0/ %s/*.npz" % (set_weights_epoch, '%s/weights' % inputs.directory))
+                    set_weights_epoch = 0
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
                          set_weights_folder=inputs.directory if args.set_weights else None, momentum=args.momentum,
                          input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
-                         set_weights_epoch=args.set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                         set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
                          cognate_experiment=args.cognate_experiment)
         if args.use_multiprocessing and args.sim > 1:
@@ -378,8 +386,8 @@ if __name__ == "__main__":
                                epochs=args.epochs)
                 plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
                                   test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
-                                  num_test=inputs.num_test, num_train=inputs.num_train,
-                                  simulation_logger=simulation_logger, auxiliary_experiment=args.auxiliary_experiment)
+                                  num_test=inputs.num_test, num_train=inputs.num_train, test_df=inputs.testlines_df,
+                                  auxiliary_experiment=args.auxiliary_experiment)
                 if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                     simulation_logger.info("Code-switched percentage (test set): %s" %
                                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],

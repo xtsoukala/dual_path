@@ -45,6 +45,7 @@ class InputFormatter:
         self.fixed_weights = fixed_weights
         self.fixed_identif = fixed_weights_identif
         self.period_idx = self.get_lexicon_index('.')
+        self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
@@ -241,20 +242,20 @@ class InputFormatter:
             return False
         return True
 
-    def check_switch_points(self, sentence_indeces, sentence_indeced_pos, pos_of_interest='aux'):
-        if pos_of_interest in sentence_indeced_pos:
-            pos_idx = sentence_indeced_pos.index(pos_of_interest)
-        elif self.replace_haber_tener:
-            pos_idx = sentence_indeced_pos.index('verb')
-
-        # check switch before pos_of_interest
-        at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
-        # check switch right after (e.g. between aux and participle)
-        right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
-                                            target_lang_idx=sentence_indeces[pos_idx])
-        # check switch at the end (e.g. after aux and participle)
-        after = self.is_code_switched(sentence_indeces[pos_idx + 2:], target_lang_idx=sentence_indeces[pos_idx + 1])
-        return at, right_after, after
+    def check_switch_points(self, sentence_indeces, sentence_pos, pos_of_interest='aux'):
+        if pos_of_interest in sentence_pos:
+            pos_idx = sentence_pos.index(pos_of_interest)
+        else:
+            pos_idx = sentence_pos.index('verb')
+        if pos_idx:
+            # check switch before pos_of_interest
+            at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
+            # check switch right after (e.g. between aux and participle)
+            right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
+                                                target_lang_idx=sentence_indeces[pos_idx])
+            # check switch at the end (e.g. after aux and participle)
+            after = self.is_code_switched(sentence_indeces[pos_idx + 2:], target_lang_idx=sentence_indeces[pos_idx + 1])
+            return at, right_after, after
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
         """
@@ -290,7 +291,6 @@ class InputFormatter:
                         else:
                             concept_append("%s::%s" % (info['pos'][-1], type_list[i])
                                            if is_not_nan(type_list[i]) else info['pos'][-1])
-                    # else: print(item, pos_list[i])
             info['code_switched_idx'].append(len(info['lex']))
         with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in info['lex'])
@@ -313,6 +313,8 @@ class InputFormatter:
         return morph
 
     def concept_to_morphemes(self, concept_idx, target_lang):
+        if self.idx_to_concept[concept_idx] == 'aux::auxiliary_verb':
+            return self.auxiliary_idx
         lower_range = 0 if target_lang == self.L1 else self.code_switched_idx
         upper_range = self.code_switched_idx if target_lang == self.L1 else len(self.idx_to_concept)
         morph = []
@@ -320,6 +322,9 @@ class InputFormatter:
         for idx in range(lower_range, upper_range):
             if self.idx_to_concept[concept_idx] == self.idx_to_concept[idx]:
                 append(idx)
+        if not morph:
+            import sys
+            sys.exit("concept_idx %s does not have a concept equivalent in %s" % (concept_idx, target_lang))
         return morph
 
     def _number_of_test_pronouns(self):
@@ -342,8 +347,8 @@ class InputFormatter:
 
         df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a))
         df['target_pos'] = df.target_sentence_idx.map(lambda a: self.pos_of_sentence(a))
-        (df['event_sem_activations'], df['target_lang_act'], df['lang'],
-         weights_role_concept) = zp(*df.message.map(lambda a: self.get_message_info(a)))
+        (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
+         df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
         return df, weights_role_concept
 
     def read_allowed_pos(self):
@@ -405,7 +410,10 @@ class InputFormatter:
         """
         if remove_period and sentence_idx_lst[-1] == self.period_idx:
             sentence_idx_lst = sentence_idx_lst[:-1]
-        return [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
+        pos = [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
+        if 'verb' in pos and 'participle' in pos:
+            pos = [w.replace('verb', 'aux') for w in pos]
+        return pos
 
     def get_message_info_OLD(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -445,6 +453,7 @@ class InputFormatter:
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
         event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = np.zeros((self.roles_size, self.identif_and_concept_size))
         target_lang_activations = np.zeros(self.languages_size)
@@ -452,6 +461,7 @@ class InputFormatter:
         for info in message.split(';'):
             role, what = info.split("=")
             if role == "E":  # retrieve activations for the event-sem layer
+                event_sem_message = what
                 activation = norm_activation
                 for event in what.split(","):
                     if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
@@ -493,7 +503,7 @@ class InputFormatter:
                                 print(message, '#####', concept)
                                 import sys
                                 sys.exit()
-        return event_sem_activations, target_lang_activations, target_language, weights_role_concept
+        return event_sem_activations, target_lang_activations, target_language, weights_role_concept, event_sem_message
 
     def get_weights_role_concept(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -609,7 +619,7 @@ def is_not_empty(x):
     return False
 
 
-def get_np_mean_and_std_err(x, summary_sim=None):
+def get_np_mean_and_std_err(x, summary_sim):
     if isinstance(x, list):
         x = np.array(x)
     if x.sum() > 0:
@@ -650,32 +660,32 @@ def compute_mean_and_std(valid_results, epochs):
     for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
         results_sum[key] = {'training': {} if key == 'type_code_switches' else [],
                             'test': {} if key == 'type_code_switches' else []}
-        for simulation in valid_results:  # go through all simulations
+        for num, simulation in enumerate(valid_results):  # go through all simulations
             for t in ['training', 'test']:
                 if t in simulation[key] and simulation[key][t]:
-                    if type(simulation[key][t]) is dict:  # case: type_code_switches
+                    if isinstance(simulation[key][t], dict):  # case: type_code_switches
                         for cs_type in cs_keywords:
                             if cs_type not in results_sum[key][t]:
                                 results_sum[key][t][cs_type] = []
+
                             if cs_type in simulation[key][t]:
-                                results_sum[key][t][cs_type].append(simulation[key][t][cs_type])
+                                results_sum[key][t][cs_type].append(simulation[key][t][cs_type][:epochs])
                             else:  # fill with 0
                                 results_sum[key][t][cs_type].append([0] * epochs)
                     else:
-                        results_sum[key][t].append(simulation[key][t])
+                        results_sum[key][t].append(simulation[key][t][:epochs])
     # now compute MEAN and STANDARD ERROR of all simulations
-    for key in all_keys:
+    for key in results_sum.keys():
         for t in ['training', 'test']:
             if t in results_sum[key] and results_sum[key][t]:
-                if type(results_sum[key][t]) is dict:
+                if isinstance(results_sum[key][t], dict):
                     for cs_type in cs_keywords:
-                        np_array = np.array(results_sum[key][t][cs_type])
-                        np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
+                        np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t][cs_type],
+                                                                      summary_sim=len(valid_results))
                         results_sum[key][t]["%s-std_error" % cs_type] = np_std_err
                         results_sum[key][t][cs_type] = np_mean
                 else:
-                    np_array = np.array(results_sum[key][t])
-                    np_mean, np_std_err = get_np_mean_and_std_err(np_array, summary_sim=len(valid_results))
+                    np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t], summary_sim=len(valid_results))
                     results_sum[key]["%s-std_error" % t] = np_std_err
                     results_sum[key][t] = np_mean
     return results_sum

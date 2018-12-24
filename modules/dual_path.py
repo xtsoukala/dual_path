@@ -3,7 +3,7 @@ import logging
 from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, np
 from modules.plotter import Plotter
-from modules.formatter import pickle, strip_language_info
+from modules.formatter import pickle
 
 
 class DualPath:
@@ -52,7 +52,7 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
-        num_epochs_decreasing_step = 2
+        num_epochs_decreasing_step = 4
         self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate,
                                                   self.inputs.num_train * num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
@@ -224,6 +224,9 @@ class DualPath:
             else:
                 set_lines = self.inputs.trainlines_df
                 num_sentences = self.inputs.num_train
+            for i in set_lines.event_sem_message.unique():
+                results[i] = {'test': [], 'training': []}
+                results["%s_cs" % i] = {'test': [], 'training': []}
             # weights_role_concept = self.inputs.weights_role_concept[set_name]
             logger = self.test_logger if set_name == 'test' else self.training_logger
             epoch = 0
@@ -254,11 +257,10 @@ class DualPath:
                     if is_grammatical:
                         counter['correct_pos'] += 1
                         has_correct_pos = True
-
-                        if code_switched:  # only count grammatically correct sentences
-                            # determine CS type here
+                        if code_switched:  # only count grammatically correct sentences -- determine CS type here
                             cs_type = self.inputs.get_code_switched_type(produced_idx, line.target_sentence_idx)
                             if cs_type:  # TODO: it could be interesting to check the failed sentences too
+                                counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True
                                 counter['correct_code_switches'] += 1
                                 cs_type_with_lang = "%s-%s" % (line.lang, cs_type)
@@ -290,10 +292,11 @@ class DualPath:
                         else:
                             correct_meaning = self.inputs.has_correct_meaning(produced_idx,
                                                                               line.target_sentence_idx)
-                            counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', line.lang)] += 1
-
                         if correct_meaning:
                             counter['correct_meaning'] += 1
+                            # this contains number of ALL correct progressive/perfect sentences, even the CS ones
+                            counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', line.lang)] += 1
+                            counter[line.event_sem_message] += 1
                         else:
                             has_wrong_det = self.inputs.test_without_feature(produced_idx,
                                                                              line.target_sentence_idx,
@@ -303,6 +306,8 @@ class DualPath:
                                                                                feature="tense")
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                                 counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
+                                counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message
+                                                           else 'is', line.lang)] += 1
 
                         if epoch > 0 and self.pronoun_experiment:  # only check the grammatical sentences
                             if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
@@ -336,8 +341,6 @@ class DualPath:
                 epoch += 1
             results['type_code_switches'][set_name] = self.aggregate_dict(self.epochs,
                                                                           results['type_code_switches'][set_name])
-        results['all_cs_types'] = self.extract_cs_keys(results['type_code_switches'])
-
         # write (single) simulation results to a pickled file
         with open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
             pickle.dump(results, pckl)
@@ -346,16 +349,9 @@ class DualPath:
             results['mse'] = self.srn.mse
             plt = Plotter(results_dir=self.inputs.directory, epochs=self.epochs, summary_sim=None, title=None)
             plt.plot_results(results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
+                             test_df=self.inputs.testlines_df,
                              cognate_experiment=self.cognate_experiment, auxiliary_experiment=self.auxiliary_experiment,
                              test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
-
-    @staticmethod
-    def extract_cs_keys(type_code_switches):
-        cs_keys = []
-        for set_type in ['test', 'training']:
-            if type_code_switches[set_type]:
-                cs_keys += type_code_switches[set_type].keys()
-        return strip_language_info(cs_keys)
 
     @staticmethod
     def aggregate_dict(epochs, results_type_code_switches):
