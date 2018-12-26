@@ -240,13 +240,14 @@ class DualPath:
                     produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(
                         line.message))  # weights_role_concept[line_idx])  # FIXME
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
+                    target_pos, target_sentence_idx = line.target_pos, line.target_sentence_idx
                     produced_pos = self.inputs.pos_of_sentence(produced_idx)
                     has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
                                                                                                  False, None)
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
-                                                                                                line.target_pos)
+                                                                                                target_pos)
                     code_switched = self.inputs.is_code_switched(produced_idx,
-                                                                 target_lang_idx=line.target_sentence_idx[0])
+                                                                 target_lang_idx=target_sentence_idx[0])
                     if code_switched:
                         counter['all_code_switches'] += 1
                         if self.cognate_experiment:
@@ -258,7 +259,7 @@ class DualPath:
                         counter['correct_pos'] += 1
                         has_correct_pos = True
                         if code_switched:  # only count grammatically correct sentences -- determine CS type here
-                            cs_type = self.inputs.get_code_switched_type(produced_idx, line.target_sentence_idx)
+                            cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx)
                             if cs_type:  # TODO: it could be interesting to check the failed sentences too
                                 counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True

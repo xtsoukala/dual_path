@@ -21,7 +21,7 @@ class InputFormatter:
         self.L1, self.L2 = self.get_l1_and_l2(language)
         self.directory = directory  # folder that contains input files and where the results are saved
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
-        self.lexicon, self.pos, self.idx_to_concept, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.replace_haber_tener = replace_haber_tener
         if replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
@@ -70,7 +70,6 @@ class InputFormatter:
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
-        del self.lexicon_df  # remove it after the processing
 
     def get_l1_and_l2(self, lang_code):
         if len(lang_code) == 4:
@@ -200,7 +199,8 @@ class InputFormatter:
             lang = self.L1
         else:
             lang = self.L2
-        trans = [self.find_equivalent_translation_idx(idx, lang) for idx in out_sentence_idx]
+        trans = [self.find_equivalent_translation_idx(idx, lang)
+                 for i, idx in enumerate(out_sentence_idx)]
         return [list(x for x in tup) for tup in list(itertools.product(*trans))]
 
     def _idx_is_cognate_or_ff(self, idx):
@@ -273,29 +273,20 @@ class InputFormatter:
         info = defaultdict(list)
         lex_append = info['lex'].append
         pos_append = info['pos'].append
-        concept_append = info['idx_to_concept'].append
         for lang in [self.L1, self.L2]:
             if lang:
                 column = self.lexicon_df[['morpheme_%s' % lang, 'pos',
                                           'concept', 'type']].dropna(subset=['morpheme_%s' % lang])
                 pos_list = list(column['pos'])
-                concept_list = list(column['concept'])
-                type_list = list(column['type'])
+                # replace 'aux' with 'verb'. FIXME: RM Look for a better way pos_list = [x.replace('aux', 'verb') for x in pos_list if x]
                 for i, item in enumerate(list(column['morpheme_%s' % lang])):
                     if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
                         lex_append(item)
                         pos_append(pos_list[i])
-                        # add concept info
-                        if is_not_nan(concept_list[i]):  # TODO: maybe change to dict
-                            concept_append(concept_list[i])
-                        else:
-                            concept_append("%s::%s" % (info['pos'][-1], type_list[i])
-                                           if is_not_nan(type_list[i]) else info['pos'][-1])
             info['code_switched_idx'].append(len(info['lex']))
         with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
             f.writelines("%s\n" % w for w in info['lex'])
-        # idx_to_concept: nparray if we want to use "where"
-        return info['lex'], info['pos'], info['idx_to_concept'], info['code_switched_idx'][0]
+        return info['lex'], info['pos'], info['code_switched_idx'][0]
 
     def get_lexicon_index(self, word):
         """
@@ -304,28 +295,9 @@ class InputFormatter:
         """
         return self.lexicon.index(word)
 
-    def concept_to_morphemes_OLD(self, concept, target_lang):
-        morpheme_idx = np.where(self.idx_to_concept == concept)[0]
-        if target_lang == self.L1:
-            morph = list(morpheme_idx[morpheme_idx < self.code_switched_idx])
-        else:  # L2
-            morph = list(morpheme_idx[morpheme_idx >= self.code_switched_idx])
-        return morph
-
-    def concept_to_morphemes(self, concept_idx, target_lang):
-        if self.idx_to_concept[concept_idx] == 'aux::auxiliary_verb':
-            return self.auxiliary_idx
-        lower_range = 0 if target_lang == self.L1 else self.code_switched_idx
-        upper_range = self.code_switched_idx if target_lang == self.L1 else len(self.idx_to_concept)
-        morph = []
-        append = morph.append
-        for idx in range(lower_range, upper_range):
-            if self.idx_to_concept[concept_idx] == self.idx_to_concept[idx]:
-                append(idx)
-        if not morph:
-            import sys
-            sys.exit("concept_idx %s does not have a concept equivalent in %s" % (concept_idx, target_lang))
-        return morph
+    def concept_to_morphemes(self, lex_idx, target_lang):
+        current_lang = self.L1 if target_lang == self.L2 else self.L2
+        return self.df_query_to_idx("morpheme_%s == '%s'" % (current_lang, self.lexicon[lex_idx]), lang=target_lang)
 
     def _number_of_test_pronouns(self):
         return sum(self.testlines_df.target_sentence.str.count('(^| )(s)?he '))
@@ -353,7 +325,7 @@ class InputFormatter:
 
     def read_allowed_pos(self):
         """ returns all allowed POS structures in the training file """
-        return [list(x) for x in set(tuple(x) for x in self.trainlines_df.target_pos)]
+        return [list([i.replace('aux', 'verb') for i in x]) for x in set(tuple(x) for x in self.trainlines_df.target_pos)]
 
     def _read_file_to_list(self, fname):
         """
@@ -411,7 +383,11 @@ class InputFormatter:
         if remove_period and sentence_idx_lst[-1] == self.period_idx:
             sentence_idx_lst = sentence_idx_lst[:-1]
         pos = [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
-        if 'verb' in pos and 'participle' in pos:
+        if pos.count('verb') > 1:
+            idx = pos.index('verb')
+            pos[idx] = 'aux'
+            pos[idx+1] = 'participle'
+        elif 'verb' in pos and 'participle' in pos:
             pos = [w.replace('verb', 'aux') for w in pos]
         return pos
 
@@ -500,9 +476,8 @@ class InputFormatter:
                                 idx_concept = self.identif_size + self.concepts.index(concept)
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
-                                print(message, '#####', concept)
                                 import sys
-                                sys.exit()
+                                sys.exit("No concept found: %s (%s)" % (concept, message))
         return event_sem_activations, target_lang_activations, target_language, weights_role_concept, event_sem_message
 
     def get_weights_role_concept(self, message):
@@ -538,9 +513,8 @@ class InputFormatter:
                                 idx_concept = self.identif_size + self.concepts.index(concept)
                                 weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
                             else:
-                                print(message, '#####', concept)
                                 import sys
-                                sys.exit()
+                                sys.exit("No concept found: %s (%s)" % (concept, message))
         return weights_role_concept
 
     def cosine_similarity(self, first_word, second_word):
@@ -566,7 +540,7 @@ class InputFormatter:
         # ignore shared indeces (cognates/period)
         if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
                                             (lang == self.L2 and idx <= self.code_switched_idx))):
-            return self.concept_to_morphemes(concept_idx=idx, target_lang=lang)
+            return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
         return [idx]
 
 

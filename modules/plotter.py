@@ -193,7 +193,6 @@ class Plotter:
                     res_aux_per_correct_tense = []
                     res_aux_no_after_per_tense = []
                     legend = []
-                    print(self.results['has_aux'])
                     for aux in ['is', 'has']:
                         for point in ['aux', 'participle', 'after']:
                             index = '%s_%s' % (aux, point)
