@@ -64,8 +64,6 @@ class DualPath:
         self.pronoun_experiment = pronoun_experiment
         self.cognate_experiment = cognate_experiment
         self.auxiliary_experiment = auxiliary_experiment
-        if self.auxiliary_experiment:
-            self.auxiliary_logger = self.init_logger('auxiliary')
         if pronoun_experiment:
             self.pronoun_logger = self.init_logger('pronouns')
         self.test_every = test_every  # test every x epochs
@@ -201,15 +199,28 @@ class DualPath:
         :param set_names: ['test', 'training'] or ['test'] if only the test set is evaluated
         :param plot_results: whether to plot results
         """
-        results = {'correct_meaning': {'test': [], 'training': []},
-                   'correct_pos': {'test': [], 'training': []},
-                   'correct_code_switches': {'test': [], 'training': []},
-                   'all_code_switches': {'test': [], 'training': []},
-                   'type_code_switches': {'test': [], 'training': []}}
+        results = {
+            'correct_meaning': {
+                'test': [],
+                'training': []
+            }, 'correct_pos': {
+                'test': [],
+                'training': []
+            }, 'correct_code_switches': {
+                'test': [],
+                'training': []
+            }, 'all_code_switches': {
+                'test': [],
+                'training': []
+            }, 'type_code_switches': {
+                'test': [],
+                'training': []}
+        }
         if self.auxiliary_experiment:
             for aux in ['is', 'has']:
-                for point in ['participle', 'aux', 'after']:
+                for point in ['participle', 'aux', 'after', 'right_after']:
                     results['%s_%s' % (aux, point)] = {'test': [], 'training': []}
+                    results['%s_%s_es_en' % (aux, point)] = {'test': [], 'training': []}
                 for lang in ['es', 'en']:
                     for cs_ in ["cs_", ""]:
                         results['correct_%s%s_%s' % (cs_, aux, lang)] = {'test': [], 'training': []}
@@ -241,11 +252,16 @@ class DualPath:
                         line.message))  # weights_role_concept[line_idx])  # FIXME
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
                     target_pos, target_sentence_idx = line.target_pos, line.target_sentence_idx
+
                     produced_pos = self.inputs.pos_of_sentence(produced_idx)
                     has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
                                                                                                  False, None)
+                    (switched_at, switched_participle, switched_right_after, switched_after, switched_at_es_en,
+                     switched_participle_es_en, switched_right_after_es_en,
+                     switched_after_es_en) = (False, False, False, False, False, False, False, False)
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
-                                                                                                target_pos)
+                                                                                                target_pos,
+                                                                                                produced_idx)
                     code_switched = self.inputs.is_code_switched(produced_idx,
                                                                  target_lang_idx=target_sentence_idx[0])
                     if code_switched:
@@ -258,7 +274,9 @@ class DualPath:
                     if is_grammatical:
                         counter['correct_pos'] += 1
                         has_correct_pos = True
-                        if code_switched:  # only count grammatically correct sentences -- determine CS type here
+                        if not code_switched:
+                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, line.target_sentence_idx)
+                        else:  # only count grammatically correct CS sentences -- determine CS type here
                             cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx)
                             if cs_type:  # TODO: it could be interesting to check the failed sentences too
                                 counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
@@ -276,37 +294,45 @@ class DualPath:
                                     counter['type_code_switches'][cs_type_with_cognate_status] += 1
                                 elif self.auxiliary_experiment:
                                     if ',PERFECT' in line.message or ',PROG' in line.message:
-                                        (switched_at, switched_participle,
-                                         switched_after) = self.inputs.check_switch_points(produced_idx,
-                                                                                           produced_pos)
-                                        self.auxiliary_logger.info("%s - %s - %s (%s %s %s) - %s" %
-                                                                   (epoch, produced_sentence, cs_type, switched_at,
-                                                                    switched_participle, switched_after, line.message))
+                                        (switched_at, switched_participle, switched_right_after, switched_after,
+                                         switched_at_es_en, switched_participle_es_en, switched_right_after_es_en,
+                                         switched_after_es_en) = self.inputs.check_switch_points(produced_idx,
+                                                                                                 produced_pos)
                                         aux = 'has' if ',PERFECT' in line.message else 'is'
                                         if switched_participle:
                                             counter['%s_participle' % aux] += 1
+                                            if switched_participle_es_en:
+                                                counter['%s_participle_es_en' % aux] += 1
                                         elif switched_at:
                                             counter['%s_aux' % aux] += 1
-                                        else:
+                                            if switched_at_es_en:
+                                                counter['%s_aux_es_en' % aux] += 1
+                                        elif switched_after:  # anywhere after
                                             counter['%s_after' % aux] += 1
+                                            if switched_after_es_en:
+                                                counter['%s_after_es_en' % aux] += 1
+                                            if switched_right_after:  # right after the participle
+                                                counter['%s_right_after' % aux] += 1
+                                                if switched_after_es_en:
+                                                    counter['%s_right_after_es_en' % aux] += 1
+
                                         counter["correct_cs_%s_%s" % (aux, line.lang)] += 1
-                        else:
-                            correct_meaning = self.inputs.has_correct_meaning(produced_idx,
-                                                                              line.target_sentence_idx)
+
                         if correct_meaning:
                             counter['correct_meaning'] += 1
                             # this contains number of ALL correct progressive/perfect sentences, even the CS ones
                             counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', line.lang)] += 1
                             counter[line.event_sem_message] += 1
                         else:
-                            has_wrong_det = self.inputs.test_without_feature(produced_idx,
-                                                                             line.target_sentence_idx,
+                            has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                              feature="determiners")
-                            has_wrong_tense = self.inputs.test_without_feature(produced_idx,
-                                                                               line.target_sentence_idx,
+                            has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                feature="tense")
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                                 counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
+                                # FIXME:
+                                print(produced_sentence, "correct meaning")
+                                correct_meaning += 1
                                 counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message
                                                            else 'is', line.lang)] += 1
 
@@ -325,13 +351,17 @@ class DualPath:
                     if epoch > 0:
                         suffix = "flex-" if has_wrong_det or has_wrong_tense else "" if correct_meaning else "in"
                         logger.info("--------%s--------\nOUT:%s\nTRG:%s\nGrammatical:%s Tense:%s Definiteness:%s "
-                                    "Meaning:%scorrect %s\n%s" %
+                                    "Meaning:%scorrect %s%s\n%s" %
                                     (epoch, produced_sentence, line.target_sentence,
                                      "%s%s" % ("flex-" if flexible_order else "", has_correct_pos), not has_wrong_tense,
                                      not has_wrong_det, suffix,
                                      "%s" % ("(code-switch%s)" % (": %s" % cs_type if cs_type else "")
                                              if code_switched else ""),
-                                     line.message))
+                                     "(%s %s %s %s) (%s %s %s %s)" % (switched_at, switched_participle,
+                                                                      switched_right_after, switched_after,
+                                                                      switched_at_es_en, switched_participle_es_en,
+                                                                      switched_right_after_es_en, switched_after_es_en)
+                                     if (self.auxiliary_experiment and cs_type) else "", line.message))
                 # on the set level
                 logger.info("Iteration %s:\nCorrect sentences: %s/%s Correct POS:%s/%s" %
                             (epoch, counter['correct_meaning'], num_sentences, counter['correct_pos'], num_sentences))

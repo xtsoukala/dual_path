@@ -87,12 +87,12 @@ if __name__ == "__main__":
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                       'or any combination [enes, esen] for bilingual)', default='enes', type=str.lower)
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.10)#0.15)
+    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.10)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
                         type=float, default=0.02)
     parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
-                        type=float, default=0.9)#0.75)
+                        type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
@@ -299,18 +299,19 @@ if __name__ == "__main__":
                                cognate_experiment=args.cognate_experiment, sets=input_sets,
                                generate_num=args.generate_num)
         del input_sets  # we no longer need it
-        # now run the simulations
+
+        os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
+        os.environ["MKL_NUM_THREADS"] = "1"
+        os.environ["NUMEXPR_NUM_THREADS"] = "1"
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["OPENBLAS_NUM_THREADS"] = "1"  # priorities: OPENBLAS_NUM_THREADS > OMP_NUM_THREADS
         if platform.system() == 'Linux':
             os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
-        else:  # Mac OS
-            os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
-            os.environ["MKL_NUM_THREADS"] = "1"
-            os.environ["NUMEXPR_NUM_THREADS"] = "1"
-            os.environ["OMP_NUM_THREADS"] = "1"
 
     if args.use_multiprocessing:
         processes = []
 
+    # run the simulations
     for sim in range(args.sim):
         if args.sim > 1:
             inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))

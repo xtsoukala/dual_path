@@ -104,7 +104,7 @@ class InputFormatter:
             return True
         return False
 
-    def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos):
+    def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos, out_sentence_idx):
         """
         Check a sentence's grammaticality. If the target and output sentences don't have identical POS but differ only
         on the double object expression (e.g., gives the book to him/gives him the book) then return flex_order = True
@@ -123,8 +123,14 @@ class InputFormatter:
             if 'prep' in out_sentence_pos and 'prep' not in trg_sentence_pos:
                 trg_sentence_pos.append('prep')
             elif 'prep' in trg_sentence_pos and 'prep' not in out_sentence_pos:
-                out_sentence_pos.append('prep')
-            # TODO: If the verb is Spanish we shouldn't allow double datives
+                # If the verb is Spanish we shouldn't allow double datives
+                p_idx = None
+                if 'verb' in out_sentence_pos:
+                    p_idx = out_sentence_pos.index('verb')
+                elif 'participle' in out_sentence_pos:
+                    p_idx = out_sentence_pos.index('participle')
+                if p_idx and out_sentence_idx[p_idx] < self.code_switched_idx:  # assumption: L1 English in lex
+                    out_sentence_pos.append('prep')
             if self.same_unordered_lists(out_sentence_pos, trg_sentence_pos):
                 return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
@@ -216,10 +222,12 @@ class InputFormatter:
         if len(check_idx) == 0:
             return False  # it was either a cognate or a false friend
 
+        if len(check_idx) == len(out_sentence_idx):
+            return "inter-sentential"  # whole sentence in the non-target language
+
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        if len(check_idx) > 1 and " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
-            # if check_idx == trg_sentence_idx[-len(check_idx):] or check_idx == trg_sentence_idx[-len(check_idx):-1]:
-            cs_type = "alternational"
+        if len(check_idx) > 1 and set(check_idx).issubset(out_sentence_idx): #" ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
+            cs_type = "intra-sentential"
         else:
             check_idx_pos = [self.pos_lookup(w) for w in check_idx]
             if len(set(check_idx_pos)) == 1:
@@ -243,6 +251,9 @@ class InputFormatter:
         return True
 
     def check_switch_points(self, sentence_indeces, sentence_pos, pos_of_interest='aux'):
+        # assumption: lexicon contains first EN and then ES words
+        (at, right_after, after, at_esen, right_after_esen, after_esen,
+         after_anywhere, after_anywhere_esen) = (False, False, False, False, False, False, False, False)
         if pos_of_interest in sentence_pos:
             pos_idx = sentence_pos.index(pos_of_interest)
         else:
@@ -250,12 +261,23 @@ class InputFormatter:
         if pos_idx:
             # check switch before pos_of_interest
             at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
+            # check Spanish-to-English direction
+            at_esen = True if at and sentence_indeces[pos_idx] < self.code_switched_idx else False
             # check switch right after (e.g. between aux and participle)
             right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
                                                 target_lang_idx=sentence_indeces[pos_idx])
+            right_after_esen = (True if right_after and sentence_indeces[pos_idx] > self.code_switched_idx
+                                else False)
             # check switch at the end (e.g. after aux and participle)
-            after = self.is_code_switched(sentence_indeces[pos_idx + 2:], target_lang_idx=sentence_indeces[pos_idx + 1])
-            return at, right_after, after
+            after = self.is_code_switched(sentence_indeces[pos_idx + 1:pos_idx + 3],
+                                          target_lang_idx=sentence_indeces[pos_idx + 1])
+            after_esen = True if after and sentence_indeces[pos_idx + 1] > self.code_switched_idx else False
+
+            after_anywhere = self.is_code_switched(sentence_indeces[pos_idx + 1:],
+                                                   target_lang_idx=sentence_indeces[pos_idx + 1])
+            after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] > self.code_switched_idx
+                                   else False)
+        return at, right_after, after, after_anywhere, at_esen, right_after_esen, after_esen, after_anywhere_esen
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
         """
@@ -278,7 +300,6 @@ class InputFormatter:
                 column = self.lexicon_df[['morpheme_%s' % lang, 'pos',
                                           'concept', 'type']].dropna(subset=['morpheme_%s' % lang])
                 pos_list = list(column['pos'])
-                # replace 'aux' with 'verb'. FIXME: RM Look for a better way pos_list = [x.replace('aux', 'verb') for x in pos_list if x]
                 for i, item in enumerate(list(column['morpheme_%s' % lang])):
                     if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
                         lex_append(item)
@@ -325,7 +346,8 @@ class InputFormatter:
 
     def read_allowed_pos(self):
         """ returns all allowed POS structures in the training file """
-        return [list([i.replace('aux', 'verb') for i in x]) for x in set(tuple(x) for x in self.trainlines_df.target_pos)]
+        return [list([i.replace('aux', 'verb') for i in x]) for x in set(tuple(x)
+                                                                         for x in self.trainlines_df.target_pos)]
 
     def _read_file_to_list(self, fname):
         """
@@ -386,7 +408,7 @@ class InputFormatter:
         if pos.count('verb') > 1:
             idx = pos.index('verb')
             pos[idx] = 'aux'
-            pos[idx+1] = 'participle'
+            pos[idx + 1] = 'participle'
         elif 'verb' in pos and 'participle' in pos:
             pos = [w.replace('verb', 'aux') for w in pos]
         return pos
@@ -538,8 +560,8 @@ class InputFormatter:
 
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indeces (cognates/period)
-        if (idx not in self.shared_idx and ((idx > self.code_switched_idx and lang == self.L1) or
-                                            (lang == self.L2 and idx <= self.code_switched_idx))):
+        if (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L1) or
+                                            (lang == self.L2 and idx < self.code_switched_idx))):
             return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
         return [idx]
 
@@ -593,14 +615,14 @@ def is_not_empty(x):
     return False
 
 
-def get_np_mean_and_std_err(x, summary_sim):
-    if isinstance(x, list):
+def get_np_mean_and_std_err(x, summary_sim, n):
+    if not isinstance(x, np.ndarray):
         x = np.array(x)
     if x.sum() > 0:
         if summary_sim:
             return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)
         return x.mean(), x.std()  # we only want one number in this case (axis=1)
-    return 0, 0
+    return None, None
 
 
 def get_np_mean(x, summary_sim=None):
@@ -655,13 +677,19 @@ def compute_mean_and_std(valid_results, epochs):
                 if isinstance(results_sum[key][t], dict):
                     for cs_type in cs_keywords:
                         np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t][cs_type],
-                                                                      summary_sim=len(valid_results))
-                        results_sum[key][t]["%s-std_error" % cs_type] = np_std_err
-                        results_sum[key][t][cs_type] = np_mean
+                                                                      summary_sim=len(valid_results), n="%s%s%s" % (key, t, cs_type))
+                        if np_mean is not None:
+                            results_sum[key][t]["%s-std_error" % cs_type] = np_std_err
+                            results_sum[key][t][cs_type] = np_mean
+                        else:
+                            results_sum[key][t][cs_type] = []
                 else:
-                    np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t], summary_sim=len(valid_results))
-                    results_sum[key]["%s-std_error" % t] = np_std_err
-                    results_sum[key][t] = np_mean
+                    np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t], summary_sim=len(valid_results), n="%s%s" % (key, t))
+                    if np_mean is not None:
+                        results_sum[key]["%s-std_error" % t] = np_std_err
+                        results_sum[key][t] = np_mean
+                    else:
+                        results_sum[key][t] = []
     return results_sum
 
 

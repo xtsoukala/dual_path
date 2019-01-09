@@ -1,5 +1,5 @@
 import matplotlib
-from modules.formatter import is_not_empty, get_np_mean_and_std_err, np, strip_language_info
+from modules.formatter import is_not_empty, get_np_mean_and_std_err, np, strip_language_info, defaultdict
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
@@ -16,13 +16,29 @@ class Plotter:
         self.title = title
         self.summary_sim = summary_sim
         self.plot_detailed_cs = False
-        # blue, orange, green, brown, purple, grey, red, yellowgreen
-        self.cblind_friendly = ['#377eb8', '#ff7f00', '#4daf4a', '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00']
+        # green:4daf4a, orange:ff7f00, purple:984ea3, grey: 999999, brown:a65628, red:e41a1c, blue:377eb8, yellow:dede00
+        self.cblind_friendly = ['#4daf4a',  '#a65628', '#ff7f00', '#999999', '#984ea3', '#377eb8', '#e41a1c', '#dede00']
         self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999')]
         self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c', '#377eb8', '#ff7f00', '#4daf4a',
                            '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00'] * 9
+        line_styles = ['-', '--', '-.', ':'] * 10
+        markers = ['.', ',', '+', '^', '*', 'x', '<', '>'] * 10
+        self.assigned_colors = defaultdict()
+        self.assigned_linestyle = defaultdict()
+        self.assigned_markers = defaultdict()
+        c = 0
+        for i in ['is', 'has']:
+            for p in ['participle', 'aux', 'right_after', 'after']:
+                self.assigned_colors["%s_%s" % (i, p)] = self.cblind_friendly[c]
+                self.assigned_colors["%s_%s_es_en" % (i, p)] = self.cblind_friendly[c]
+                self.assigned_linestyle["%s_%s" % (i, p)] = line_styles[c]
+                self.assigned_linestyle["%s_%s_es_en" % (i, p)] = line_styles[c]
 
-    def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, label, ylim, fname,
+                self.assigned_markers["%s_%s" % (i, p)] = markers[c]
+                self.assigned_markers["%s_%s_es_en" % (i, p)] = markers[c]
+                c += 1
+
+    def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, ylabel, ylim, fname,
                                legend_loc='upper right'):
         for item_idx, item_to_plot in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item_to_plot]['test'], test_percentage)
@@ -32,7 +48,7 @@ class Plotter:
                 lower_bound = self.percentage(self.results[item_to_plot]['test'] - test_std_error, test_percentage)
                 upper_bound = self.percentage(self.results[item_to_plot]['test'] + test_std_error, test_percentage)
                 plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.colors[item_idx][0],
-                                 alpha=0.3)
+                                 alpha=0.2)
 
             if is_not_empty(self.results[item_to_plot]['training']):
                 if is_not_empty(training_percentage):
@@ -42,7 +58,7 @@ class Plotter:
                 plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
                          label="%s (Training)" % item_to_plot, linestyle='--')
         plt.xlabel('epochs')
-        plt.ylabel(label)
+        plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
@@ -51,15 +67,17 @@ class Plotter:
 
     def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='upper right'):
         for i, result in enumerate(results):
+            legend_label = legend[i]
+            color = self.assigned_colors[legend_label] if legend_label in self.assigned_colors else self.color_bars[i]
+            marker = self.assigned_markers[legend_label] if legend_label in self.assigned_markers else None
             if self.is_nd_array_or_list(result):
-                plt.plot(self.epoch_range, result, color=self.color_bars[i], label=legend[i])
+                plt.plot(self.epoch_range, result, color=color, label=legend_label, marker=marker)
             else:
-                plt.plot(self.epoch_range, result[0], color=self.color_bars[i], label=legend[i])
+                plt.plot(self.epoch_range, result[0], color=color, label=legend_label, marker=marker)
                 if result[1] is not None and not (isinstance(result[1], int)):
                     lower_bound = [x - y for x, y in zip(result[0], result[1])]
                     upper_bound = [x + y for x, y in zip(result[0], result[1])]
-                    plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.color_bars[i],
-                                     alpha=0.3)
+                    plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=color, alpha=0.2)
         plt.xlabel('epochs')
         plt.ylabel(label)
         plt.ylim([0, ylim])
@@ -109,22 +127,22 @@ class Plotter:
         results['all_cs_types'] = self.extract_cs_keys(results['type_code_switches'])
         self.results = results
 
-        self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], label='Percentage correct (%)',
+        self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], ylabel='Percentage correct (%)',
                                     test_percentage=num_test, training_percentage=num_train, ylim=100,
                                     fname="performance", legend_loc='lower right')
         # !------------  CODE-SWITCHES ------------!
         correct_code_switches = results['correct_code_switches']['test']
         if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             self.plot_changes_over_time(items_to_plot=['correct_code_switches', 'all_code_switches'],
-                                        test_percentage=num_test, training_percentage=num_train, ylim=30,
-                                        label='%% CS among %s set' % 'test',
+                                        test_percentage=num_test, training_percentage=num_train, ylim=40,
+                                        ylabel='%% CS among %s set' % 'test',
                                         fname='code_switches_%s_set' % 'test')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
-            self.plot_changes_over_time(ylim=30, items_to_plot=['correct_code_switches'],
+            self.plot_changes_over_time(ylim=40, items_to_plot=['correct_code_switches'],
                                         test_percentage=correct_test,
                                         training_percentage=results['correct_meaning']['training'],
                                         fname="code_switches_correct_%s_set" % 'test',
-                                        label='%% CS among correctly produced %s set' % 'test')
+                                        ylabel='%% CS among correctly produced %s set' % 'test')
 
             # !------------  code-switching ------------!
             self.cs_results = {'type_correct_test_en': [], 'type_correct_test_es': [],
@@ -186,74 +204,75 @@ class Plotter:
                                 all_correct[aux] = ([x + y for x, y in zip(all_correct[aux], self.results[key]['test'])]
                                                     if all_correct[aux] != [] else self.results[key]['test'])
 
-                    res_aux_all_set = []
-                    res_aux_all_raw = []
-                    res_aux_participle_all_set = []
-                    res_aux_participle_per_tense = []
-                    res_aux_per_correct_tense = []
-                    res_aux_no_after_per_tense = []
-                    legend = []
-                    for aux in ['is', 'has']:
-                        for point in ['aux', 'participle', 'after']:
-                            index = '%s_%s' % (aux, point)
-                            if index in self.results:
-                                legend.append(index)
-                                # normalize using correct_code_switches
-                                if 'test-std_error' in self.results[index]:
-                                    res_aux_all_set.append((self.percentage(self.results[index]['test'],
-                                                                            correct_test),
-                                                            self.percentage(self.results[index]['test-std_error'],
-                                                                            correct_test)))
-                                    res_aux_all_raw.append((self.results[index]['test'],
-                                                            self.results[index]['test-std_error']))
-                                    res_aux_per_correct_tense.append((self.percentage(self.results[index]['test'],
-                                                                                      all_correct[aux]),
-                                                                      self.percentage(
-                                                                          self.results[index]['test-std_error'],
-                                                                          all_correct[aux])))
-                                else:
-                                    res_aux_all_set.append(
-                                        self.percentage(self.results[index]['test'], correct_test))
-                                    res_aux_all_raw.append(self.results[index]['test'])
-                                    res_aux_per_correct_tense.append(self.percentage(self.results[index]['test'],
-                                                                                     all_correct[aux]))
+                    for cs_direction in ['', '_es_en']:
+                        res_aux_all_set = []
+                        res_aux_all_raw = []
+                        res_aux_participle_all_set = []
+                        res_aux_participle_per_tense = []
+                        res_aux_per_correct_tense = []
+                        res_aux_no_after_per_tense = []
+                        legend = []
+                        for aux in ['is', 'has']:
+                            for point in ['aux', 'participle', 'right_after', 'after']:
+                                index = '%s_%s%s' % (aux, point, cs_direction)
+                                if index in self.results and self.results[index]['test'] != []:
+                                    legend.append(index)
+                                    # normalize using correct_code_switches
+                                    if 'test-std_error' in self.results[index]:
+                                        res_aux_all_set.append((self.percentage(self.results[index]['test'],
+                                                                                correct_test),
+                                                                self.percentage(self.results[index]['test-std_error'],
+                                                                                correct_test)))
+                                        res_aux_all_raw.append((self.results[index]['test'],
+                                                                self.results[index]['test-std_error']))
+                                        res_aux_per_correct_tense.append((self.percentage(self.results[index]['test'],
+                                                                                          all_correct[aux]),
+                                                                          self.percentage(
+                                                                              self.results[index]['test-std_error'],
+                                                                              all_correct[aux])))
+                                    else:
+                                        res_aux_all_set.append(
+                                            self.percentage(self.results[index]['test'], correct_test))
+                                        res_aux_all_raw.append(self.results[index]['test'])
+                                        res_aux_per_correct_tense.append(self.percentage(self.results[index]['test'],
+                                                                                         all_correct[aux]))
 
-                                if not index.endswith('after'):
-                                    res_aux_no_after_per_tense.append(res_aux_per_correct_tense[-1])
-                                if index.endswith('participle'):
-                                    res_aux_participle_all_set.append(res_aux_all_set[-1])
-                                    res_aux_participle_per_tense.append(res_aux_per_correct_tense[-1])
+                                    if 'after' not in index:
+                                        res_aux_no_after_per_tense.append(res_aux_per_correct_tense[-1])
+                                    if 'participle' in index:
+                                        res_aux_participle_all_set.append(res_aux_all_set[-1])
+                                        res_aux_participle_per_tense.append(res_aux_per_correct_tense[-1])
 
-                    if res_aux_all_set:
-                        self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
-                                                    legend=legend, ylim=15,
-                                                    fname='auxiliary_all_set', results=res_aux_all_set)
+                        if res_aux_all_set:
+                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
+                                                        legend=legend, ylim=7, results=res_aux_all_set,
+                                                        fname='auxiliary_all_set%s' % cs_direction)
 
-                        self.plot_cs_type_over_time(label='auxiliary switches in test set',
-                                                    legend=legend, ylim=75,
-                                                    fname='auxiliary_all_raw', results=res_aux_all_raw)
-                        # same for res_percentage:
-                        self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced set per tense)',
-                                                    legend=legend, ylim=15,
-                                                    fname='auxiliary_per_correct_tense',
-                                                    results=res_aux_per_correct_tense)
+                            self.plot_cs_type_over_time(label='auxiliary switches in test set',
+                                                        legend=legend, ylim=60, results=res_aux_all_raw,
+                                                        fname='auxiliary_all_raw%s' % cs_direction)
+                            # same for res_percentage:
+                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced per tense)',
+                                                        legend=legend, ylim=14,
+                                                        fname='auxiliary_per_correct_tense%s' % cs_direction,
+                                                        results=res_aux_per_correct_tense)
 
-                        self.plot_cs_type_over_time(label='participle switches (% of correctly produced sentences)',
-                                                    legend=['is_participle', 'has_participle'], ylim=3,
-                                                    fname='participle_all_set',
-                                                    results=res_aux_participle_all_set)
+                            self.plot_cs_type_over_time(label='participle switches (% of correctly produced sentences)',
+                                                        legend=['is_participle%s' % cs_direction,
+                                                                'has_participle%s' % cs_direction], ylim=3,
+                                                        fname='participle_all_set%s' % cs_direction,
+                                                        results=res_aux_participle_all_set)
 
-                        self.plot_cs_type_over_time(label='participle switches (% of correctly produced set per tense)',
-                                                    legend=['is_participle', 'has_participle'], ylim=3,
-                                                    fname='participle_per_tense',
-                                                    results=res_aux_participle_per_tense)
+                            self.plot_cs_type_over_time(label='participle switches (% of correctly produced per tense)',
+                                                        legend=['is_participle%s' % cs_direction,
+                                                                'has_participle%s' % cs_direction], ylim=3,
+                                                        fname='participle_per_tense%s' % cs_direction,
+                                                        results=res_aux_participle_per_tense)
 
-                        self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced set per tense)',
-                                                    legend=[x for x in legend if not x.endswith('after')], ylim=15,
-                                                    fname='auxiliary_no_after_per_tense',
-                                                    results=res_aux_no_after_per_tense)
-
-
+                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced per tense)',
+                                                        legend=[x for x in legend if 'after' not in x], ylim=3,
+                                                        fname='auxiliary_no_after_per_tense%s' % cs_direction,
+                                                        results=res_aux_no_after_per_tense)
             ############################################################################################################
             if cognate_experiment:
                 # for dataset_type in ['test']:  # ['training', 'test']:
@@ -308,11 +327,11 @@ class Plotter:
         if 'pronoun_errors' in results:
             print("pronoun", type(results['pronoun_errors']['test']))
             self.plot_changes_over_time(items_to_plot=['pronoun_errors', 'pronoun_errors_flex'],
-                                        label='Sum of subject pronoun errors', fname='pronoun_errors')
+                                        ylabel='Sum of subject pronoun errors', fname='pronoun_errors')
             # same using percentages
             if test_sentences_with_pronoun:  # in es case there are no sentences with 'he' and 'she'
                 self.plot_changes_over_time(items_to_plot=['pronoun_errors', 'pronoun_errors_flex'],
-                                            label='Percentage (%) of subject pronoun errors in test set',
+                                            ylabel='Percentage (%) of subject pronoun errors in test set',
                                             fname='pronoun_errors_percentage',
                                             test_percentage=test_sentences_with_pronoun, ylim=15)
 
