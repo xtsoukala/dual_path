@@ -181,3 +181,5 @@ AGENT=def,GIRL,F;AAL=GIVE;PATIENT=indef,BALLOON;RECIPIENT=indef,FATHER,M;E=PRESE
 
 Where OUT: is the produced sentence, TRG: the target (intended) sentence. Grammatical: Whether the sentence is grammatically correct, even if it conveys the wrong meaning; in case of flex-True it means that a different (but correct) structure was chosen instead of the target one, e.g., a double dative instead of a prepositional dative one. Tense: Whether the tense (present, past) is correct. Definiteness: Wether the determiners have the correct definiteness (definite, indefinite), Meaning: Whether the sentence expresses the message correctly (all concepts need to be correctly produced).
 The last sentence is the message used to produce the sentence.
+
+Note: The input files for the gender error experiment can be found [here](https://github.com/xtsoukala/gender_error_experiment)
