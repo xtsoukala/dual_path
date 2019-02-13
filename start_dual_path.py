@@ -69,6 +69,7 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError("%s is invalid: only use positive int value" % x)
         return pos_int
 
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)
     parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)
@@ -103,11 +104,11 @@ if __name__ == "__main__":
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('-generate_num', type=int, default=3500, help='Sum of test/training sentences to be generated '
+    parser.add_argument('-generate_num', type=int, default=4000, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
     parser.add_argument('-test_every', help='Test network every x epochs', type=positive_int, default=1)
     parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=positive_int, default=4,
+    parser.add_argument('-sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
     parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
                         type=int, default=100)
@@ -126,9 +127,9 @@ if __name__ == "__main__":
     parser.set_defaults(cinput=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('--nolang', dest='exclude_lang', action='store_true',
-                        help='Exclude language info during TESTing')
-    parser.set_defaults(exclude_lang=False)
+    parser.add_argument('--cs', '--nolang', dest='activate_both_lang', action='store_true',
+                        help='Activate both languages during TESTing')
+    parser.set_defaults(activate_both_lang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
@@ -144,15 +145,15 @@ if __name__ == "__main__":
     parser.add_argument('--noplot', dest='plot_results', action='store_false',
                         help='Do not plot results')
     parser.set_defaults(plot_results=True)
-    parser.add_argument('--eval_train', dest='eval_train', action='store_true',
+    parser.add_argument('--eval_training', dest='eval_training', action='store_true',
                         help='Evaluate training sets')
-    parser.set_defaults(eval_train=False)
+    parser.set_defaults(eval_training=False)
     parser.add_argument('--only_eval', dest='only_eval', action='store_true',
                         help='Do not train, only evaluate test sets')
     parser.set_defaults(only_eval=False)
-    parser.add_argument('--full-verb-form', '--fv', dest='full_verb', action='store_true',
-                        help='Use full lexeme for verbs instead of splitting into lemma/suffix')
-    parser.set_defaults(full_verb=False)
+    parser.add_argument('--morphemes', '--morph', dest='full_verb', action='store_false',
+                        help='Use morphemes for verbs (i.e., splitting into lemma/suffix) instead of full lexeme')
+    parser.set_defaults(full_verb=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it it therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
@@ -192,6 +193,9 @@ if __name__ == "__main__":
         set_weights_epoch = 0
         logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
 
+    if args.only_eval and args.set_weights and not args.input:
+        args.input = args.set_weights
+
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
         if sys.version[0] == '3':
             args.compress = int(args.hidden * (2 / 3))
@@ -210,13 +214,13 @@ if __name__ == "__main__":
 
     if args.auxiliary_experiment:
         args.cognate_percentage = 0
-        args.exclude_lang = True
+        args.activate_both_lang = True
         args.full_verb = True
         args.threshold = 30
         if not args.testset:
             args.testset = 'test_aux.in'
     elif args.cognate_experiment:
-        args.exclude_lang = True
+        args.activate_both_lang = True
 
     original_input_path = None  # keep track of the original input in case it was copied
     input_sets = None
@@ -235,11 +239,12 @@ if __name__ == "__main__":
         args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
-
+        experiment_dir = "code-switching/" if args.activate_both_lang else ""
         if not args.lexicon:
-            args.lexicon = 'corpus/lexicon.csv'
+            args.lexicon = 'corpus/%slexicon.csv' % experiment_dir
         if not args.structures:
-            args.structures = 'corpus/structures.csv'
+            args.structures = 'corpus/%sstructures.csv' % experiment_dir
+        logging.warning("Using %s (lexicon) and %s (structures)" % (args.lexicon, args.structures))
         args.input = "%s/input/" % results_dir
         input_sets = ExperimentSets(
             sets_gen=SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
@@ -282,7 +287,7 @@ if __name__ == "__main__":
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.np, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
-                            args.set_weights, set_weights_epoch, args.exclude_lang, args.free_pos,
+                            args.set_weights, set_weights_epoch, args.activate_both_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(directory=args.input, language=args.lang, semantic_gender=args.gender,
@@ -331,19 +336,20 @@ if __name__ == "__main__":
                     set_weights_epoch = 0
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                         test_every=args.test_every, compress_size=args.compress, exclude_lang=args.exclude_lang,
+                         test_every=args.test_every, compress_size=args.compress,
+                         activate_both_lang=args.activate_both_lang, cognate_experiment=args.cognate_experiment,
                          set_weights_folder=inputs.directory if args.set_weights else None, momentum=args.momentum,
                          input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
-                         cognate_experiment=args.cognate_experiment)
+                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
         if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.plot_results, args.eval_test, args.eval_train))
+            process = mp.Process(target=dualp.start_network, args=(args.plot_results, args.eval_test,
+                                                                   args.eval_training))
             process.start()
             processes.append(process)
         else:
             dualp.start_network(plot_results=args.plot_results, evaluate_test_set=args.eval_test,
-                                evaluate_training_set=args.eval_train)
+                                evaluate_training_set=args.eval_training)
 
     if args.use_multiprocessing:
         for p in processes:
@@ -356,43 +362,47 @@ if __name__ == "__main__":
     del dualp
 
     if args.sim > 1:  # aggregate and plot results
-        all_results = []
+        valid_results = []
         for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
-                    all_results.append(pickle.load(f))
-            else:  # this would mean "missing data", we could raise a message
-                logging.warning('Simulation #%s was problematic' % sim)
+                    simulation = pickle.load(f)
 
-        if all_results:
-            valid_results = []
-            for i, simulation in enumerate(all_results):
                 if inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=args.threshold):
                     valid_results.append(simulation)
                     if not inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=80):
-                        failed_sim_id.append("[%s]" % i)  # flag it, even if it's included in the final analysis
+                        failed_sim_id.append("[%s]" % sim)  # flag it, even if it's included in the final analysis
                 else:
-                    failed_sim_id.append(str(i))  # keep track of simulations that failed
-            num_valid_simulations = len(valid_results)  # some might have been discarded
+                    failed_sim_id.append(str(sim))  # keep track of simulations that failed
 
-            if num_valid_simulations:  # take the average of results and plot
-                simulations_with_pron_err = 0 if not args.pronoun_experiment else \
-                    len([simulation for simulation in valid_results if sum(simulation['pronoun_errors']['test']) > 0 or
-                         sum(simulation['pronoun_errors_flex']['test']) > 0])
-                results_mean_and_std = compute_mean_and_std(valid_results, epochs=args.epochs)
-                print("%s -> %s" % (args.fw, results_mean_and_std['correct_meaning']['test'][-1]))
-                with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
-                    pickle.dump(results_mean_and_std, pckl)
-                plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                               epochs=args.epochs)
-                plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
-                                  test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
-                                  num_test=inputs.num_test, num_train=inputs.num_train, test_df=inputs.testlines_df,
-                                  auxiliary_experiment=args.auxiliary_experiment)
-                if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
-                    simulation_logger.info("Code-switched percentage (test set): %s" %
-                                           Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],
-                                                              inputs.num_test))
+            else:  # this would mean "missing data", we could raise a message
+                logging.warning('Simulation #%s was problematic' % sim)
+
+        num_valid_simulations = len(valid_results)  # some might have been discarded
+        if num_valid_simulations:  # take the average of results and plot
+            if not args.pronoun_experiment:
+                simulations_with_pron_err = 0
+            else:
+                simulations_with_pron_err = len([simulation for simulation in valid_results
+                                                 if sum(simulation['pronoun_errors_flex']['test']) > 0])
+            eval_sets = set()
+            if args.eval_test:
+                eval_sets.add('test')
+            if args.eval_training:
+                eval_sets.add('training')
+            results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
+            with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
+                pickle.dump(results_mean_and_std, pckl)
+            plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
+                           epochs=args.epochs)
+            plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
+                              test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
+                              num_test=inputs.num_test, num_train=inputs.num_train, test_df=inputs.testlines_df,
+                              auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
+            if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
+                simulation_logger.info("Code-switched percentage (test set): %s" %
+                                       Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],
+                                                          inputs.num_test))
 
     simulation_logger.info("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun "
                            "errors:%s/%s\n%s%s" %

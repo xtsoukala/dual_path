@@ -96,7 +96,7 @@ class SimpleRecurrentNetwork:
         # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)
         pred_identif = self.get_layer("pred_identifiability")
         pred_concept = self.get_layer("pred_concept")
-        for x in range(pred_concept.in_size):  # pred_identif.in_size == pred_concept.in_size
+        for x in range(pred_concept.in_size):  # pred_identif.in_size is the same as pred_concept.in_size
             for s in range(pred_identif.size):
                 pred_identif.in_weights[x][s] = updated_role_concept[x][s]
             for s in range(pred_concept.size):

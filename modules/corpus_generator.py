@@ -89,7 +89,6 @@ class SetsGenerator:
         return test_set, training_set
 
     def generate_auxiliary_experiment_sentences(self, training_sentences, percentage_l2, num_test_sentences=1000):
-        sys.exit('DA GUK')
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            percentage_l2=percentage_l2)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_sentences,
@@ -200,7 +199,7 @@ class SetsGenerator:
         :param max_cognate: maximum number of cognates in set
         :return: list of generated pairs (sentence, message)
         """
-        replace_aux_sentences = "aux" in fname
+        replace_aux_sentences = True if fname and "aux" in fname else False
         # keep track of training sentences (messages) that are identical to test ones and exclude them
         generated_pairs = []
         remaining_structures = sentence_structures
@@ -294,7 +293,7 @@ class SetsGenerator:
         return False
 
     def select_random_morpheme_for_lang(self, pos, lang, gender, exclude_cognates, only_get_cognate=False,
-                                        only_get_false_fr=False):
+                                        only_get_false_friend=False):
         params = ''.join([str(x) for x in locals().values()])
         cache = self.get_query_cache(params)
         if cache is False:
@@ -325,15 +324,14 @@ class SetsGenerator:
                 query += " and is_cognate != 'Y'"
             elif only_get_cognate:
                 query += " and is_cognate == 'Y'"
-            elif only_get_false_fr:
+            elif only_get_false_friend:
                 query += " and is_false_friend == '1'"
             cache = self.lexicon_df.query(query)
             self.df_cache[params] = cache
         if not cache.shape[0]:
-            print(params, cache)
             if query:
                 print(query)
-            sys.exit()  # throw an error if cache is empty
+            sys.exit("Empty cache: %s %s" % (params, cache))  # throw an error if cache is empty
         selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
                           'is_cognate', 'is_false_friend']].iloc[random.randint(0, cache.shape[0] - 1)]
         return selected
@@ -423,7 +421,7 @@ class SetsGenerator:
 
     @staticmethod
     def extract_and_append_event_semantics(msg_str):
-        event_sem_roles = [re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")] #, "AAL="))]
+        event_sem_roles = [re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")]
         new_msg = "%s,%s" % (msg_str, ",".join(event_sem_roles))
         return new_msg.replace("RECIPIENT,PATIENT", "RECIPIENT,-1,PATIENT")
 
@@ -458,16 +456,13 @@ class SetsGenerator:
 
     @staticmethod
     def add_concept_and_gender_info(message, concept, semantic_gender):
-        if message[-1] != '=':
-            msg = "%s,%s" % (message, concept) if not semantic_gender else "%s,%s,%s" % (message,
-                                                                                         concept, semantic_gender)
-        else:
-            msg = "%s%s" % (message, concept) if not semantic_gender else "%s%s,%s" % (message,
-                                                                                       concept, semantic_gender)
+        msg = "%s%s%s" % (message, "," if message[-1] != '=' else "", concept)
+        if semantic_gender:
+            msg += ",%s" % semantic_gender
         return msg
 
     @staticmethod
-    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
+    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.25):
         """
         :param num_sentences: Number of sentences that need to be generated
         :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)

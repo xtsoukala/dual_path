@@ -135,19 +135,14 @@ class InputFormatter:
                 return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
-    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, remove_last_word=True, allow_identical=False,
-                                ignore_det=True):
+    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=True):
         """
         :param out_sentence_idx:
         :param trg_sentence_idx:
-        :param remove_last_word:
-        :param allow_identical: Whether to return False if sentences are identical
         :param ignore_det: Whether to count article definiteness (a/the) as a mistake
         :return: if produced sentence was not identical to the target one, check if the meaning was correct but
         expressed with a different syntactic structure (due to, e.g., priming)
         """
-        if out_sentence_idx == trg_sentence_idx and not allow_identical:  # only check non identical sentences
-            return False
         flexible_order = False
         ignore_idx = self.to_prepositions_idx
         if ignore_det:
@@ -156,7 +151,8 @@ class InputFormatter:
         if self.same_unordered_lists([x for x in out_sentence_idx if x not in ignore_idx],
                                      [x for x in trg_sentence_idx if x not in ignore_idx]):
             flexible_order = True
-        elif remove_last_word and self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
+        elif self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
+            print(out_sentence_idx, trg_sentence_idx, "LAST WORD")
             flexible_order = True
         return flexible_order
 
@@ -164,7 +160,7 @@ class InputFormatter:
         # remove subject pronouns and check the rest of the sentence
         out = [idx for idx in out_sentence_idx if idx not in self.idx_pronoun]
         trg = [idx for idx in trg_sentence_idx if idx not in self.idx_pronoun]
-        return self.test_for_flexible_order(out, trg, allow_identical=True)
+        return self.test_for_flexible_order(out, trg)
 
     def test_without_feature(self, out_sentence_idx, trg_sentence_idx, feature):
         if feature == "tense":
@@ -173,7 +169,7 @@ class InputFormatter:
             feature_markers = self.determiners
         out = [x for x in out_sentence_idx if x not in feature_markers]
         trg = [x for x in trg_sentence_idx if x not in feature_markers]
-        return self.test_for_flexible_order(out, trg, allow_identical=True, ignore_det=False)
+        return self.test_for_flexible_order(out, trg, ignore_det=False)
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
         out_pronouns = [idx for idx in out_sentence_idx if idx in self.idx_pronoun]
@@ -215,7 +211,7 @@ class InputFormatter:
         return False
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
-        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, allow_identical=True):
+        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
         check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx
                                                      and w is not self._idx_is_cognate_or_ff(w))]
@@ -226,7 +222,8 @@ class InputFormatter:
             return "inter-sentential"  # whole sentence in the non-target language
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        if len(check_idx) > 1 and set(check_idx).issubset(out_sentence_idx): #" ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
+        if len(check_idx) > 1 and set(check_idx).issubset(
+                out_sentence_idx):  # " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
             cs_type = "intra-sentential"
         else:
             check_idx_pos = [self.pos_lookup(w) for w in check_idx]
@@ -576,122 +573,78 @@ def is_not_nan(x):
     return False
 
 
-def take_average_of_valid_results(valid_results):
-    """
-    :param valid_results: list of dicts (simulations)
-    :return:
-    """
-    results_average = {}
-    for key in valid_results[0].keys():
-        results_average[key] = {'training': [], 'test': []}
-        for simulation in valid_results:
-            for t in ['training', 'test']:
-                if t in results_average[key] and is_not_empty(results_average[key][t]):
-                    if type(simulation[key][t]) is dict:  # case: type_code_switches
-                        for cs_type, val in simulation[key][t].items():
-                            if cs_type in results_average[key][t]:
-                                results_average[key][t][cs_type] = np.add(results_average[key][t][cs_type], val)
-                            else:
-                                results_average[key][t][cs_type] = val
-                    else:
-                        results_average[key][t] = np.add(results_average[key][t], simulation[key][t])
-                elif t in simulation[key]:
-                    results_average[key][t] = simulation[key][t]
-    # now average over all simulations
-    for key, val in results_average.items():
-        for t in ['training', 'test']:
-            if t in results_average[key]:
-                if type(results_average[key][t]) is dict:  # case: type_code_switches
-                    results_average[key][t] = {k: np.true_divide(v, len(valid_results))
-                                               for k, v in results_average[key][t].iteritems()}
-                else:
-                    results_average[key][t] = np.true_divide(val[t], len(valid_results))
-    return results_average
-
-
 def is_not_empty(x):
     if x != [] and sum(x) > 0:  # do not simplify
         return True
     return False
 
 
-def get_np_mean_and_std_err(x, summary_sim, n):
+def get_np_mean_and_std_err(x, summary_sim):
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-    if x.sum() > 0:
-        if summary_sim:
-            return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)
-        return x.mean(), x.std()  # we only want one number in this case (axis=1)
-    return None, None
 
+    #if x.sum() == 0:
+    #    return False, False
 
-def get_np_mean(x, summary_sim=None):
-    if isinstance(x, list):
-        x = np.array(x)
-    if x.sum() > 0:
-        if summary_sim:
-            return x.mean(axis=0)
-        return x.mean()  # we only want one number in this case (axis=1)
-    return 0
+    if summary_sim:
+        mean, std = x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
+    else:
+        mean, std = x.mean(), x.std()  # we only want one number in this case (axis=1, mean per line)
+    return mean, std
 
 
 def standard_error(std, num_simulations):
     return np.true_divide(std, np.sqrt(num_simulations))
 
 
-def compute_mean_and_std(valid_results, epochs):
+def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
+    cs_keys = []
+    for sim in sim_with_type_code_switches:
+        for set_type in set_names:
+            cs_keys += sim['type_code_switches'][set_type].keys()
+    res = cs_keys
+    if strip_language_info:
+        res = strip_language_info_and_std_err(res)
+    return res
+
+
+def compute_mean_and_std(valid_results, epochs, evaluated_sets):
     """
-    :param valid_results: list of dicts (simulations).
+    :param valid_results: list of dicts (simulations).  e.g., for 2 simulations and 4 epochs:
+                [{'correct_meaning': {'test': [0, 324, 725, 822]}, 'correct_pos': {'test': [0, 864, 944, 962, 952]}},
+                {'correct_meaning': {'test': [0, 424, 825, 922]}, 'correct_pos': {'test': [0, 964, 984, 982, 989]}}]
+    :param epochs: number of epochs per simulation that will be analyzed. We might want to restrict to a
+                   lower number than the one in the simulations
+    :param evaluated_sets: the sets that have been evaluated (test, training)
     :return:
     """
+    # convert lists of dicts to a single dictionary of lists
     results_sum = {}
-    all_keys = valid_results[0].keys()
-    cs_keywords = []
-    for sim in valid_results:
-        for t in ['test', 'training']:
-            if sim['type_code_switches'][t]:
-                cs_keywords.extend(sim['type_code_switches'][t].keys())
-    cs_keywords = set(cs_keywords)
-    results_sum['all_cs_types'] = strip_language_info(cs_keywords)
-    for key in all_keys:  # e.g., 'correct_code_switches', 'correct_sentences', 'type_code_switches', 'correct_pos'
-        results_sum[key] = {'training': {} if key == 'type_code_switches' else [],
-                            'test': {} if key == 'type_code_switches' else []}
-        for num, simulation in enumerate(valid_results):  # go through all simulations
-            for t in ['training', 'test']:
-                if t in simulation[key] and simulation[key][t]:
-                    if isinstance(simulation[key][t], dict):  # case: type_code_switches
-                        for cs_type in cs_keywords:
-                            if cs_type not in results_sum[key][t]:
-                                results_sum[key][t][cs_type] = []
+    all_simulation_keys = list(valid_results[0].keys())  # e.g., 'correct_code_switches', 'correct_sentences'
+    all_simulation_keys.remove('type_code_switches')
+    all_cs_types = extract_cs_keys(valid_results, set_names=evaluated_sets, strip_language_info=False)
 
-                            if cs_type in simulation[key][t]:
-                                results_sum[key][t][cs_type].append(simulation[key][t][cs_type][:epochs])
-                            else:  # fill with 0
-                                results_sum[key][t][cs_type].append([0] * epochs)
-                    else:
-                        results_sum[key][t].append(simulation[key][t][:epochs])
+    for key in all_simulation_keys + all_cs_types:
+        results_sum[key] = {set_name: [] for set_name in evaluated_sets}
+        for simulation in valid_results:  # go through all simulations
+            for set_name in evaluated_sets:
+                if key in all_cs_types:
+                    if key in simulation['type_code_switches'][set_name]:
+                        results_sum[key][set_name].append(simulation['type_code_switches'][set_name][key][:epochs])
+                    else:  # fill with 0
+                        results_sum[key][set_name].append([0] * epochs)
+                else:
+                    results_sum[key][set_name].append(simulation[key][set_name][:epochs])
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in results_sum.keys():
-        for t in ['training', 'test']:
-            if t in results_sum[key] and results_sum[key][t]:
-                if isinstance(results_sum[key][t], dict):
-                    for cs_type in cs_keywords:
-                        np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t][cs_type],
-                                                                      summary_sim=len(valid_results), n="%s%s%s" % (key, t, cs_type))
-                        if np_mean is not None:
-                            results_sum[key][t]["%s-std_error" % cs_type] = np_std_err
-                            results_sum[key][t][cs_type] = np_mean
-                        else:
-                            results_sum[key][t][cs_type] = []
-                else:
-                    np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][t], summary_sim=len(valid_results), n="%s%s" % (key, t))
-                    if np_mean is not None:
-                        results_sum[key]["%s-std_error" % t] = np_std_err
-                        results_sum[key][t] = np_mean
-                    else:
-                        results_sum[key][t] = []
+        for set_name in evaluated_sets:
+            np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name], summary_sim=len(valid_results))
+            if np_mean is not False:
+                results_sum[key]["%s-std_error" % set_name] = np_std_err
+                results_sum[key][set_name] = np_mean
+    results_sum['all_cs_types'] = strip_language_info_and_std_err(all_cs_types)
     return results_sum
 
 
-def strip_language_info(keyword_list):
-    return set([re.sub("en-|es-|-cog|-ff", "", x) for x in keyword_list])
+def strip_language_info_and_std_err(keyword_list):
+    return set([re.sub("en-|es-|-cog|-ff|-std_error", "", x) for x in keyword_list])
