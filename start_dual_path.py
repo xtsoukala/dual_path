@@ -87,7 +87,7 @@ if __name__ == "__main__":
     parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
                                               'and a timestamp will be added')
     parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any combination [enes, esen] for bilingual)', default='enes', type=str.lower)
+                                      'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
     parser.add_argument('-lrate', help='Learning rate', type=float, default=0.10)
     parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
                                                         "(2k sentences). If not set, rate doesn't decrease",
@@ -361,7 +361,7 @@ if __name__ == "__main__":
             layers_with_softmax_act_function += ", %s" % layer.name
     del dualp
 
-    if args.sim > 1:  # aggregate and plot results
+    if args.sim > 1 and args.eval_test:  # aggregate and plot results
         valid_results = []
         for sim in range(args.sim):  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
