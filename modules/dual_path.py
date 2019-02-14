@@ -202,7 +202,9 @@ class DualPath:
             set_names.add('training')
         if evaluate_test_set:
             set_names.add('test')
-        self.evaluate_network(set_names=set_names, plot_results=plot_results)
+
+        if set_names:
+            self.evaluate_network(set_names=set_names, plot_results=plot_results)
 
     def evaluate_network(self, set_names, plot_results):
         """
