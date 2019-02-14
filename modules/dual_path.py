@@ -21,7 +21,7 @@ class DualPath:
     """
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
-                 role_copy, input_copy, activate_both_lang, srn_debug, test_every, set_weights_folder, set_weights_epoch,
+                 role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, allow_cognate_boost=False, simulation_num=None):
         """
@@ -34,7 +34,6 @@ class DualPath:
         :param role_copy: Whether to keep a copy of the role layer activation
         :param input_copy: Whether to keep a copy of the input layer activation
         :param srn_debug: Whether to show debug messages during training
-        :param test_every: Test network every x epochs
         :param set_weights_folder: A folder that contains pre-trained weights as initial weights for simulations
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
         :param input_class: Instance of InputFormatter Class (contains all the input for the model)
@@ -65,7 +64,6 @@ class DualPath:
         self.ignore_tense_and_det = ignore_tense_and_det
         self.allow_cognate_boost = allow_cognate_boost
         self.activate_both_lang = activate_both_lang
-        self.test_every = test_every  # test every x epochs
         self.role_copy = role_copy
         self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder

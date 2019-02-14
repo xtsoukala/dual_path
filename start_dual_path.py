@@ -106,12 +106,9 @@ if __name__ == "__main__":
                         type=float, default=0.35)
     parser.add_argument('-generate_num', type=int, default=4000, help='Sum of test/training sentences to be generated '
                                                                       '(only if no input was set)')
-    parser.add_argument('-test_every', help='Test network every x epochs', type=positive_int, default=1)
     parser.add_argument('-title', help='Title for the plots')
     parser.add_argument('-sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
-    parser.add_argument('-np', help='Defines percentage of Noun Phrases(NPs) vs pronouns on the subject level',
-                        type=int, default=100)
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
     parser.add_argument('-threshold', type=int, default=50,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
@@ -279,14 +276,14 @@ if __name__ == "__main__":
     simulation_logger.addHandler(fh)
 
     simulation_logger.info(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\n"
-                            "Compress: %s\nCopy role: %s\nCopy input: %s\nPercentage NPs:%s\nPro-drop language:%s\nUse "
+                            "Compress: %s\nCopy role: %s\nCopy input: %s\nPro-drop language:%s\nUse "
                             "gender info:%s\novert_pronouns (overt es pronouns):%s%%\nFixed weights: concept-role: %s, "
                             "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
                             "Allow free structure production:%s\nIgnore tense and determiners when evaluating:%s") %
                            (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
-                            args.cinput, args.np, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
+                            args.cinput, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
                             args.set_weights, set_weights_epoch, args.activate_both_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
@@ -336,9 +333,9 @@ if __name__ == "__main__":
                     set_weights_epoch = 0
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                         test_every=args.test_every, compress_size=args.compress,
-                         activate_both_lang=args.activate_both_lang, cognate_experiment=args.cognate_experiment,
-                         set_weights_folder=inputs.directory if args.set_weights else None, momentum=args.momentum,
+                         compress_size=args.compress, activate_both_lang=args.activate_both_lang,
+                         cognate_experiment=args.cognate_experiment, momentum=args.momentum,
+                         set_weights_folder=inputs.directory if args.set_weights else None,
                          input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
