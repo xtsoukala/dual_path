@@ -2,7 +2,7 @@
 import sys
 import os
 from copy import deepcopy
-from modules.plotter import Plotter, np
+from modules.plotter import Plotter, np, torch
 from collections import defaultdict
 
 
@@ -67,14 +67,14 @@ class SimpleRecurrentNetwork:
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
-                stats['means'].append(np.mean(layer.in_weights))
-                stats['std'].append(np.std(layer.in_weights))
+                stats['means'].append(layer.in_weights.mean())
+                stats['std'].append(layer.in_weights.std())
                 stats['labels'].append(layer.name)
                 np.savez_compressed("%s/weights/weights_%s_0.npz" % (results_dir, layer.name), layer.in_weights)
                 if self.debug_messages:
                     with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
                         f.write("name, max, min, mean, std\n"
-                                "%s,%g,%g,%g,%g\n" % (layer.name, np.max(layer.in_weights), np.min(layer.in_weights),
+                                "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
                                                       stats['means'][-1], stats['std'][-1]))
                 if plot_stats:
                     plt = Plotter(results_dir=results_dir)
@@ -131,7 +131,7 @@ class SimpleRecurrentNetwork:
 
     def set_inputs(self, input_idx, target_idx=None):
         input_layer = self.get_layer("input")
-        input_layer.activation = np.zeros(input_layer.size)
+        input_layer.activation = torch.zeros(input_layer.size)
         if input_idx:  # at the beginning of sentence, input_idx is None
             input_layer.activation[input_idx] = 1
         if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
@@ -139,13 +139,13 @@ class SimpleRecurrentNetwork:
 
         if target_idx is not None:  # no need to set target when testing
             output_layer = self.get_layer("output")
-            output_layer.target_activation = np.zeros(output_layer.size)
+            output_layer.target_activation = torch.zeros(output_layer.size)
             output_layer.target_activation[target_idx] = 1
 
     def update_layer_activation(self, layer_name, activation):
         layer = self.get_layer(layer_name)
         if activation is None:  # set to zero
-            layer.activation = np.zeros(layer.size)
+            layer.activation = torch.zeros(layer.size)
         else:
             layer.activation = activation
 
@@ -164,15 +164,15 @@ class SimpleRecurrentNetwork:
                 layer.in_activation = np.append(layer.in_activation, 1)
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
-                layer.activation = np.zeros(layer.size)  # set role_copy to zero
+                layer.activation = torch.zeros(layer.nelement())  # set role_copy to zero
                 continue
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
+                layer.activation = softmax(torch.mm(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "tanh":
-                layer.activation = tanh_activation(np.dot(layer.in_activation, layer.in_weights))
+                layer.activation = tanh_activation(torch.mm(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "sigmoid":
-                layer.activation = sigmoid(np.dot(layer.in_activation, layer.in_weights))
+                layer.activation = sigmoid(torch.mm(layer.in_activation, layer.in_weights))
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -224,7 +224,7 @@ class SimpleRecurrentNetwork:
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
-            error_out = np.sum(self.current_layer.error_out, axis=0)
+            error_out = self.current_layer.error_out.sum(0)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
@@ -236,10 +236,10 @@ class SimpleRecurrentNetwork:
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
-        self.current_layer.delta = np.dot(np.atleast_2d(self.current_layer.in_activation).T,
+        self.current_layer.delta = torch.mm(np.atleast_2d(self.current_layer.in_activation).T,
                                           np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = np.sqrt(np.sum(self.current_layer.delta ** 2))
+        len_delta = torch.sqrt(np.sum(self.current_layer.delta ** 2))
         if len_delta > 1:
             self.current_layer.delta = np.true_divide(self.current_layer.delta, len_delta)
         self.current_layer.delta *= self.learn_rate
@@ -248,7 +248,7 @@ class SimpleRecurrentNetwork:
 
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
-        self.current_layer.total_error = np.dot(self.current_layer.gradient, self.current_layer.in_weights.T)
+        self.current_layer.total_error = torch.mm(self.current_layer.gradient, self.current_layer.in_weights.T)
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -327,16 +327,16 @@ class NeuronLayer:
         self.convert_input = convert_input
         self.size = size
         self.sd = 0  # it is used to initialize weights
-        self.activation = np.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
-        self.target_activation = np.zeros(size)
+        self.activation = torch.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.target_activation = torch.zeros(size)
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
-        self.in_weights = np.array([])  # weights from incoming layers
+        self.in_weights = torch.tensor([])  # weights from incoming layers
         self.in_size = 0
         self.in_layers = []
         self.in_activation = []
-        self.previous_delta = np.empty([])
+        self.previous_delta = torch.empty([])
         self.gradient = None
         self.context_activation = None
         # the following two properties are only for the hidden (recurrent) layer
@@ -347,12 +347,12 @@ class NeuronLayer:
     def make_recurrent(self, context_init_value):
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
-        self.context_activation = np.array([context_init_value] * self.size)
+        self.context_activation = torch.tensor([context_init_value] * self.size)
 
 
 def convert_range(matrix, min_val=-1, max_val=1):
     """ Converts range between min and max values. NOTE: This seems to be creating some issues during training. """
-    if np.sum(matrix) == 0:
+    if matrix.sum() == 0:
         return matrix + min_val
     else:
         return np.true_divide((max_val - min_val) * (matrix - matrix.min()), (matrix.max() - matrix.min())) + min_val
@@ -383,29 +383,6 @@ def softmax(x):
 def softmax_derivative(x):
     # if i=j this derivative is the same as the derivative of the logistic function. Otherwise: -XiXj
     return x * (1.0 - x)
-
-
-# The following activation functions are never used
-def relu(x):
-    return x * (x > 0)
-
-
-def relu_derivative(x):
-    return 1 * (x > 0)
-
-
-def softmax_derivative_complete(s):
-    # input s is softmax value of the original input x. Its shape is (1,n)
-    # e.i. s = np.array([0.3,0.7]), x = np.array([0,1])
-    # make the matrix whose size is n^2.
-    jacobian_m = np.diag(s)
-    for i in range(len(jacobian_m)):
-        for j in range(len(jacobian_m)):
-            if i == j:
-                jacobian_m[i][j] = s[i] * (1 - s[i])
-            else:
-                jacobian_m[i][j] = -s[i] * s[j]
-    return jacobian_m
 
 
 def sigmoid(x):

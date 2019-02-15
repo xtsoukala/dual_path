@@ -5,6 +5,7 @@ import itertools
 import pickle
 import pandas as pd
 import numpy as np
+import torch
 from collections import defaultdict, Counter
 
 try:
@@ -417,9 +418,9 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        event_sem_activations = torch.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        target_lang_activations = np.zeros(self.languages_size)
+        target_lang_activations = torch.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -447,11 +448,11 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        event_sem_activations = torch.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = np.zeros(self.languages_size)
+        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
+        target_lang_activations = torch.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -505,7 +506,7 @@ class InputFormatter:
                             gives information about the event-semantics (E)
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = np.zeros((self.roles_size, self.identif_and_concept_size))
+        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
         for info in message.split(';'):
             role, what = info.split("=")
             if role != "E":  # retrieve activations for the event-sem layer
@@ -538,8 +539,8 @@ class InputFormatter:
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
-        return np.dot(self.concepts[first_word], self.concepts[second_word] /
-                      np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
+        return torch.mm(self.concepts[first_word], self.concepts[second_word] /
+                        np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold):
         if x:
@@ -594,7 +595,7 @@ def get_np_mean_and_std_err(x, summary_sim):
 
 
 def standard_error(std, num_simulations):
-    return np.true_divide(std, np.sqrt(num_simulations))
+    return np.true_divide(std, torch.sqrt(num_simulations))
 
 
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
