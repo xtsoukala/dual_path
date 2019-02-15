@@ -2,7 +2,6 @@
 import logging
 from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, np
-from modules.plotter import Plotter
 from modules.formatter import pickle
 
 
@@ -48,9 +47,9 @@ class DualPath:
         self.pronoun_experiment = pronoun_experiment
         self.cognate_experiment = cognate_experiment
         self.auxiliary_experiment = auxiliary_experiment
-        self.training_logger = self.init_logger('training')
-        self.test_logger = self.init_logger('test')
-        self.set_level_logger = self.init_logger('set_level')
+        self.training_logger = None
+        self.test_logger = None
+        self.set_level_logger = None
         self.only_evaluate = only_evaluate
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
@@ -165,9 +164,8 @@ class DualPath:
         if not backpropagate:
             return produced_sent_ids
 
-    def start_network(self, plot_results, evaluate_test_set, evaluate_training_set):
+    def start_network(self, evaluate_test_set, evaluate_training_set):
         """
-        :param plot_results: Whether to plot the performance
         :param evaluate_test_set: Whether to evaluate test set every x epochs. The only reason NOT to evaluate
         is for speed, if we want to training network and save weights
         :param evaluate_training_set: Whether to evaluate the training set (default: False)
@@ -198,16 +196,18 @@ class DualPath:
         set_names = set()
         if evaluate_training_set:
             set_names.add('training')
+            self.training_logger = self.init_logger('training')
         if evaluate_test_set:
+            self.test_logger = self.init_logger('test')
             set_names.add('test')
 
         if set_names:
-            self.evaluate_network(set_names=set_names, plot_results=plot_results)
+            self.set_level_logger = self.init_logger('set_level')
+            self.evaluate_network(set_names=set_names)
 
-    def evaluate_network(self, set_names, plot_results):
+    def evaluate_network(self, set_names):
         """
         :param set_names: ['test', 'training'] or ['test'] if only the test set is evaluated
-        :param plot_results: whether to plot results
         """
         results = {
             'correct_meaning': {
@@ -373,14 +373,6 @@ class DualPath:
         # write (single) simulation results to a pickled file
         with open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
             pickle.dump(results, pckl)
-
-        if plot_results:
-            results['mse'] = self.srn.mse
-            plt = Plotter(results_dir=self.inputs.directory, epochs=self.epochs, summary_sim=None, title=None)
-            plt.plot_results(results, num_train=self.inputs.num_train, num_test=self.inputs.num_test,
-                             test_df=self.inputs.testlines_df, evaluated_datasets=set_names,
-                             cognate_experiment=self.cognate_experiment, auxiliary_experiment=self.auxiliary_experiment,
-                             test_sentences_with_pronoun=self.inputs.test_sentences_with_pronoun)
 
     @staticmethod
     def aggregate_dict(epochs, results_type_code_switches):
