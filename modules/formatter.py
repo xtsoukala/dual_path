@@ -448,11 +448,11 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = torch.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
+        event_sem_activations = [0] * self.event_sem_size #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = torch.zeros(self.languages_size)
+        target_lang_activations = [0] * self.languages_size #np.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -507,6 +507,7 @@ class InputFormatter:
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
+        print(message)
         for info in message.split(';'):
             role, what = info.split("=")
             if role != "E":  # retrieve activations for the event-sem layer
@@ -539,12 +540,11 @@ class InputFormatter:
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
-        return torch.mm(self.concepts[first_word], self.concepts[second_word] /
-                        np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
+        pass
 
     def training_is_successful(self, x, threshold):
         if x:
-            return np.true_divide(x[-1] * 100, self.num_test) >= threshold
+            return true_divide(x[-1] * 100, self.num_test) >= threshold
         print("Training did not pass the threshold: %s / %s" % (x, threshold))
         return False
 
@@ -581,9 +581,8 @@ def is_not_empty(x):
 
 
 def get_np_mean_and_std_err(x, summary_sim):
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
-
+    #if not isinstance(x, np .ndarray):
+    #    x = np .array(x)
     if summary_sim:
         mean, std = x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
     else:
@@ -592,7 +591,11 @@ def get_np_mean_and_std_err(x, summary_sim):
 
 
 def standard_error(std, num_simulations):
-    return np.true_divide(std, torch.sqrt(num_simulations))
+    return true_divide(std, torch.sqrt(num_simulations))
+
+
+def true_divide(x, total):
+    return torch.div(x, total)
 
 
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):

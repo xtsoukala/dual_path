@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 from collections import defaultdict
-from modules.elman_network import SimpleRecurrentNetwork, np, torch
-from modules.formatter import pickle
+from modules.elman_network import SimpleRecurrentNetwork, torch
+from modules.formatter import pickle, true_divide
 
 
 class DualPath:
@@ -55,7 +55,7 @@ class DualPath:
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
         num_epochs_decreasing_step = 4
-        self.lrate_decrease_step = np.true_divide(learn_rate - final_learn_rate,
+        self.lrate_decrease_step = true_divide(learn_rate - final_learn_rate,
                                                   self.inputs.num_train * num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
@@ -182,10 +182,11 @@ class DualPath:
             epoch = 0
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs
-                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(
-                        self.inputs.trainlines_df.index)).itertuples():  # shuffle and train
+                print(self.inputs.trainlines_df.size)
+                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():  # shuffle and train
                     # train_line = self.inputs.trainlines_df.loc[i]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
+                    print(train_line)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
                                    backpropagate=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs

@@ -1,5 +1,5 @@
 import matplotlib
-from modules.formatter import is_not_empty, get_np_mean_and_std_err, np, torch, extract_cs_keys, defaultdict
+from modules.formatter import is_not_empty, get_np_mean_and_std_err, torch, extract_cs_keys, defaultdict, true_divide
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
@@ -364,12 +364,12 @@ class Plotter:
             return float('NaN')
         if isinstance(x, list):
             x = torch.tensor(x)
-        return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
+        return true_divide(x * 100, total, where=x != 0)  # avoid division by 0
 
     @staticmethod
     def is_nd_array_or_list(x):
         type(x)
         sys.exit()
-        if isinstance(x, (list, np.ndarray)):
+        if isinstance(x, (list, np .ndarray)):
             return True
         return False
