@@ -6,7 +6,8 @@ import sys
 import platform
 from datetime import datetime
 from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
-from modules.dual_path import DualPath, Plotter
+from modules.dual_path import DualPath
+from modules.plotter import Plotter
 import argparse
 
 
@@ -35,7 +36,7 @@ def copy_specific_files(src, dest, filename_starts_with_list=('test', 'training'
                 shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def create_all_input_files(num_simulations, directory, sets, original_input_path, cognate_experiment,
+def create_all_input_files(num_simulations, directory, sets, original_input, cognate_experiment,
                            generate_num, l2_percentage, auxiliary_experiment):
     for sim_num in range(num_simulations):  # first create all input files
         rdir = "%s/%s" % (directory, sim_num)
@@ -58,8 +59,8 @@ def create_all_input_files(num_simulations, directory, sets, original_input_path
                         if len(args.lang) > 2:
                             sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
                                                                               percentage_l2=l2_percentage)
-        elif original_input_path:  # use existing test/training set (copy them first)
-            copy_files_endswith(os.path.join(original_input_path, str(sim_num)), rdir)
+        elif original_input:  # use existing test/training set (copy them first)
+            copy_files_endswith(os.path.join(original_input, str(sim_num)), rdir)
 
 
 if __name__ == "__main__":
@@ -139,9 +140,6 @@ if __name__ == "__main__":
     parser.add_argument('--noeval', dest='eval_test', action='store_false',
                         help='Do not evaluate test set')
     parser.set_defaults(eval_test=True)
-    parser.add_argument('--noplot', dest='plot_results', action='store_false',
-                        help='Do not plot results')
-    parser.set_defaults(plot_results=True)
     parser.add_argument('--eval_training', dest='eval_training', action='store_true',
                         help='Evaluate training sets')
     parser.set_defaults(eval_training=False)
@@ -236,6 +234,7 @@ if __name__ == "__main__":
         args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
+
         experiment_dir = "code-switching/" if args.activate_both_lang else ""
         if not args.lexicon:
             args.lexicon = 'corpus/%slexicon.csv' % experiment_dir
@@ -259,7 +258,6 @@ if __name__ == "__main__":
                 if len(args.lang) > 2:
                     input_sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
                                                                             percentage_l2=args.l2_percentage)
-
     if not args.title:
         lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
                               'el': 'Greek monolingual model', 'enes': 'Bilingual en-es model',
@@ -297,7 +295,7 @@ if __name__ == "__main__":
     failed_sim_id = []
     if args.sim > 1:
         create_all_input_files(num_simulations=args.sim, directory=results_dir, l2_percentage=args.l2_percentage,
-                               auxiliary_experiment=args.auxiliary_experiment, original_input_path=original_input_path,
+                               auxiliary_experiment=args.auxiliary_experiment, original_input=original_input_path,
                                cognate_experiment=args.cognate_experiment, sets=input_sets,
                                generate_num=args.generate_num)
         del input_sets  # we no longer need it
@@ -340,13 +338,11 @@ if __name__ == "__main__":
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
         if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.plot_results, args.eval_test,
-                                                                   args.eval_training))
+            process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training))
             process.start()
             processes.append(process)
         else:
-            dualp.start_network(plot_results=args.plot_results, evaluate_test_set=args.eval_test,
-                                evaluate_training_set=args.eval_training)
+            dualp.start_network(evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training)
 
     if args.use_multiprocessing:
         for p in processes:

@@ -584,9 +584,6 @@ def get_np_mean_and_std_err(x, summary_sim):
     if not isinstance(x, np.ndarray):
         x = np.array(x)
 
-    #if x.sum() == 0:
-    #    return False, False
-
     if summary_sim:
         mean, std = x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
     else:
