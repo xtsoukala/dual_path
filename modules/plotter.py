@@ -337,16 +337,6 @@ class Plotter:
                                             fname='pronoun_errors_percentage',
                                             test_percentage=test_sentences_with_pronoun, ylim=15)
 
-        if plot_mse and not self.summary_sim and results['mse']:  # no need to plot an average of all the simulations
-            mse_list = [get_np_mean_and_std_err(results['mse'][epoch], summary_sim=None)[0] for epoch in
-                        self.epoch_range]
-            plt.plot(self.epoch_range, mse_list, color='darkslateblue', label='MSE')
-            plt.xlabel('epochs')
-            plt.ylabel('Mean Square Error')
-            plt.ylim([0, 0.007])
-            plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
-            plt.close()
-
     def plot_layer_stats(self, stats):
         """
         :param stats: dict of lists that contain means, std and labels

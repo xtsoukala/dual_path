@@ -253,9 +253,8 @@ class DualPath:
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
                                       set_weights_epoch=epoch, plot_stats=False)
                 for line in set_lines.itertuples():
-                    # line = set_lines.loc[line_idx]
-                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(
-                        line.message))  # weights_role_concept[line_idx])  # FIXME
+                    # line = set_lines.loc[line_idx]   # FIXME: weights_role_concept[line_idx])
+                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message))
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
                     target_pos, target_sentence_idx = line.target_pos, line.target_sentence_idx
 
@@ -353,7 +352,7 @@ class DualPath:
                     if epoch > 0:
                         meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
                         pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos)
-                        log_info = (epoch, produced_sentence, line.target_sentence, "'%s'" % line.message,
+                        log_info = (epoch, produced_sentence, line.target_sentence, '"%s"' % line.message,
                                     pos, not has_wrong_tense, not has_wrong_det, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:
                             log_info += (switched_at, switched_participle, switched_right_after, switched_after,

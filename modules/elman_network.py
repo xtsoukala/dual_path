@@ -171,8 +171,6 @@ class SimpleRecurrentNetwork:
                 layer.activation = softmax(np.dot(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "tanh":
                 layer.activation = tanh_activation(np.dot(layer.in_activation, layer.in_weights))
-            elif layer.activation_function == "sigmoid":
-                layer.activation = sigmoid(np.dot(layer.in_activation, layer.in_weights))
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -205,9 +203,6 @@ class SimpleRecurrentNetwork:
         elif output_layer.activation_function == "tanh":
             output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
                                      tanh_derivative(output_layer.activation))
-        elif output_layer.activation_function == "sigmoid":
-            output_layer.gradient = ((output_layer.target_activation - output_layer.activation) *
-                                     sigmoid_derivative(output_layer.activation))
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
@@ -231,8 +226,6 @@ class SimpleRecurrentNetwork:
                 self.current_layer.gradient = error_out * softmax_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "tanh":
                 self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
-            elif self.current_layer.activation_function == "sigmoid":
-                self.current_layer.gradient = error_out * sigmoid_derivative(self.current_layer.activation)
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
@@ -383,37 +376,3 @@ def softmax(x):
 def softmax_derivative(x):
     # if i=j this derivative is the same as the derivative of the logistic function. Otherwise: -XiXj
     return x * (1.0 - x)
-
-
-# The following activation functions are never used
-def relu(x):
-    return x * (x > 0)
-
-
-def relu_derivative(x):
-    return 1 * (x > 0)
-
-
-def softmax_derivative_complete(s):
-    # input s is softmax value of the original input x. Its shape is (1,n)
-    # e.i. s = np.array([0.3,0.7]), x = np.array([0,1])
-    # make the matrix whose size is n^2.
-    jacobian_m = np.diag(s)
-    for i in range(len(jacobian_m)):
-        for j in range(len(jacobian_m)):
-            if i == j:
-                jacobian_m[i][j] = s[i] * (1 - s[i])
-            else:
-                jacobian_m[i][j] = -s[i] * s[j]
-    return jacobian_m
-
-
-def sigmoid(x):
-    return np.true_divide(1.0, (1.0 + np.exp(-x)))
-
-
-def sigmoid_derivative(x, input_activation=False):
-    if input_activation:
-        return sigmoid(x) * (1.0 - sigmoid(x))
-    else:
-        return x * (1.0 - x)

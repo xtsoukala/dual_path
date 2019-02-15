@@ -410,36 +410,6 @@ class InputFormatter:
             pos = [w.replace('verb', 'aux') for w in pos]
         return pos
 
-    def get_message_info_OLD(self, message):
-        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
-                            gives information about the event-semantics (E)
-        """
-        norm_activation = 1  # 0.5 ?
-        reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
-        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        target_lang_activations = np.zeros(self.languages_size)
-        target_language = None
-        for info in message.split(';'):
-            role, what = info.split("=")
-            if role == "E":  # retrieve activations for the event-sem layer
-                activation = norm_activation
-                for event in what.split(","):
-                    if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
-                        activation = reduced_activation
-                        continue  # otherwise activation will revert to default
-                    elif event in self.languages:
-                        target_language = event
-                        target_lang_activations[self.languages.index(event)] = activation
-                    elif event == 'enes':
-                        target_language = event
-                        target_lang_activations = [0.5, 0.5]
-                    else:
-                        event_sem_activations[self.event_semantics.index(event)] = activation
-                    activation = norm_activation  # reset activation levels to maximum
-        return event_sem_activations, target_lang_activations, target_language
-
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
@@ -582,12 +552,7 @@ def is_not_empty(x):
 def get_np_mean_and_std_err(x, summary_sim):
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-
-    if summary_sim:
-        mean, std = x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
-    else:
-        mean, std = x.mean(), x.std()  # we only want one number in this case (axis=1, mean per line)
-    return mean, std
+    return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
 
 
 def standard_error(std, num_simulations):
