@@ -1,5 +1,5 @@
 import matplotlib
-from modules.formatter import is_not_empty, get_np_mean_and_std_err, np, extract_cs_keys, defaultdict
+from modules.formatter import is_not_empty, get_np_mean_and_std_err, np, torch, extract_cs_keys, defaultdict
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
@@ -96,7 +96,7 @@ class Plotter:
         return max(result)
 
     def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
-        index_size = np.arange(len(indeces))
+        index_size = torch.arange(len(indeces))
         fig, ax = plt.subplots()
         rects = []
         for i, item in enumerate(items_to_plot):
@@ -353,7 +353,7 @@ class Plotter:
         :return:
         """
         fig, ax = plt.subplots()
-        ax.bar(np.arange(len(stats['labels'])), stats['means'], color='r', yerr=stats['std'])
+        ax.bar(torch.arange(len(stats['labels'])), stats['means'], color='r', yerr=stats['std'])
         ax.set_xticklabels(stats['labels'])
         plt.savefig('%s/weights/summary_weights.pdf' % self.results_dir)
         plt.close()
@@ -363,11 +363,13 @@ class Plotter:
         if isinstance(total, int) and total == 0:
             return float('NaN')
         if isinstance(x, list):
-            x = np.array(x)
+            x = torch.tensor(x)
         return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
 
     @staticmethod
     def is_nd_array_or_list(x):
+        type(x)
+        sys.exit()
         if isinstance(x, (list, np.ndarray)):
             return True
         return False

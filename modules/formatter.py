@@ -418,7 +418,7 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = torch.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        event_sem_activations = torch.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         target_lang_activations = torch.zeros(self.languages_size)
         target_language = None
@@ -448,7 +448,7 @@ class InputFormatter:
         """
         norm_activation = 1  # 0.5 ?
         reduced_activation = 0.4  # 0.1-4
-        event_sem_activations = torch.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
+        event_sem_activations = torch.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))

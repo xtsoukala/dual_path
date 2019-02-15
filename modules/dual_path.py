@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 from collections import defaultdict
-from modules.elman_network import SimpleRecurrentNetwork, np
+from modules.elman_network import SimpleRecurrentNetwork, np, torch
 from modules.plotter import Plotter
 from modules.formatter import pickle
 
@@ -154,8 +154,8 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.activate_both_lang and prod_idx is None:
                     # TODO: play with activations, e.g. activate the target language slightly more
-                    # np.ones(2)  # [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
-                    self.srn.update_layer_activation("target_lang", activation=np.ones(2))
+                    # ones or: [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
+                    self.srn.update_layer_activation("target_lang", activation=torch.ones(2))
                 prod_idx = self.srn.get_max_output_activation()
                 append_to_produced(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if period produced
@@ -184,7 +184,7 @@ class DualPath:
             epoch = 0
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs
-                for train_line in self.inputs.trainlines_df.reindex(np.random.permutation(
+                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(
                         self.inputs.trainlines_df.index)).itertuples():  # shuffle and train
                     # train_line = self.inputs.trainlines_df.loc[i]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
