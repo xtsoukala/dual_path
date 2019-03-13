@@ -1,5 +1,5 @@
 import matplotlib
-from modules.formatter import is_not_empty, get_np_mean_and_std_err, torch, extract_cs_keys, defaultdict, true_divide
+from modules.formatter import is_not_empty, np, extract_cs_keys, defaultdict, torch, true_divide
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
@@ -18,7 +18,7 @@ class Plotter:
         self.plot_detailed_cs = False
         # green:4daf4a, orange:ff7f00, purple:984ea3, grey: 999999, brown:a65628, red:e41a1c, blue:377eb8, yellow:dede00
         self.cblind_friendly = ['#4daf4a', '#a65628', '#ff7f00', '#999999', '#984ea3', '#377eb8', '#e41a1c', '#dede00']
-        self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999')]
+        self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999'), ('#377eb8', '')]
         self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c', '#377eb8', '#ff7f00', '#4daf4a',
                            '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00'] * 9
         line_styles = ['-', '--', '-.', ':'] * 10
@@ -37,6 +37,16 @@ class Plotter:
                 self.assigned_markers["%s_%s" % (i, p)] = markers[c]
                 self.assigned_markers["%s_%s_es_en" % (i, p)] = markers[c]
                 c += 1
+
+        self.assigned_colors['progressive_tener'] = self.assigned_colors['progressive_aux'] = '#999999'
+        self.assigned_colors['perfect_tener'] = self.assigned_colors['perfect_aux'] = '#377eb8'
+        self.assigned_colors['progressive'] = self.assigned_colors['progressive_participle'] = '#4daf4a'
+        self.assigned_colors['perfect'] = self.assigned_colors['perfect_participle'] = '#984ea3'
+
+        self.assigned_markers['progressive_tener'] = self.assigned_markers['progressive_aux'] = ','
+        self.assigned_markers['perfect_tener'] = self.assigned_markers['perfect_aux'] = 'x'
+        self.assigned_markers['progressive'] = self.assigned_markers['progressive_participle'] = '.'
+        self.assigned_markers['perfect'] = self.assigned_markers['perfect_participle'] = '*'
 
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, ylabel, ylim, fname,
                                legend_loc='upper right'):
@@ -58,14 +68,47 @@ class Plotter:
                 plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
                          label="%s (Training)" % item, linestyle='--')
         plt.xlabel('epochs')
-        plt.ylabel(ylabel)
+        if ylabel:
+            plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='upper right'):
+    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
+                                        fname, legend_loc='upper right'):
+        for item_idx, item in enumerate(items_to_plot):
+            test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
+            plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0],
+                     label=item.replace('_', ' ').replace('code switches', 'code-switches'))
+            if 'test-std_error' in self.results[item]:
+                test_std_error = self.results[item]['test-std_error']
+                lower_bound = self.percentage(self.results[item]['test'] - test_std_error,
+                                              test_percentage_lst[item_idx])
+                upper_bound = self.percentage(self.results[item]['test'] + test_std_error,
+                                              test_percentage_lst[item_idx])
+                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.colors[item_idx][0],
+                                 alpha=0.2)
+
+            if 'training' in self.results[item]:
+                if is_not_empty(training_percentage):
+                    training_value = self.percentage(self.results[item]['training'], training_percentage)
+                else:
+                    training_value = self.results[item]['training']
+                plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
+                         label="%s (Training)" % item, linestyle='--')
+        plt.xlabel('epochs')
+        if ylabel:
+            plt.ylabel(ylabel)
+        plt.ylim([0, ylim])
+        plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
+        plt.xticks(np.arange(1, 30, 2))
+        plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
+        plt.savefig(self.get_plot_path(fname))
+        plt.close()
+
+    def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='lower right'):
         for i, result in enumerate(results):
             legend_label = legend[i]
             color = self.assigned_colors[legend_label] if legend_label in self.assigned_colors else self.color_bars[i]
@@ -95,14 +138,21 @@ class Plotter:
             return max(result) + 5
         return max(result)
 
-    def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
+    def plot_bar_chart_original(self, indeces, items_to_plot, legend, fname, label=None, only_last_epoch=False):
         index_size = torch.arange(len(indeces))
         fig, ax = plt.subplots()
         rects = []
         for i, item in enumerate(items_to_plot):
-            rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for x in self.cs_results[item]],
-                                self.bar_width, color=self.color_bars[i], yerr=[x[1] for x in self.cs_results[item]]))
-        ax.set_ylabel(label)
+            if not only_last_epoch:
+                rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for x in self.cs_results[item]],
+                                    self.bar_width, color=self.color_bars[i],
+                                    yerr=[x[1] for x in self.cs_results[item]]))
+            else:
+                rects.append(ax.bar(index_size + (self.bar_width * i), self.cs_results[item][-1][0],
+                                    self.bar_width, color=self.color_bars[i], yerr=self.cs_results[item][-1][1]))
+
+        if label:
+            ax.set_ylabel(label)
         if self.title:
             ax.set_title(self.title)
         ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
@@ -110,13 +160,73 @@ class Plotter:
         ax.legend(([x[0] for x in rects]), legend)
         ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
         plt.tight_layout()  # make room for labels
-        fname = '%s/%s%s_cs.pdf' % (self.results_dir, "%s" % (("summary_%s_" % self.summary_sim)
-                                                              if self.summary_sim else ""), fname)
+        fname = '%s/"summary_%s_%s_cs.pdf' % (self.results_dir, self.summary_sim, fname)
         plt.savefig(fname)
         plt.close()
 
+    def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
+        original_idx = list(indeces)
+        insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
+        alternations = [x for x in indeces if x.startswith('alt')]
+
+        fname = ['insertions.pdf', 'alternations.pdf']
+        for type, indeces in enumerate([insertions, alternations]):
+            index_size = np.arange(len(indeces))
+            fig, ax = plt.subplots()
+            rects = []
+            for i, item in enumerate(items_to_plot):
+                rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for ind, x in
+                                                                        enumerate(self.cs_results[item])
+                                                                        if original_idx[ind] in indeces],
+                                    self.bar_width, color=self.color_bars[i], yerr=[x[1] for ind, x in
+                                                                                    enumerate(self.cs_results[item])
+                                                                                    if original_idx[ind] in indeces]))
+            if self.title:
+                ax.set_title(self.title)
+            ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
+            ax.set_ylim(bottom=0)
+            ax.legend(([x[0] for x in rects]), legend, loc='upper left')
+            ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
+            plt.tight_layout()  # make room for labels
+            filename = '%s/%s' % (self.results_dir, fname[type])
+            plt.savefig(filename)
+            plt.close()
+
+    def simple_bar_plot(self, fname="all_switch_points"):
+        # prog, perfect
+        means_prog = (3.34761383e+000, 4.15960945e+000)
+        std_prog = (4.47782572e-001, 5.77097541e-001)
+
+        means_perfect = (4.08477268e+000, 2.18383959e+000)
+        std_perfect = (5.29089072e-001, 3.82811174e-001)
+
+        n_groups = len(means_prog)
+
+        fig, ax = plt.subplots()
+
+        index = np.arange(n_groups)
+        bar_width = 0.3
+        opacity = 0.7
+
+        error_config = {'ecolor': '0.3'}
+
+        ax.bar(index, means_prog, bar_width, alpha=opacity,
+               color='#4daf4a', yerr=std_prog, error_kw=error_config, label='auxiliary')
+
+        ax.bar(index + bar_width, means_perfect, bar_width, alpha=opacity,
+               color='#984ea3', yerr=std_perfect, error_kw=error_config, label='participle')
+
+        ax.set_xticks(index + bar_width / 2)
+        ax.set_xticklabels(('progressive', 'perfect'))
+        ax.legend()
+
+        fig.tight_layout()  # make room for labels
+        filename = '%s/%s.pdf' % (self.results_dir, fname)
+        plt.savefig(filename)
+        plt.close()
+
     def plot_results(self, results, num_train, num_test, test_df, test_sentences_with_pronoun,
-                     cognate_experiment, auxiliary_experiment, evaluated_datasets, plot_mse=True):
+                     cognate_experiment, auxiliary_experiment, evaluated_datasets):
         correct_test = results['correct_meaning']['test']
         self.results = results
         if 'all_cs_types' in self.results:
@@ -134,13 +244,19 @@ class Plotter:
                                         test_percentage=num_test, training_percentage=num_train, ylim=40,
                                         ylabel='%% CS among %s set' % 'test',
                                         fname='code_switches_%s_set' % 'test')
+
+            self.plot_multiple_changes_over_time(items_to_plot=['correct_code_switches', 'correct_meaning'],
+                                                 legend_loc='lower right',
+                                                 test_percentage_lst=[correct_test, num_test],
+                                                 training_percentage=None, ylim=90, ylabel=None,
+                                                 fname='performance_and_code_switches')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
             self.plot_changes_over_time(ylim=40, items_to_plot=['correct_code_switches'],
                                         test_percentage=correct_test,
                                         training_percentage=(0 if 'training' not in results['correct_meaning'] else
                                                              results['correct_meaning']['training']),
                                         fname="code_switches_correct_%s_set" % 'test',
-                                        ylabel='%% CS among correctly produced %s set' % 'test')
+                                        ylabel='')  # '#%% CS among correctly produced %s set' % 'test')
 
             # !------------  code-switching ------------!
             self.cs_results = {'type_correct_test_en': [], 'type_correct_test_es': [],
@@ -170,7 +286,7 @@ class Plotter:
             # make sure there is still something to be plotted after the manipulations
             if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
                 self.plot_bar_chart(label='CS types (%% of correctly produced %s set)' % 'test',
-                                    indeces=all_cs_types, legend=('es', 'en'),
+                                    indeces=all_cs_types, legend=('target lang: Spanish', 'target lang: English'),
                                     fname='code_switches_correct_test_set_last_epoch',
                                     items_to_plot=['type_correct_test_last_epoch_es',
                                                    'type_correct_test_last_epoch_en'])
@@ -178,8 +294,8 @@ class Plotter:
                 if self.plot_detailed_cs:
                     for i, cs_type in enumerate(all_cs_types):
                         self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
-                                                    ylim=15, legend=('es', 'en'), fname='code_switches_correct_test_'
-                                                                                        'set_%s' % cs_type,
+                                                    ylim=15, legend=('target lang: Spanish', 'target lang: English'),
+                                                    fname='code_switches_correct_test_%s' % cs_type,
                                                     results=[self.cs_results['type_correct_test_es'][i],
                                                              self.cs_results['type_correct_test_en'][i]])
 
@@ -215,6 +331,7 @@ class Plotter:
                         res_aux_per_correct_tense = []
                         res_aux_no_after_per_tense = []
                         legend = []
+                        l = []
                         for aux in ['is', 'has']:
                             for point in ['aux', 'participle', 'right_after', 'after']:
                                 index = '%s_%s%s' % (aux, point, cs_direction)
@@ -240,6 +357,7 @@ class Plotter:
                                     if 'after' not in index:
                                         res_aux_no_after_per_tense.append(res_aux_per_correct_tense[-1])
                                     if 'participle' in index:
+                                        l.append(index)
                                         res_aux_participle_all_set.append(res_aux_all_set[-1])
                                         res_aux_participle_per_tense.append(res_aux_per_correct_tense[-1])
 
@@ -259,18 +377,26 @@ class Plotter:
 
                             self.plot_cs_type_over_time(label='participle switches (% of correctly produced sentences)',
                                                         legend=['is_participle%s' % cs_direction,
-                                                                'has_participle%s' % cs_direction], ylim=3,
+                                                                'has_participle%s' % cs_direction], ylim=5,
                                                         fname='participle_all_set%s' % cs_direction,
                                                         results=res_aux_participle_all_set)
 
-                            self.plot_cs_type_over_time(label='participle switches (% of correctly produced per tense)',
-                                                        legend=['is_participle%s' % cs_direction,
-                                                                'has_participle%s' % cs_direction], ylim=3,
-                                                        fname='participle_per_tense%s' % cs_direction,
+                            self.plot_cs_type_over_time(label='participle switches (% of correctly produced per aspect)'
+                                                        , legend=['progressive_participle%s' % cs_direction,
+                                                                  'perfect_participle%s' % cs_direction], ylim=5,
+                                                        fname='participle_per_aspect%s' % cs_direction,
                                                         results=res_aux_participle_per_tense)
-
-                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced per tense)',
-                                                        legend=[x for x in legend if 'after' not in x], ylim=3,
+                            # for paper:
+                            self.plot_cs_type_over_time(label=''
+                                                        , legend=['progressive', 'perfect'], ylim=5,
+                                                        fname='tener%s' % cs_direction,
+                                                        results=res_aux_participle_per_tense)
+                            plot_label = ''  # auxiliary switches (% of correctly produced per aspect)'
+                            plot_legend = [x.replace('is', 'progressive').replace('has', 'perfect')
+                                           for x in legend if 'after' not in x]
+                            self.plot_cs_type_over_time(label=plot_label,
+                                                        legend_loc='lower right',
+                                                        legend=plot_legend, ylim=5,
                                                         fname='auxiliary_no_after_per_tense%s' % cs_direction,
                                                         results=res_aux_no_after_per_tense)
             ############################################################################################################
@@ -336,16 +462,6 @@ class Plotter:
                                             ylabel='Percentage (%) of subject pronoun errors in test set',
                                             fname='pronoun_errors_percentage',
                                             test_percentage=test_sentences_with_pronoun, ylim=15)
-
-        if plot_mse and not self.summary_sim and results['mse']:  # no need to plot an average of all the simulations
-            mse_list = [get_np_mean_and_std_err(results['mse'][epoch], summary_sim=None)[0] for epoch in
-                        self.epoch_range]
-            plt.plot(self.epoch_range, mse_list, color='darkslateblue', label='MSE')
-            plt.xlabel('epochs')
-            plt.ylabel('Mean Square Error')
-            plt.ylim([0, 0.007])
-            plt.savefig('%s/all_mse_err.pdf' % self.results_dir)
-            plt.close()
 
     def plot_layer_stats(self, stats):
         """

@@ -54,9 +54,9 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
-        num_epochs_decreasing_step = 4
+        num_epochs_decreasing_step = 10
         self.lrate_decrease_step = true_divide(learn_rate - final_learn_rate,
-                                                  self.inputs.num_train * num_epochs_decreasing_step)
+                                               self.inputs.num_train * num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -78,13 +78,14 @@ class DualPath:
         logger.propagate = False  # no stdout to console
         logger.addHandler(logging.FileHandler("%s/%s.csv" % (self.inputs.directory, name)))
         if name in ['test', 'training']:
-            header = ("epoch, produced_sentence, target_sentence, message, is_grammatical, correct_tense, "
-                      "correct_definiteness, meaning, is_code_switched, switched_type")
+            header = ("epoch, produced_sentence, target_sentence, is_grammatical, meaning, "
+                      "is_code_switched, switched_type")
             if self.auxiliary_experiment:
                 header += (",switched_at, switched_participle,switched_right_after, switched_after,switched_at_es_en,"
                            "switched_participle_es_en,switched_right_after_es_en, switched_after_es_en")
             if self.pronoun_experiment:
                 header += ",pronoun_error, pronoun_error_flex"
+            header += ", produced_pos, target_pos, correct_tense, correct_definiteness, message"
         else:
             header = "epoch, set_name, correct_meaning, correct_pos, total_sentences"
         logger.info(header)
@@ -164,7 +165,7 @@ class DualPath:
         if not backpropagate:
             return produced_sent_ids
 
-    def start_network(self, evaluate_test_set, evaluate_training_set):
+    def start_network(self, evaluate_test_set, evaluate_training_set, start_from_epoch=0):
         """
         :param evaluate_test_set: Whether to evaluate test set every x epochs. The only reason NOT to evaluate
         is for speed, if we want to training network and save weights
@@ -179,7 +180,7 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         """
         if not self.only_evaluate:
-            epoch = 0
+            epoch = start_from_epoch
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs
                 print(self.inputs.trainlines_df.size)
@@ -254,13 +255,20 @@ class DualPath:
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
                                       set_weights_epoch=epoch, plot_stats=False)
                 for line in set_lines.itertuples():
-                    # line = set_lines.loc[line_idx]
-                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(
-                        line.message))  # weights_role_concept[line_idx])  # FIXME
+                    # line = set_lines.loc[line_idx]   # FIXME: weights_role_concept[line_idx])
+                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message))
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
+                    produced_pos = self.inputs.sentence_pos(produced_idx)
+
                     target_pos, target_sentence_idx = line.target_pos, line.target_sentence_idx
 
-                    produced_pos = self.inputs.pos_of_sentence(produced_idx)
+                    """produced_sentence = 'the woman has jumped .'
+                    target_sentence = 'la mujer ha saltado .'
+                    produced_idx = self.inputs.sentence_indeces(produced_sentence)
+                    produced_pos = self.inputs.sentence_pos(produced_idx)
+                    target_sentence_idx = self.inputs.sentence_indeces(target_sentence)
+                    target_pos = self.inputs.sentence_pos(target_sentence_idx)"""
+
                     has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
                                                                                                  False, None)
                     (switched_at, switched_participle, switched_right_after, switched_after, switched_at_es_en,
@@ -270,8 +278,11 @@ class DualPath:
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
                                                                                                 target_pos,
                                                                                                 produced_idx)
-                    code_switched = self.inputs.is_code_switched(produced_idx,
-                                                                 target_lang_idx=target_sentence_idx[0])
+                    # FIXME: if the "allowed structures" are corrected we won't need this step
+                    produced_pos = self.inputs.replace_verb_with_auxiliary(produced_pos)
+                    target_pos = self.inputs.replace_verb_with_auxiliary(target_pos)
+
+                    code_switched = self.inputs.is_code_switched(produced_idx, target_lang_idx=target_sentence_idx[0])
                     if code_switched:
                         counter['all_code_switches'] += 1
                         if self.cognate_experiment:
@@ -286,7 +297,9 @@ class DualPath:
                             correct_meaning = self.inputs.has_correct_meaning(produced_idx, line.target_sentence_idx)
                         else:  # only count grammatically correct CS sentences -- determine CS type here
                             cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx)
-                            if cs_type:  # TODO: it could be interesting to check the failed sentences too
+                            #if cs_type == "inter-sentential":  # for now don't count it as CS
+                            #    correct_meaning = True
+                            if cs_type:  # TODO: check the failed sentences too
                                 counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True
                                 counter['correct_code_switches'] += 1
@@ -311,11 +324,11 @@ class DualPath:
                                             counter['%s_participle' % aux] += 1
                                             if switched_participle_es_en:
                                                 counter['%s_participle_es_en' % aux] += 1
-                                        elif switched_at:
+                                        if switched_at:
                                             counter['%s_aux' % aux] += 1
                                             if switched_at_es_en:
                                                 counter['%s_aux_es_en' % aux] += 1
-                                        elif switched_after:  # anywhere after
+                                        if switched_after:  # anywhere after
                                             counter['%s_after' % aux] += 1
                                             if switched_after_es_en:
                                                 counter['%s_after_es_en' % aux] += 1
@@ -325,7 +338,6 @@ class DualPath:
                                                     counter['%s_right_after_es_en' % aux] += 1
 
                                         counter["correct_cs_%s_%s" % (aux, line.lang)] += 1
-
                         if correct_meaning:
                             counter['correct_meaning'] += 1
                             # this contains number of ALL correct progressive/perfect sentences, even the CS ones
@@ -354,14 +366,16 @@ class DualPath:
                     if epoch > 0:
                         meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
                         pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos)
-                        log_info = (epoch, produced_sentence, line.target_sentence, "'%s'" % line.message,
-                                    pos, not has_wrong_tense, not has_wrong_det, meaning, code_switched, cs_type)
+                        log_info = (epoch, produced_sentence, line.target_sentence,
+                                    pos, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:
                             log_info += (switched_at, switched_participle, switched_right_after, switched_after,
                                          switched_at_es_en, switched_participle_es_en, switched_right_after_es_en,
                                          switched_after_es_en)
                         if self.pronoun_experiment:
                             log_info += (has_pronoun_error, has_pronoun_error_flex)
+                        log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
+                                     not has_wrong_det, '"%s"' % line.message,)
                         logger.info(",".join(str(x) for x in log_info))
                 self.set_level_logger.info(",".join(str(x) for x in (epoch, set_name, counter['correct_meaning'],
                                                                      counter['correct_pos'], num_sentences)))

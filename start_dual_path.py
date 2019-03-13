@@ -36,9 +36,9 @@ def copy_specific_files(src, dest, filename_starts_with_list=('test', 'training'
                 shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def create_all_input_files(num_simulations, directory, sets, original_input, cognate_experiment,
+def create_all_input_files(simulation_range, directory, sets, original_input, cognate_experiment,
                            generate_num, l2_percentage, auxiliary_experiment):
-    for sim_num in range(num_simulations):  # first create all input files
+    for sim_num in simulation_range:  # first create all input files
         rdir = "%s/%s" % (directory, sim_num)
         os.makedirs(rdir)
         if sets:  # generate new test/training sets
@@ -72,10 +72,10 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)
-    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)   # 110 80
+    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)  # 70 40
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
-                        type=positive_int, default=20)
+                        type=positive_int, default=30)
     parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
@@ -99,17 +99,21 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('-set_weights_epoch', '-swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=30,
+    parser.add_argument('-fw', '-fixed_weights', type=int, default=30,  # 20
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('-generate_num', type=int, default=4000, help='Sum of test/training sentences to be generated '
-                                                                      '(only if no input was set)')
+    parser.add_argument('-generate_num', type=int, default=3800, help='Sum of test/training sentences to be generated '
+                                                                      '(only if no input was set)')  # 3500
     parser.add_argument('-title', help='Title for the plots')
     parser.add_argument('-sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
+    parser.add_argument('-sim_from', type=positive_int, help='To train several simulations with range other than '
+                                                             '(0, number_of_simulations) you need to set the '
+                                                             'sim_from and sim_to values')
+    parser.add_argument('-sim_to', type=positive_int, help='See sim_from')
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
     parser.add_argument('-threshold', type=int, default=50,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
@@ -130,8 +134,8 @@ if __name__ == "__main__":
     parser.set_defaults(activate_both_lang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
     parser.set_defaults(decrease_lrate=True)
-    parser.add_argument('--nogender', dest='gender', action='store_false', help='Exclude semantic gender for nouns')
-    parser.set_defaults(gender=True)
+    parser.add_argument('--gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
+    parser.set_defaults(gender=False)
     parser.add_argument('--monolingual', dest='monolingual', action='store_true', help='Do not include L2 lexicon')
     parser.set_defaults(monolingual=False)
     parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
@@ -146,6 +150,9 @@ if __name__ == "__main__":
     parser.add_argument('--only_eval', dest='only_eval', action='store_true',
                         help='Do not train, only evaluate test sets')
     parser.set_defaults(only_eval=False)
+    parser.add_argument('--continue_training', '--continue', dest='continue_training', action='store_true',
+                        help='Continue training for more epochs')
+    parser.set_defaults(continue_training=False)
     parser.add_argument('--morphemes', '--morph', dest='full_verb', action='store_false',
                         help='Use morphemes for verbs (i.e., splitting into lemma/suffix) instead of full lexeme')
     parser.set_defaults(full_verb=True)
@@ -179,6 +186,7 @@ if __name__ == "__main__":
     parser.set_defaults(use_multiprocessing=True)
     args = parser.parse_args()
 
+    simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
     if args.only_eval and not (args.set_weights or set_weights_epoch):
         sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
@@ -188,7 +196,7 @@ if __name__ == "__main__":
         set_weights_epoch = 0
         logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
 
-    if args.only_eval and args.set_weights and not args.input:
+    if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
         args.input = args.set_weights
 
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
@@ -264,7 +272,8 @@ if __name__ == "__main__":
                               'esen': 'Bilingual en-es model'}
         args.title = lang_code_to_title[args.lang]
 
-    if not args.decrease_lrate:
+    if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
+        logging.warning("Learning rate will NOT be decreased, it is set to %s" % args.final_lrate)
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
     simulation_logger = logging.getLogger('simulation')
@@ -285,7 +294,7 @@ if __name__ == "__main__":
                             args.set_weights, set_weights_epoch, args.activate_both_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
-    inputs = InputFormatter(directory=args.input, language=args.lang, semantic_gender=args.gender,
+    inputs = InputFormatter(directory=args.input, language=args.lang, use_semantic_gender=args.gender,
                             overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
                             trainingset=args.trainingset, testset=args.testset, fixed_weights=args.fw,
                             fixed_weights_identif=args.fwi, use_word_embeddings=args.word_embeddings,
@@ -294,10 +303,10 @@ if __name__ == "__main__":
     simulations_with_pron_err = 0
     failed_sim_id = []
     if args.sim > 1:
-        create_all_input_files(num_simulations=args.sim, directory=results_dir, l2_percentage=args.l2_percentage,
-                               auxiliary_experiment=args.auxiliary_experiment, original_input=original_input_path,
-                               cognate_experiment=args.cognate_experiment, sets=input_sets,
-                               generate_num=args.generate_num)
+        create_all_input_files(simulation_range=simulation_range, directory=results_dir,
+                               l2_percentage=args.l2_percentage, auxiliary_experiment=args.auxiliary_experiment,
+                               original_input=original_input_path, cognate_experiment=args.cognate_experiment,
+                               sets=input_sets, generate_num=args.generate_num)
         del input_sets  # we no longer need it
 
         os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
@@ -311,18 +320,20 @@ if __name__ == "__main__":
     if args.use_multiprocessing:
         processes = []
 
+    starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     # run the simulations
-    for sim in range(args.sim):
+    for sim in simulation_range:
         if args.sim > 1:
             inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))
-            simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
-                                   (sim, sum(inputs.trainlines_df.message.str.count(',(COG|FF)')), inputs.num_train))
+            if args.cognate_experiment:
+                simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
+                                       (sim, sum(inputs.trainlines_df.message.str.count(',(COG|FF)')), inputs.num_train))
         if args.set_weights:
             destination_folder = '%s/weights' % inputs.directory
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
-            if args.only_eval:  # copy all weights, otherwise only copy the epoch we wanted (as epoch 0)
+            if args.only_eval or args.continue_training:  # copy all weights
                 copy_dir(src_folder, destination_folder)
-            else:
+            else:  # only copy the epoch we wanted (such as epoch 0)
                 os.makedirs(destination_folder)
                 copy_files_endswith(src=src_folder, dest=destination_folder,
                                     ends_with="_%s.npz" % set_weights_epoch)
@@ -338,11 +349,12 @@ if __name__ == "__main__":
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
         if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training))
+            process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
             process.start()
             processes.append(process)
         else:
-            dualp.start_network(evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training)
+            dualp.start_network(evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
+                                start_from_epoch=starting_epoch)
 
     if args.use_multiprocessing:
         for p in processes:
@@ -356,7 +368,7 @@ if __name__ == "__main__":
 
     if args.sim > 1 and args.eval_test:  # aggregate and plot results
         valid_results = []
-        for sim in range(args.sim):  # read results from all simulations
+        for sim in simulation_range:  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
                 with open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
                     simulation = pickle.load(f)

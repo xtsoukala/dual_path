@@ -14,7 +14,7 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 class SetsGenerator:
     def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
                  cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv, aux_experiment=False,
-                 seed=0, include_ff=False):
+                 seed=0, default_L2='en', include_ff=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -51,9 +51,10 @@ class SetsGenerator:
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
         self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=;)')[1].unique()  # AGENT etc
         self.df_cache = {}
+        L2 = self.L2 if self.L2 is not None else default_L2
+        self.target_lang = [self.L1, L2] if not monolingual_only else [self.L1]
         # TODO: automate
-        self.identifiability = ['emph', 'pron', 'def', 'indef'] + self.genders
-        self.target_lang = ['en', 'es'] if not monolingual_only else [self.L1]
+        self.identifiability = ['pron', 'def', 'indef']
 
     def generate_general(self, num_sentences, percentage_l2, cognates_experiment=False, save_files=True):
         """
@@ -144,6 +145,14 @@ class SetsGenerator:
                 row = random.randint(0, self.num_structures_L2 - 1)
                 sentence_structures.append((self.structures_df['message'].iloc[row] + "," + self.L2,
                                             self.structures_df[self.L2].iloc[row]))
+        generated_structures = len(sentence_structures)
+        if num_sentences > generated_structures:
+            sentences_to_append = num_sentences - generated_structures
+            print("Appending %s more L1 row(s)" % sentences_to_append)
+            for i in range(sentences_to_append):
+                row = random.randint(0, self.num_structures_L1 - 1)  # select random row
+                sentence_structures.append((self.structures_df['message'].iloc[row] + "," + self.L1,
+                                            self.structures_df[self.L1].iloc[row]))
         assert num_sentences == len(sentence_structures)
         random.shuffle(sentence_structures)
         return sentence_structures
@@ -207,10 +216,10 @@ class SetsGenerator:
         while remaining_structures:  # while loop needed because of the unique sentence restriction
             if time.time() - time_start > 60:
                 if self.aux_experiment and len(self.lang) == 2:
-                    print("You might want to increase the size of the lexicon or the number of allowed structures; the "
-                          "generator doesn't have enough material to generate %s more structures: %s (total: %s). "
-                          "fname: %s. Simulation: %s" % (len(remaining_structures), remaining_structures,
-                                                         len(sentence_structures), fname, self.seed))
+                    print("You might want to increase the size of the lexicon or decrease the number of allowed "
+                          "structures; the generator doesn't have enough material to generate %s more structures: %s "
+                          "(total: %s). fname: %s. Simulation: %s" % (len(remaining_structures), remaining_structures,
+                                                                      len(sentence_structures), fname, self.seed))
                     exclude_test_sentences = []
                 else:
                     sys.exit("You might want to increase the size of the lexicon or the number of allowed structures; "
@@ -344,6 +353,7 @@ class SetsGenerator:
         self.list_to_file("identifiability", self.identifiability)
         self.list_to_file("target_lang", set(self.target_lang))
         self.list_to_file("roles", self.roles)
+        self.list_to_file("concepts", self.concepts)
         self.lexicon_df.to_csv('%s/lexicon.csv' % self.results_dir, encoding='utf-8', index=False)
         self.structures_df.to_csv('%s/structures.csv' % self.results_dir, encoding='utf-8', index=False)
 
@@ -462,7 +472,7 @@ class SetsGenerator:
         return msg
 
     @staticmethod
-    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.25):
+    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
         """
         :param num_sentences: Number of sentences that need to be generated
         :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)

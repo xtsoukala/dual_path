@@ -176,8 +176,6 @@ class SimpleRecurrentNetwork:
                 layer.activation = softmax(torch.mm(layer.in_activation, layer.in_weights))
             elif layer.activation_function == "tanh":
                 layer.activation = tanh_activation(torch.mm(layer.in_activation, layer.in_weights))
-            elif layer.activation_function == "sigmoid":
-                layer.activation = sigmoid(torch.mm(layer.in_activation, layer.in_weights))
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -210,9 +208,6 @@ class SimpleRecurrentNetwork:
         elif output_layer.activation_function == "tanh":
             output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
                                      tanh_derivative(output_layer.activation))
-        elif output_layer.activation_function == "sigmoid":
-            output_layer.gradient = ((output_layer.target_activation - output_layer.activation) *
-                                     sigmoid_derivative(output_layer.activation))
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
@@ -236,8 +231,6 @@ class SimpleRecurrentNetwork:
                 self.current_layer.gradient = error_out * softmax_derivative(self.current_layer.activation)
             elif self.current_layer.activation_function == "tanh":
                 self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
-            elif self.current_layer.activation_function == "sigmoid":
-                self.current_layer.gradient = error_out * sigmoid_derivative(self.current_layer.activation)
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = t()d(Io) * δο
@@ -388,14 +381,3 @@ def softmax(x):
 def softmax_derivative(x):
     # if i=j this derivative is the same as the derivative of the logistic function. Otherwise: -XiXj
     return x * (1.0 - x)
-
-
-def sigmoid(x):
-    return true_divide(1.0, (1.0 + torch.exp(-x)))
-
-
-def sigmoid_derivative(x, input_activation=False):
-    if input_activation:
-        return sigmoid(x) * (1.0 - sigmoid(x))
-    else:
-        return x * (1.0 - x)
