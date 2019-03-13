@@ -14,12 +14,16 @@ except:  # python 2
 
 
 class InputFormatter:
-    def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset,
-                 semantic_gender, overt_pronouns, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
+    def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset, overt_pronouns,
+                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
         self.directory = directory  # folder that contains input files and where the results are saved
+        self.identifiability = self._read_file_to_list('identifiability.in')
+        self.use_semantic_gender = use_semantic_gender
+        if self.use_semantic_gender and 'M' not in self.identifiability:
+            self.identifiability += ['M', 'F']
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.replace_haber_tener = replace_haber_tener
@@ -32,8 +36,6 @@ class InputFormatter:
         self.use_word_embeddings = use_word_embeddings
         self.concepts = list(self.lexicon_df.concept.dropna().unique()) if not use_word_embeddings \
             else word2vec.load('word2vec/text8.bin')
-        self.semantic_gender = semantic_gender
-        self.identifiability = self._read_file_to_list('identifiability.in')
         self.languages = self._read_file_to_list('target_lang.in')
         self.roles = self._read_file_to_list('roles.in')
         self.event_semantics = self._read_file_to_list('event_semantics.in')
@@ -121,7 +123,8 @@ class InputFormatter:
         # Normally we should add "and out_pos in allowed_structures" but the model generated novel (correct) structures
         if not out_sentence_pos[-1] == 'prep':  # it shouldn't end with 'to'
             if 'prep' in out_sentence_pos and 'prep' not in trg_sentence_pos:
-                trg_sentence_pos.append('prep')
+                if self.same_unordered_lists(out_sentence_pos, trg_sentence_pos + ['prep']):
+                    return is_grammatical, has_flex_order
             elif 'prep' in trg_sentence_pos and 'prep' not in out_sentence_pos:
                 # If the verb is Spanish we shouldn't allow double datives
                 p_idx = None
@@ -129,10 +132,10 @@ class InputFormatter:
                     p_idx = out_sentence_pos.index('verb')
                 elif 'participle' in out_sentence_pos:
                     p_idx = out_sentence_pos.index('participle')
+
                 if p_idx and out_sentence_idx[p_idx] < self.code_switched_idx:  # assumption: L1 English in lex
-                    out_sentence_pos.append('prep')
-            if self.same_unordered_lists(out_sentence_pos, trg_sentence_pos):
-                return is_grammatical, has_flex_order
+                    if self.same_unordered_lists(out_sentence_pos + ['prep'], trg_sentence_pos):
+                        return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=True):
@@ -186,9 +189,16 @@ class InputFormatter:
                 - noun borrowing? (if no determiners were switched)
             Note: Returns FALSE if the message conveyed was not correct
         """
-        # First "translate" message into the target language and compare with target sentence
-        translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
-                                                                                        trg_sentence_idx[0])
+        # "translate" message into the target language
+        trg_lang = self.get_target_language_from_sentence_idx(trg_sentence_idx)
+        translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx, trg_lang)
+        # check for insertions (cases where only 1 idx is from the other language)
+        insertion_type = self.check_for_insertions(out_sentence_idx, trg_lang)
+        if insertion_type:
+            for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
+                if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
+                    return insertion_type
+        # Now check for alternational switching - compare with target sentence
         for translated_sentence_idx in translated_sentence_candidates:
             cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
             if cs_type:  # if not False no need to look further
@@ -196,41 +206,54 @@ class InputFormatter:
         # no CS type found. Either the meaning was incorrect or the produced lang was different than the "target" one
         return False
 
-    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang_word_idx):
-        if trg_lang_word_idx < self.code_switched_idx:
-            lang = self.L1
-        else:
+    def get_target_language_from_sentence_idx(self, sentence_idx):
+        lang = self.L1
+        if sentence_idx[0] >= self.code_switched_idx:
             lang = self.L2
-        trans = [self.find_equivalent_translation_idx(idx, lang)
-                 for i, idx in enumerate(out_sentence_idx)]
-        return [list(x for x in tup) for tup in list(itertools.product(*trans))]
+        return lang
 
-    def _idx_is_cognate_or_ff(self, idx):
-        if idx in self.shared_idx:
-            return True
+    def check_for_insertions(self, out_sentence_idx, target_lang):
+        non_shared_idx = [w for w in out_sentence_idx if w not in self.shared_idx]
+        l2_words = sum(1 for i in non_shared_idx if i >= self.code_switched_idx)
+        l1_words = sum(1 for i in non_shared_idx if i < self.code_switched_idx)
+        if ((target_lang == self.L2 and l1_words >= l2_words and out_sentence_idx[0] < self.code_switched_idx) or
+                (target_lang == self.L1 and l1_words <= l2_words and out_sentence_idx[0] >= self.code_switched_idx)):
+            print(out_sentence_idx, self.sentence_from_indeces(out_sentence_idx), target_lang, 'RESOLVE',
+                  l1_words, l2_words)
+
+        if target_lang == self.L2:  # test for L1 insertions
+            check_idx = [i for i in non_shared_idx if i < self.code_switched_idx]
+        else:  # check for L2 insertions
+            check_idx = [i for i in non_shared_idx if i >= self.code_switched_idx]
+
+        check_idx_pos = [self.pos_lookup(w) for w in check_idx]
+        if len(set(check_idx_pos)) == 1:
+            return check_idx_pos[0]
         return False
+
+    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang):
+        trans = [self.find_equivalent_translation_idx(idx, trg_lang) for i, idx in enumerate(out_sentence_idx)]
+        return [list(x for x in tup) for tup in list(itertools.product(*trans))]
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
-        check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx
-                                                     and w is not self._idx_is_cognate_or_ff(w))]
+
+        check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx and w not in self.shared_idx)]
         if len(check_idx) == 0:
             return False  # it was either a cognate or a false friend
 
-        if len(check_idx) == len(out_sentence_idx):
+        if len(check_idx) == len([w for w in out_sentence_idx if w not in self.shared_idx]):
             return "inter-sentential"  # whole sentence in the non-target language
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        if len(check_idx) > 1 and set(check_idx).issubset(
-                out_sentence_idx):  # " ".join(str(x) for x in check_idx) in " ".join(str(x) for x in out_sentence_idx):
-            cs_type = "intra-sentential"
+        check_idx_pos = [self.pos_lookup(w) for w in check_idx]
+        len_pos = len(set(check_idx_pos))
+        if len_pos > 1 and set(check_idx).issubset(out_sentence_idx):
+            cs_type = "alt. (%s)" % check_idx_pos[0]
         else:
-            check_idx_pos = [self.pos_lookup(w) for w in check_idx]
-            if len(set(check_idx_pos)) == 1:
-                cs_type = "%s" % check_idx_pos[0]
-            else:
-                cs_type = "congruent lex."
+            print("No CS detected for: %s %s" % (out_sentence_idx, self.sentence_from_indeces(out_sentence_idx)))
+            sys.exit()
         return cs_type
 
     def is_code_switched(self, sentence_indeces, target_lang_idx):
@@ -259,20 +282,20 @@ class InputFormatter:
             # check switch before pos_of_interest
             at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
             # check Spanish-to-English direction
-            at_esen = True if at and sentence_indeces[pos_idx] < self.code_switched_idx else False
+            at_esen = True if at and sentence_indeces[pos_idx] >= self.code_switched_idx else False
             # check switch right after (e.g. between aux and participle)
             right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
                                                 target_lang_idx=sentence_indeces[pos_idx])
-            right_after_esen = (True if right_after and sentence_indeces[pos_idx] > self.code_switched_idx
+            right_after_esen = (True if right_after and sentence_indeces[pos_idx] < self.code_switched_idx
                                 else False)
             # check switch at the end (e.g. after aux and participle)
             after = self.is_code_switched(sentence_indeces[pos_idx + 1:pos_idx + 3],
                                           target_lang_idx=sentence_indeces[pos_idx + 1])
-            after_esen = True if after and sentence_indeces[pos_idx + 1] > self.code_switched_idx else False
+            after_esen = True if after and sentence_indeces[pos_idx + 1] < self.code_switched_idx else False
 
             after_anywhere = self.is_code_switched(sentence_indeces[pos_idx + 1:],
                                                    target_lang_idx=sentence_indeces[pos_idx + 1])
-            after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] > self.code_switched_idx
+            after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] < self.code_switched_idx
                                    else False)
         return at, right_after, after, after_anywhere, at_esen, right_after_esen, after_esen, after_anywhere_esen
 
@@ -329,14 +352,14 @@ class InputFormatter:
                 # find num of lines that are in ES. decide on num that will be emphasized:
                 number_emphasized = len([]) * self.emphasis_percentage / 100  # replace('AGENT=', 'AGENT=EMPH,')
             else:
-                df.line.str.replace('(^| )(él|ella) ', ' ', regex=True)
+                df.line = df.line.str.replace('(^| )(él|ella) ', ' ', regex=True)
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
-        if not self.semantic_gender:
-            df.message.str.replace(',(M|F);', ';', regex=True)
+        if not self.use_semantic_gender:
+            df.message = df.message.str.replace(',(M|F);', ';', regex=True)
 
         df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a))
-        df['target_pos'] = df.target_sentence_idx.map(lambda a: self.pos_of_sentence(a))
+        df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
         (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
          df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
         return df, weights_role_concept
@@ -386,13 +409,13 @@ class InputFormatter:
 
     def sentence_indeces(self, sentence):
         """
-        :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walk', '-s'])
-        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33, 20]
+        :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walks'])
+        :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33]
         """
         return [self.get_lexicon_index(w) for w in sentence.split()]
 
     # TODO: remove_period?
-    def pos_of_sentence(self, sentence_idx_lst, remove_period=False):
+    def sentence_pos(self, sentence_idx_lst, remove_period=False):
         """
         :param sentence_idx_lst: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
@@ -402,21 +425,38 @@ class InputFormatter:
         if remove_period and sentence_idx_lst[-1] == self.period_idx:
             sentence_idx_lst = sentence_idx_lst[:-1]
         pos = [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
-        if pos.count('verb') > 1:
+        if 'aux' in pos:
+            idx = pos.index('aux')
+            pos[idx] = 'verb'
+        """if pos.count('verb') > 1:
             idx = pos.index('verb')
             pos[idx] = 'aux'
             pos[idx + 1] = 'participle'
         elif 'verb' in pos and 'participle' in pos:
-            pos = [w.replace('verb', 'aux') for w in pos]
+            pos = [w.replace('verb', 'aux') for w in pos]"""
         return pos
+
+    @staticmethod
+    def replace_verb_with_auxiliary(sentence_pos):
+        if 'participle' in sentence_pos:
+            idx = sentence_pos.index('participle')
+            sentence_pos[idx-1] = 'aux'
+        elif sentence_pos.count('verb') == 2:
+            idx = sentence_pos.index('verb')
+            sentence_pos[idx] = 'aux'
+            sentence_pos[idx+1] = 'participle'
+        elif 'aux' in sentence_pos and 'verb' in sentence_pos:
+            idx = sentence_pos.index('verb')
+            sentence_pos[idx] = 'participle'
+        return sentence_pos
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 1  # 0.5 ?
-        reduced_activation = 0.4  # 0.1-4
+        norm_activation = 1  # 1? 0.5 ?
+        reduced_activation = 0.7  # 0.8? 0.1-4
         event_sem_activations = np.zeros(self.event_sem_size)  # np.array([-1] * self.event_sem_size)
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
@@ -512,10 +552,7 @@ class InputFormatter:
                       np.linalg.norm(self.concepts[first_word] * np.linalg.norm(self.concepts[second_word])))
 
     def training_is_successful(self, x, threshold):
-        if x:
-            return np.true_divide(x[-1] * 100, self.num_test) >= threshold
-        print("Training did not pass the threshold: %s / %s" % (x, threshold))
-        return False
+        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
 
     def df_query_to_idx(self, query, lang=None):
         if lang:
