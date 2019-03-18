@@ -142,6 +142,9 @@ class DualPath:
         produced_sent_ids = []
         append_to_produced = produced_sent_ids.append
         # self.srn.set_message_reset_context(updated_role_concept=self.inputs.get_weights_role_concept(line.message),
+        #print(line)
+        #print(weights_role_concept)
+        #print(line.event_sem_activations)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         for trg_idx in line.target_sentence_idx + [None] * (5 if not backpropagate else 0):
@@ -160,6 +163,8 @@ class DualPath:
                 append_to_produced(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if period produced
                     break
+                print(self.inputs.sentence_from_indeces(produced_sent_ids))
+
             if self.allow_cognate_boost and self.activate_both_lang and prod_idx in self.inputs.cognate_idx:
                 self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(line.lang))  # cognate boost
         if not backpropagate:
@@ -182,12 +187,11 @@ class DualPath:
         if not self.only_evaluate:
             epoch = start_from_epoch
             # weights_role_concept = self.inputs.weights_role_concept['training']
-            while epoch < self.epochs:  # start training for x epochs
-                print(self.inputs.trainlines_df.size)
-                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():  # shuffle and train
+            while epoch < self.epochs:  # start training for x epochs (shuffle training set)
+                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():
                     # train_line = self.inputs.trainlines_df.loc[i]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
-                    print(train_line)
+                    #print("LINE:", train_line)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
                                    backpropagate=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
@@ -243,6 +247,7 @@ class DualPath:
             else:
                 set_lines = self.inputs.trainlines_df
                 num_sentences = self.inputs.num_train
+
             for i in set_lines.event_sem_message.unique():
                 results[i] = {set_name: [] for set_name in set_names}
                 results["%s_cs" % i] = {set_name: [] for set_name in set_names}

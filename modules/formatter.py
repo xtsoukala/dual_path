@@ -6,6 +6,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import torch
+import torch.multiprocessing as mp
 from collections import defaultdict, Counter
 
 try:
@@ -363,6 +364,11 @@ class InputFormatter:
         df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
         (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
          df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
+        #print(df['event_sem_activations'], type(df['event_sem_activations']))
+        #print(df['event_sem_activations'].values.astype(float))
+        #df['event_sem_activations'] = torch.tensor(df['event_sem_activations'].values.astype(float))
+        #print(df['event_sem_activations'], type(df['event_sem_activations']))
+        #sys.exit
         return df, weights_role_concept
 
     def read_allowed_pos(self):
@@ -456,13 +462,13 @@ class InputFormatter:
                             E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 1  # 0.5 ?
+        norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = [0] * self.event_sem_size #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
+        event_sem_activations = np.zeros(self.event_sem_size) #[0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = [0] * self.languages_size #np.zeros(self.languages_size)
+        target_lang_activations = [0.] * self.languages_size #torch.zeros(self.languages_size) #np.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -517,7 +523,6 @@ class InputFormatter:
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        print(message)
         for info in message.split(';'):
             role, what = info.split("=")
             if role != "E":  # retrieve activations for the event-sem layer

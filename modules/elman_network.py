@@ -3,7 +3,7 @@ import sys
 import os
 from copy import deepcopy
 import numpy as np
-from modules.plotter import Plotter,torch, true_divide
+from modules.plotter import Plotter, torch, true_divide
 from collections import defaultdict
 from torch.distributions import normal
 
@@ -62,15 +62,20 @@ class SimpleRecurrentNetwork:
             # weights folder should contain the same num of simulations (or more)
             if set_weights_folder:
                 w_dir = os.path.join(set_weights_folder, "weights")
-                weights_fname = "weights_%s_%s.npz" % (layer.name, set_weights_epoch)
-                layer.in_weights = torch.load(os.path.join(w_dir, weights_fname))['arr_0']
+                weights_fname = os.path.join(w_dir, "weights_%s_%s.npz" % (layer.name, set_weights_epoch))
+                layer.in_weights = torch.tensor(np.load(weights_fname)['arr_0'])
+                # layer.in_weights = torch.jit.load(weights_fname)['arr_0']
+                # FIXMElayer.in_weights = torch.load(os.path.join(w_dir, weights_fname))['arr_0']
             else:
                 layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 m = normal.Normal(0, layer.sd)
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
-                #np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
+                # layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
+                # xxx = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
+
+                # yyy = torch.randn(layer.in_size + int(layer.has_bias), layer.size)
                 stats['means'].append(layer.in_weights.mean())
                 stats['std'].append(layer.in_weights.std())
                 stats['labels'].append(layer.name)
@@ -92,10 +97,9 @@ class SimpleRecurrentNetwork:
             np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
 
     def set_message_reset_context(self, updated_role_concept, info):
-        weights_concept_role = updated_role_concept.t()
+        weights_concept_role = torch.t(updated_role_concept)
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
-            print(type(role_layer.in_weights), type(weights_concept_role))
             role_layer.in_weights[x] = weights_concept_role[x]
 
         # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)
@@ -111,8 +115,8 @@ class SimpleRecurrentNetwork:
         if event_sem.convert_input:
             event_sem.activation = convert_range(info.event_sem_activations)
         else:
-            event_sem.activation = info.event_sem_activations
-        self.update_layer_activation("target_lang", activation=info.target_lang_act)
+            event_sem.activation = torch.tensor(info.event_sem_activations)  # info.event_sem_activations  # FIXME
+        self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))  # FIXME
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -161,21 +165,25 @@ class SimpleRecurrentNetwork:
         for layer in self.feedforward_layers:
             layer.in_activation = torch.tensor([])
             for incoming_layer in layer.in_layers:
+                # print(layer.name, incoming_layer.name, layer.in_activation, '---')
+                # print(incoming_layer.activation, '+++')
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
-                layer.in_activation = torch.cat((layer.in_activation, incoming_layer.activation), 0)
+                layer.in_activation = torch.cat((layer.in_activation, incoming_layer.activation))  # , 0)
             if layer.is_recurrent:  # hidden layer only (include context activation)
-                layer.in_activation = torch.cat((layer.in_activation, layer.context_activation), 0)
+                layer.in_activation = torch.cat((layer.in_activation, layer.context_activation))  # , 0)
             if layer.has_bias:  # add bias
-                layer.in_activation = torch.cat((layer.in_activation, torch.tensor(1)), 0) #np. append(layer.in_activation, 1)
+                layer.in_activation = torch.cat(
+                    (layer.in_activation, torch.tensor(1)))  # , 0) #np. append(layer.in_activation, 1)
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = torch.zeros(layer.size)  # set role_copy to zero
                 continue
+            dot_product = torch.matmul(layer.in_activation, layer.in_weights)  # FIXME: or mm?
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = softmax(torch.mm(layer.in_activation, layer.in_weights))
+                layer.activation = softmax(dot_product)
             elif layer.activation_function == "tanh":
-                layer.activation = tanh_activation(torch.mm(layer.in_activation, layer.in_weights))
+                layer.activation = tanh_activation(dot_product)
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -187,6 +195,14 @@ class SimpleRecurrentNetwork:
         if self.include_role_copy:
             role_layer = self.get_layer("role")
             self.update_layer_activation("role_copy", activation=deepcopy(role_layer.activation))
+
+    @staticmethod
+    def convert_to_2d(tensor, transpose=False):
+        if len(tensor.size()) == 1:
+            return tensor[None, :]  # tensor.view(tensor.size(), 1)
+        if transpose:
+            return torch.t(tensor)
+        return tensor
 
     def backpropagate(self, epoch):
         self._compute_output_error(epoch)
@@ -204,14 +220,14 @@ class SimpleRecurrentNetwork:
         self._calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
 
         if output_layer.activation_function == "softmax":
-            output_layer.gradient = (output_layer.target_activation - output_layer.activation)  # no derivative here
+            output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
         elif output_layer.activation_function == "tanh":
             output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
                                      tanh_derivative(output_layer.activation))
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
-        self.mse[epoch].append(((target_activation - output_activation) ** 2).mean(axis=None))  # same as axis=0
+        self.mse[epoch].append(((target_activation - output_activation) ** 2).mean())  # axis=None))  # same as axis=0
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
                         divergence_err = np .sum(target_activation)
@@ -224,7 +240,11 @@ class SimpleRecurrentNetwork:
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
-            error_out = self.current_layer.error_out.sum(0)
+            # error_out = self.current_layer.error_out.sum(0) FIXME
+            error_out = self.current_layer.error_out[0]
+            for i in range(1, len(self.current_layer.error_out)):
+                error_out = error_out.add(self.current_layer.error_out[i])
+            # print('ERROR:', error_out)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
@@ -233,20 +253,37 @@ class SimpleRecurrentNetwork:
                 self.current_layer.gradient = error_out * tanh_derivative(self.current_layer.activation)
 
     def _compute_current_delta_weight_matrix(self):
-        # Compute delta weight matrix Δo = t()d(Io) * δο
-        self.current_layer.delta = torch.mm(self.current_layer.in_activation.t(), self.current_layer.gradient)
+        # Compute delta weight matrix Δo = transposed(Io) * δο
+
+        # print(self.current_layer.name, self.current_layer.in_activation, self.current_layer.gradient)
+        # print('----')
+        # print(self.convert_to_2d(self.current_layer.in_activation))
+        # print(self.convert_to_2d(self.current_layer.in_activation).t())
+        self.current_layer.delta = torch.matmul(torch.t(self.convert_to_2d(self.current_layer.in_activation,
+                                                                           transpose=True)),
+                                                self.convert_to_2d(self.current_layer.gradient))
+        # print("DELTA:", self.current_layer.delta)
+        # sys.exit()
+        # self.current_layer.delta = torch.matmul(self.convert_to_2d(self.current_layer.in_activation).t(),
+        #                                        self.convert_to_2d(self.current_layer.gradient))  # FIXME: mm?
         # np .dot(np.atleast_2d(self.current_layer.in_activation).T, np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum()) # np .sqrt(np .sum(self.current_layer.delta ** 2))
+        len_delta = torch.sqrt(
+            self.current_layer.delta.pow(2).sum())  # np .sqrt(np .sum(self.current_layer.delta ** 2))
+        #print(len_delta)
         if len_delta > 1:
             self.current_layer.delta = true_divide(self.current_layer.delta, len_delta)
+            #print('CH')
+        #sys.exit()
+
         self.current_layer.delta *= self.learn_rate
         if self.debug_messages:
             print("%s delta (with learn rate): %s" % (self.current_layer.name, self.current_layer.delta))
 
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
-        self.current_layer.total_error = torch.mm(self.current_layer.gradient, self.current_layer.in_weights.t())
+        self.current_layer.total_error = torch.matmul(self.current_layer.gradient,
+                                                      torch.t(self.current_layer.in_weights))  # FIXME: mm?
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -256,7 +293,7 @@ class SimpleRecurrentNetwork:
         """
         self.current_layer.in_weights += self.current_layer.delta
         # momentum descent: model continues in same direction as previous weight change
-        if self.current_layer.previous_delta.size > 1:
+        if len(self.current_layer.previous_delta.size()) > 1:
             added_weight = self.momentum * self.current_layer.previous_delta
             self.current_layer.in_weights += added_weight
         # Update previous delta. Deepcopying is important otherwise it keeps reference
@@ -333,7 +370,7 @@ class NeuronLayer:
         self.in_weights = torch.tensor([])  # weights from incoming layers
         self.in_size = 0
         self.in_layers = []
-        self.in_activation = []
+        self.in_activation = torch.tensor([])
         self.previous_delta = torch.tensor([])
         self.gradient = None
         self.context_activation = None
@@ -375,9 +412,15 @@ def softmax(x):
     """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
     will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
     normalized_x = x - x.min()
-    return torch.round(true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum()), 4)
+    return true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())  # FIXME: round?
+    # return round(true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum()))
+    # return torch.round((true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())), 4)
 
 
 def softmax_derivative(x):
     # if i=j this derivative is the same as the derivative of the logistic function. Otherwise: -XiXj
     return x * (1.0 - x)
+
+
+def round(x, n_digits=4):
+    return torch.round(x * 10 ^ n_digits) / (10 ^ n_digits)
