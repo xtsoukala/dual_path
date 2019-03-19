@@ -1,8 +1,11 @@
-import matplotlib
 from modules.formatter import is_not_empty, np, extract_cs_keys, defaultdict
-
+import seaborn as sns
+import matplotlib
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
+
+
+sns.set(palette="colorblind")
 
 
 class Plotter:
@@ -148,8 +151,8 @@ class Plotter:
                                     self.bar_width, color=self.color_bars[i],
                                     yerr=[x[1] for x in self.cs_results[item]]))
             else:
-                rects.append(ax.bar(index_size + (self.bar_width * i), self.cs_results[item][-1][0],
-                                    self.bar_width, color=self.color_bars[i], yerr=self.cs_results[item][-1][1]))
+                rects.append(ax.bar(index_size + (self.bar_width * i), item[0][-1],  # self.cs_results[item][-1][0],
+                                    self.bar_width, color=self.color_bars[i], yerr=item[1][-1]))
 
         if label:
             ax.set_ylabel(label)
@@ -157,7 +160,9 @@ class Plotter:
             ax.set_title(self.title)
         ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
         ax.set_ylim(bottom=0)
-        ax.legend(([x[0] for x in rects]), legend)
+        if legend:
+            ax.legend(legend)
+
         ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
         plt.tight_layout()  # make room for labels
         fname = '%s/"summary_%s_%s_cs.pdf' % (self.results_dir, self.summary_sim, fname)
