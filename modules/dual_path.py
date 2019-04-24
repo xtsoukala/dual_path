@@ -2,7 +2,7 @@
 import logging
 from collections import defaultdict
 from modules.elman_network import SimpleRecurrentNetwork, torch
-from modules.formatter import pickle, true_divide
+from modules.formatter import pickle
 
 
 class DualPath:
@@ -55,8 +55,8 @@ class DualPath:
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
         num_epochs_decreasing_step = 10
-        self.lrate_decrease_step = true_divide(learn_rate - final_learn_rate,
-                                               self.inputs.num_train * num_epochs_decreasing_step)
+        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_train *
+                                                                      num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -142,9 +142,6 @@ class DualPath:
         produced_sent_ids = []
         append_to_produced = produced_sent_ids.append
         # self.srn.set_message_reset_context(updated_role_concept=self.inputs.get_weights_role_concept(line.message),
-        #print(line)
-        #print(weights_role_concept)
-        #print(line.event_sem_activations)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line)
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         for trg_idx in line.target_sentence_idx + [None] * (5 if not backpropagate else 0):
@@ -153,6 +150,8 @@ class DualPath:
             if backpropagate:
                 prod_idx = trg_idx  # training with target word, NOT produced one
                 self.srn.backpropagate(epoch)
+                # FIXME: REMOVE
+                append_to_produced(self.srn.get_max_output_activation())
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if self.activate_both_lang and prod_idx is None:
@@ -163,10 +162,9 @@ class DualPath:
                 append_to_produced(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if period produced
                     break
-                print(self.inputs.sentence_from_indeces(produced_sent_ids))
-
             if self.allow_cognate_boost and self.activate_both_lang and prod_idx in self.inputs.cognate_idx:
                 self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(line.lang))  # cognate boost
+
         if not backpropagate:
             return produced_sent_ids
 
@@ -189,12 +187,11 @@ class DualPath:
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs (shuffle training set)
                 for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():
-                    # train_line = self.inputs.trainlines_df.loc[i]
+                    ###train_line = self.inputs.trainlines_df.iloc[1817]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
-                    #print("LINE:", train_line)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
                                    backpropagate=True)
-                    if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
+                    if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
                 epoch += 1  # increase number of epochs, begin new iteration
                 self.srn.save_weights(results_dir=self.inputs.directory, epoch=epoch)

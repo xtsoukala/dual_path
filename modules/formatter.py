@@ -6,7 +6,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import torch
-import torch.multiprocessing as mp
+from math import sqrt
 from collections import defaultdict, Counter
 
 try:
@@ -364,11 +364,6 @@ class InputFormatter:
         df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
         (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
          df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
-        #print(df['event_sem_activations'], type(df['event_sem_activations']))
-        #print(df['event_sem_activations'].values.astype(float))
-        #df['event_sem_activations'] = torch.tensor(df['event_sem_activations'].values.astype(float))
-        #print(df['event_sem_activations'], type(df['event_sem_activations']))
-        #sys.exit
         return df, weights_role_concept
 
     def read_allowed_pos(self):
@@ -447,11 +442,11 @@ class InputFormatter:
     def replace_verb_with_auxiliary(sentence_pos):
         if 'participle' in sentence_pos:
             idx = sentence_pos.index('participle')
-            sentence_pos[idx-1] = 'aux'
+            sentence_pos[idx - 1] = 'aux'
         elif sentence_pos.count('verb') == 2:
             idx = sentence_pos.index('verb')
             sentence_pos[idx] = 'aux'
-            sentence_pos[idx+1] = 'participle'
+            sentence_pos[idx + 1] = 'participle'
         elif 'aux' in sentence_pos and 'verb' in sentence_pos:
             idx = sentence_pos.index('verb')
             sentence_pos[idx] = 'participle'
@@ -464,11 +459,13 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = np.zeros(self.event_sem_size) #[0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
+        event_sem_activations = np.zeros(
+            self.event_sem_size)  # [0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = [0.] * self.languages_size #torch.zeros(self.languages_size) #np.zeros(self.languages_size)
+        target_lang_activations = [
+                                      0.] * self.languages_size  # torch.zeros(self.languages_size) #np.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -558,7 +555,7 @@ class InputFormatter:
         pass
 
     def training_is_successful(self, x, threshold):
-        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
+        return x[-1] * 100 / self.num_test >= threshold
 
     def df_query_to_idx(self, query, lang=None):
         if lang:
@@ -586,24 +583,17 @@ def is_not_nan(x):
     return False
 
 
-def is_not_empty(x):
-    if x != [] and sum(x) > 0:  # do not simplify
-        return True
-    return False
-
-
-def get_np_mean_and_std_err(x, summary_sim):
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
-    return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
+def get_mean_and_std_err(x, summary_sim):
+    if isinstance(x, list):
+        if any(isinstance(i, torch.Tensor) for i in x):
+            x = torch.stack(x)  # list of tensors into a single tensor
+        else:
+            x = torch.FloatTensor(x)
+    return x.mean(dim=0), standard_error(x.std(dim=0), summary_sim)  # mean of lists (per column)
 
 
 def standard_error(std, num_simulations):
-    return true_divide(std, torch.sqrt(num_simulations))
-
-
-def true_divide(x, total):
-    return torch.div(x, total)
+    return std / sqrt(num_simulations)
 
 
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
@@ -639,18 +629,20 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
             for set_name in evaluated_sets:
                 if key in all_cs_types:
                     if key in simulation['type_code_switches'][set_name]:
-                        results_sum[key][set_name].append(simulation['type_code_switches'][set_name][key][:epochs])
+                        results_sum[key][set_name].append(
+                            torch.FloatTensor(simulation['type_code_switches'][set_name][key][:epochs]))
                     else:  # fill with 0
-                        results_sum[key][set_name].append([0] * epochs)
+                        results_sum[key][set_name].append(torch.zeros(epochs))
                 else:
                     results_sum[key][set_name].append(simulation[key][set_name][:epochs])
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in results_sum.keys():
         for set_name in evaluated_sets:
-            np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name], summary_sim=len(valid_results))
-            if np_mean is not False:
-                results_sum[key]["%s-std_error" % set_name] = np_std_err
-                results_sum[key][set_name] = np_mean
+            mean, std_err = get_mean_and_std_err(results_sum[key][set_name],
+                                                 summary_sim=len(valid_results))
+            if mean is not False:
+                results_sum[key]["%s-std_error" % set_name] = std_err
+                results_sum[key][set_name] = mean
     results_sum['all_cs_types'] = strip_language_info_and_std_err(all_cs_types)
     return results_sum
 

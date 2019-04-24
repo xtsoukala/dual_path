@@ -1,5 +1,5 @@
 import matplotlib
-from modules.formatter import is_not_empty, np, extract_cs_keys, defaultdict, torch, true_divide
+from modules.formatter import np, extract_cs_keys, defaultdict, torch
 
 matplotlib.use('Agg')  # needed for the server only
 import matplotlib.pyplot as plt
@@ -51,7 +51,7 @@ class Plotter:
     def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, ylabel, ylim, fname,
                                legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
-            test_value = self.percentage(self.results[item]['test'], test_percentage)
+            test_value = self.percentage(self.results[item]['test'], test_percentage).numpy()
             plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0], label=item)
             if 'test-std_error' in self.results[item]:
                 test_std_error = self.results[item]['test-std_error']
@@ -61,10 +61,7 @@ class Plotter:
                                  alpha=0.2)
 
             if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
+                training_value = self.percentage(self.results[item]['training'], training_percentage)
                 plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
                          label="%s (Training)" % item, linestyle='--')
         plt.xlabel('epochs')
@@ -79,7 +76,7 @@ class Plotter:
     def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
-            test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
+            test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx]).numpy()
             plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0],
                      label=item.replace('_', ' ').replace('code switches', 'code-switches'))
             if 'test-std_error' in self.results[item]:
@@ -92,10 +89,7 @@ class Plotter:
                                  alpha=0.2)
 
             if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
+                training_value = self.percentage(self.results[item]['training'], training_percentage)
                 plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
                          label="%s (Training)" % item, linestyle='--')
         plt.xlabel('epochs')
@@ -103,7 +97,7 @@ class Plotter:
             plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
-        plt.xticks(np.arange(1, 30, 2))
+        plt.xticks(np.arange(1, max(self.epoch_range), 2))
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig(self.get_plot_path(fname))
         plt.close()
@@ -166,21 +160,21 @@ class Plotter:
 
     def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
         original_idx = list(indeces)
+        print('original:', original_idx)
         insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
         alternations = [x for x in indeces if x.startswith('alt')]
-
+        print('indeces:', indeces)
         fname = ['insertions.pdf', 'alternations.pdf']
         for type, indeces in enumerate([insertions, alternations]):
             index_size = np.arange(len(indeces))
             fig, ax = plt.subplots()
             rects = []
             for i, item in enumerate(items_to_plot):
-                rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for ind, x in
-                                                                        enumerate(self.cs_results[item])
-                                                                        if original_idx[ind] in indeces],
-                                    self.bar_width, color=self.color_bars[i], yerr=[x[1] for ind, x in
-                                                                                    enumerate(self.cs_results[item])
-                                                                                    if original_idx[ind] in indeces]))
+                rects.append(ax.bar(index_size + (self.bar_width * i),
+                                    [x[0] for ind, x in enumerate(self.cs_results[item])
+                                     if original_idx[ind] in indeces], self.bar_width, color=self.color_bars[i],
+                                    yerr=[x[1] for ind, x in enumerate(self.cs_results[item])
+                                          if original_idx[ind] in indeces]))
             if self.title:
                 ax.set_title(self.title)
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
@@ -480,12 +474,4 @@ class Plotter:
             return float('NaN')
         if isinstance(x, list):
             x = torch.tensor(x)
-        return true_divide(x * 100, total, where=x != 0)  # avoid division by 0
-
-    @staticmethod
-    def is_nd_array_or_list(x):
-        type(x)
-        sys.exit()
-        if isinstance(x, (list, np .ndarray)):
-            return True
-        return False
+        return x * 100 / total  # avoid division by 0

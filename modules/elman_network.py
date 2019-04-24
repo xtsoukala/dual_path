@@ -3,7 +3,7 @@ import sys
 import os
 from copy import deepcopy
 import numpy as np
-from modules.plotter import Plotter, torch, true_divide
+from modules.plotter import Plotter, torch
 from collections import defaultdict
 from torch.distributions import normal
 
@@ -165,8 +165,6 @@ class SimpleRecurrentNetwork:
         for layer in self.feedforward_layers:
             layer.in_activation = torch.tensor([])
             for incoming_layer in layer.in_layers:
-                # print(layer.name, incoming_layer.name, layer.in_activation, '---')
-                # print(incoming_layer.activation, '+++')
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
                 layer.in_activation = torch.cat((layer.in_activation, incoming_layer.activation))  # , 0)
             if layer.is_recurrent:  # hidden layer only (include context activation)
@@ -178,12 +176,12 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = torch.zeros(layer.size)  # set role_copy to zero
                 continue
-            dot_product = torch.matmul(layer.in_activation, layer.in_weights)  # FIXME: or mm?
+            dot_product = torch.matmul(layer.in_activation, layer.in_weights)
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = softmax(dot_product)
+                layer.activation = dot_product.softmax(dim=0)
             elif layer.activation_function == "tanh":
-                layer.activation = tanh_activation(dot_product)
+                layer.activation = dot_product.tanh()
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -234,7 +232,7 @@ class SimpleRecurrentNetwork:
         # if all(output_activation) == 0:
         #    print output_activation
         with np .errstate(divide='ignore', invalid='ignore'):
-            self.divergence_error[epoch].append(target_activation * np .log(np.true_divide(target_activation,
+            self.divergence_error[epoch].append(target_activation * np .log(np.rue_divide(target_activation,
             output_activation)))"""
 
     def _compute_current_layer_gradient(self):
@@ -244,7 +242,6 @@ class SimpleRecurrentNetwork:
             error_out = self.current_layer.error_out[0]
             for i in range(1, len(self.current_layer.error_out)):
                 error_out = error_out.add(self.current_layer.error_out[i])
-            # print('ERROR:', error_out)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
@@ -254,27 +251,16 @@ class SimpleRecurrentNetwork:
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
-
-        # print(self.current_layer.name, self.current_layer.in_activation, self.current_layer.gradient)
-        # print('----')
-        # print(self.convert_to_2d(self.current_layer.in_activation))
-        # print(self.convert_to_2d(self.current_layer.in_activation).t())
         self.current_layer.delta = torch.matmul(torch.t(self.convert_to_2d(self.current_layer.in_activation,
                                                                            transpose=True)),
                                                 self.convert_to_2d(self.current_layer.gradient))
-        # print("DELTA:", self.current_layer.delta)
-        # sys.exit()
         # self.current_layer.delta = torch.matmul(self.convert_to_2d(self.current_layer.in_activation).t(),
         #                                        self.convert_to_2d(self.current_layer.gradient))  # FIXME: mm?
         # np .dot(np.atleast_2d(self.current_layer.in_activation).T, np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = torch.sqrt(
-            self.current_layer.delta.pow(2).sum())  # np .sqrt(np .sum(self.current_layer.delta ** 2))
-        #print(len_delta)
+        len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
         if len_delta > 1:
-            self.current_layer.delta = true_divide(self.current_layer.delta, len_delta)
-            #print('CH')
-        #sys.exit()
+            self.current_layer.delta = self.current_layer.delta / len_delta
 
         self.current_layer.delta *= self.learn_rate
         if self.debug_messages:
@@ -283,7 +269,7 @@ class SimpleRecurrentNetwork:
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
         self.current_layer.total_error = torch.matmul(self.current_layer.gradient,
-                                                      torch.t(self.current_layer.in_weights))  # FIXME: mm?
+                                                      torch.t(self.current_layer.in_weights))
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -312,13 +298,7 @@ class SimpleRecurrentNetwork:
         if not os.path.isdir('%s/weights' % results_dir):
             # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
             # exception even though we have checked.
-            if self.python_version.startswith('3'):
-                os.makedirs('%s/weights' % results_dir, exist_ok=True)
-            else:
-                try:
-                    os.mkdir('%s/weights' % results_dir)
-                except IOError:
-                    print('%s/weights already exists' % results_dir)
+            os.makedirs('%s/weights' % results_dir, exist_ok=True)
 
     def get_layer(self, layer_name):
         return self.layers[self.layer_idx[layer_name]]
@@ -344,7 +324,7 @@ class SimpleRecurrentNetwork:
         """
         As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
         """
-        return true_divide(1.0, number_of_inputs)
+        return 1.0 / number_of_inputs
 
 
 class NeuronLayer:
@@ -362,8 +342,8 @@ class NeuronLayer:
         self.convert_input = convert_input
         self.size = size
         self.sd = 0  # it is used to initialize weights
-        self.activation = torch.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
-        self.target_activation = torch.zeros(size)
+        self.activation = torch.zeros(size, dtype=torch.float64)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.target_activation = torch.zeros(size, dtype=torch.float64)
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
@@ -387,14 +367,11 @@ class NeuronLayer:
 
 def convert_range(matrix, min_val=-1, max_val=1):
     """ Converts range between min and max values. NOTE: This seems to be creating some issues during training. """
+    print('CONVERT')
     if matrix.sum() == 0:
         return matrix + min_val
     else:
-        return true_divide((max_val - min_val) * (matrix - matrix.min()), (matrix.max() - matrix.min())) + min_val
-
-
-def tanh_activation(x):
-    return torch.tanh(x)
+        return ((max_val - min_val) * (matrix - matrix.min()) / (matrix.max() - matrix.min())) + min_val
 
 
 def tanh_derivative(x, input_activation=False):
@@ -406,15 +383,6 @@ def tanh_derivative(x, input_activation=False):
         return 1.0 - torch.tanh(x).pow(2)
     else:
         return 1.0 - x.pow(2)
-
-
-def softmax(x):
-    """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
-    will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
-    normalized_x = x - x.min()
-    return true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())  # FIXME: round?
-    # return round(true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum()))
-    # return torch.round((true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())), 4)
 
 
 def softmax_derivative(x):

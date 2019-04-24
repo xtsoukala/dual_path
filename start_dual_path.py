@@ -4,7 +4,8 @@ import logging
 import sys
 import platform
 from datetime import datetime
-from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, mp
+from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
+import torch.multiprocessing as mp
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
 import argparse
