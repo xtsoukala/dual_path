@@ -87,7 +87,7 @@ class SimpleRecurrentNetwork:
         for layer in self.backpropagated_layers:
             np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
 
-    def set_message_reset_context(self, updated_role_concept, info):
+    def set_message_reset_context(self, updated_role_concept, info, activate_language):
         weights_concept_role = updated_role_concept.T
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
@@ -107,7 +107,8 @@ class SimpleRecurrentNetwork:
             event_sem.activation = convert_range(info.event_sem_activations)
         else:
             event_sem.activation = info.event_sem_activations
-        self.update_layer_activation("target_lang", activation=info.target_lang_act)
+        if activate_language:
+            self.update_layer_activation("target_lang", activation=info.target_lang_act)
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -210,8 +211,6 @@ class SimpleRecurrentNetwork:
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
                         divergence_err = np.sum(target_activation)
-        # if all(output_activation) == 0:
-        #    print output_activation
         with np.errstate(divide='ignore', invalid='ignore'):
             self.divergence_error[epoch].append(target_activation * np.log(np.true_divide(target_activation,
             output_activation)))"""

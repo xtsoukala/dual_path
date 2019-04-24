@@ -303,7 +303,7 @@ class SetsGenerator:
 
     def select_random_morpheme_for_lang(self, pos, lang, gender, exclude_cognates, only_get_cognate=False,
                                         only_get_false_friend=False):
-        params = ''.join([str(x) for x in locals().values()])
+        params = repr(locals().values())
         cache = self.get_query_cache(params)
         if cache is False:
             if gender and not any([x in pos for x in ['noun', 'adj']]):
