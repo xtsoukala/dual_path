@@ -1,5 +1,4 @@
-from modules.formatter import np, extract_cs_keys
-import torch
+from modules.formatter import np, extract_cs_keys, torch
 import seaborn as sns
 import matplotlib.pyplot as plt
 

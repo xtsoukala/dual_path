@@ -4,12 +4,16 @@ import logging
 import sys
 import platform
 from datetime import datetime
-from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
+from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, torch
 import torch.multiprocessing as mp
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
 import argparse
 
+
+if torch.cuda.is_available():
+    print('CUDA available')
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
     if not os.path.exists(dst):

@@ -2,7 +2,7 @@
 import sys
 import os
 from copy import deepcopy
-from modules.plotter import Plotter, torch
+from modules.formatter import torch
 from collections import defaultdict
 from torch.distributions import normal
 

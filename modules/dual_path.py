@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 from collections import defaultdict
-from modules.elman_network import SimpleRecurrentNetwork, torch
-from modules.formatter import pickle
+from modules.elman_network import SimpleRecurrentNetwork
+from modules.formatter import pickle, torch
 
 
 class DualPath:
