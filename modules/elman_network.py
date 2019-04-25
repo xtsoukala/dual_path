@@ -96,7 +96,7 @@ class SimpleRecurrentNetwork:
         for layer in self.backpropagated_layers:
             np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
 
-    def set_message_reset_context(self, updated_role_concept, info):
+    def set_message_reset_context(self, updated_role_concept, info, activate_language):
         weights_concept_role = torch.t(updated_role_concept)
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
@@ -116,7 +116,8 @@ class SimpleRecurrentNetwork:
             event_sem.activation = convert_range(info.event_sem_activations)
         else:
             event_sem.activation = torch.tensor(info.event_sem_activations)  # info.event_sem_activations  # FIXME
-        self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))  # FIXME
+        if activate_language:
+            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act)) # FIXME
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -228,11 +229,9 @@ class SimpleRecurrentNetwork:
         self.mse[epoch].append(((target_activation - output_activation) ** 2).mean())  # axis=None))  # same as axis=0
         """ Error on the word units was measured in terms of divergence—? ti log(ti/oi)—where oi is the activation for
                             the i output unit on the current word and ti is its target activation
-                        divergence_err = np .sum(target_activation)
-        # if all(output_activation) == 0:
-        #    print output_activation
-        with np .errstate(divide='ignore', invalid='ignore'):
-            self.divergence_error[epoch].append(target_activation * np .log(np.rue_divide(target_activation,
+                        divergence_err = np.sum(target_activation)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self.divergence_error[epoch].append(target_activation * np.log(np.true_divide(target_activation,
             output_activation)))"""
 
     def _compute_current_layer_gradient(self):

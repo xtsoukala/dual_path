@@ -36,31 +36,30 @@ def copy_specific_files(src, dest, filename_starts_with_list=('test', 'training'
                 shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def create_all_input_files(simulation_range, directory, sets, original_input, cognate_experiment,
-                           generate_num, l2_percentage, auxiliary_experiment):
-    for sim_num in simulation_range:  # first create all input files
-        rdir = "%s/%s" % (directory, sim_num)
-        os.makedirs(rdir)
-        if sets:  # generate new test/training sets
-            if sim_num == 0:  # copy the .in files under the /input folder
-                copy_specific_files(os.path.join("%s/input" % directory), rdir)
+def create_input_for_simulation(simulation_number, directory, sets, original_input, cognate_experiment,
+                                generate_num, l2_percentage, auxiliary_experiment):
+    rdir = "%s/%s" % (directory, simulation_number)
+    os.makedirs(rdir)
+    if sets:  # generate new test/training sets
+        if simulation_number == 0:  # copy the .in files under the /input folder
+            copy_specific_files(os.path.join("%s/input" % directory), rdir)
+        else:
+            sets.sets.results_dir = rdir
+            sets.sets.seed = simulation_number  # set new seed for language generator
+            if cognate_experiment:
+                sets.generate_for_cognate_experiment(num_sentences=generate_num,
+                                                     percentage_l2=l2_percentage,
+                                                     save_files=False)
             else:
-                sets.sets.results_dir = rdir
-                sets.sets.seed = sim_num  # set new seed for language generator
-                if cognate_experiment:
-                    sets.generate_for_cognate_experiment(num_sentences=generate_num,
-                                                         percentage_l2=l2_percentage,
-                                                         save_files=False)
-                else:
-                    test, train = sets.sets.generate_general(num_sentences=generate_num, percentage_l2=l2_percentage,
-                                                             save_files=False)
-                    if auxiliary_experiment:
-                        sets.sets.aux_experiment = True
-                        if len(args.lang) > 2:
-                            sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
-                                                                              percentage_l2=l2_percentage)
-        elif original_input:  # use existing test/training set (copy them first)
-            copy_files_endswith(os.path.join(original_input, str(sim_num)), rdir)
+                tst, training = sets.sets.generate_general(num_sentences=generate_num, percentage_l2=l2_percentage,
+                                                           save_files=False)
+                if auxiliary_experiment:
+                    sets.sets.aux_experiment = True
+                    if len(args.lang) > 2:
+                        sets.sets.generate_auxiliary_experiment_sentences(training_sentences=training,
+                                                                          percentage_l2=l2_percentage)
+    elif original_input:  # use existing test/training set (copy them first)
+        copy_files_endswith(os.path.join(original_input, str(simulation_number)), rdir)
 
 
 if __name__ == "__main__":
@@ -72,7 +71,7 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)   # 110 80
+    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)  # 110 80
     parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)  # 70 40
     parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=30)
@@ -303,11 +302,18 @@ if __name__ == "__main__":
     simulations_with_pron_err = 0
     failed_sim_id = []
     if args.sim > 1:
-        create_all_input_files(simulation_range=simulation_range, directory=results_dir,
-                               l2_percentage=args.l2_percentage, auxiliary_experiment=args.auxiliary_experiment,
-                               original_input=original_input_path, cognate_experiment=args.cognate_experiment,
-                               sets=input_sets, generate_num=args.generate_num)
-        del input_sets  # we no longer need it
+        input_files = []
+        for sim_num in simulation_range:  # first create all input files
+            process = mp.Process(target=create_input_for_simulation,
+                                 args=(sim_num, results_dir, input_sets, original_input_path, args.cognate_experiment,
+                                       args.generate_num, args.l2_percentage, args.auxiliary_experiment))
+            process.start()
+            input_files.append(process)
+
+        for p in input_files:
+            p.join()
+
+        del input_sets, input_files  # we no longer need it
 
         os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
         os.environ["MKL_NUM_THREADS"] = "1"
@@ -327,7 +333,8 @@ if __name__ == "__main__":
             inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))
             if args.cognate_experiment:
                 simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
-                                       (sim, sum(inputs.trainlines_df.message.str.count(',(COG|FF)')), inputs.num_train))
+                                       (
+                                       sim, sum(inputs.trainlines_df.message.str.count(',(COG|FF)')), inputs.num_train))
         if args.set_weights:
             destination_folder = '%s/weights' % inputs.directory
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
@@ -356,7 +363,7 @@ if __name__ == "__main__":
             dualp.start_network(evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                                 start_from_epoch=starting_epoch)
 
-    if args.use_multiprocessing:
+    if args.use_multiprocessing and args.sim > 1:
         for p in processes:
             p.join()
 
