@@ -183,12 +183,13 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         :param start_from_epoch: training can start from a later epoch
         """
+        cpu = torch.device('cpu')  # randperm doesn't support GPU
         if not self.only_evaluate:
             epoch = start_from_epoch
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs
                 for train_line in self.inputs.trainlines_df.reindex(
-                        torch.randperm(self.inputs.num_train)).itertuples():  # shuffle and train
+                        torch.randperm(self.inputs.num_train), device=cpu).itertuples():  # shuffle and train
                     # train_line = self.inputs.trainlines_df.iloc[1817]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,

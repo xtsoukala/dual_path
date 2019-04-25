@@ -12,8 +12,8 @@ import argparse
 
 
 if torch.cuda.is_available():
-    print('CUDA available')
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
     if not os.path.exists(dst):
