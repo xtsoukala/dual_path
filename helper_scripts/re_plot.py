@@ -21,11 +21,11 @@ results_dir = '../simulations/auxiliary_asymmetry-enes_sim60_h110_c70_fw30_e30_h
 # results_dir = main_dir + '2019-02-18/22.39.07_esen_sim60_h90_c50_fw20_e20'
 # results_dir = main_dir + '2019-02-16/late_esen_sim30_h80_c40_fw20_e15'
 results_dir = main_dir + 'cmcl_2019-03-01/cs'
-results_dir = main_dir + '2019-04-22/19.55.13_esen_sim4_h110_c70_fw30_e15'
-num_sim = 60
-epochs = 15
+results_dir = main_dir + '2019-04-24/19.31.47_esen_sim2_h110_c70_fw30_e5'
+num_sim = 2
+epochs = 5
 performance_threshold = 45
-test_name = 'test_aux.in'
+test_name = 'test.in'
 training_name = 'training.in'
 num_test_set = int(subprocess.check_output("wc -l %s/input/%s" % (results_dir, test_name), shell=True).split()[0])
 num_train = int(subprocess.check_output("wc -l %s/input/%s" % (results_dir, training_name), shell=True).split()[0])

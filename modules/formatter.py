@@ -15,6 +15,9 @@ try:
 except:  # python 2
     from itertools import izip as zp
 
+if torch.cuda.is_available():
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset, overt_pronouns,

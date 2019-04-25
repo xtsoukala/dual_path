@@ -96,7 +96,7 @@ if __name__ == "__main__":
                         type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('-set_weights_epoch', '-swe', type=int,
+    parser.add_argument('-set_weights_epoch', '-swe', type=int, default=0,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=int, default=30,  # 20
                         help='Fixed weight value for concept-role connections')
@@ -186,14 +186,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
-    set_weights_epoch = args.set_weights_epoch
-    if args.only_eval and not (args.set_weights or set_weights_epoch):
-        sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
-                 '(set_weights_epoch: %s).' % (args.set_weights, set_weights_epoch))
-
-    if args.set_weights and not args.only_eval and not set_weights_epoch:
-        set_weights_epoch = 0
-        logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
+    if args.only_eval and not args.set_weights:
+        sys.exit('No pre-trained weights found. Check the set-weights folder (set_weights: %s)' % args.set_weights)
 
     if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
         args.input = args.set_weights
@@ -290,7 +284,7 @@ if __name__ == "__main__":
                             args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
                             if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
                             args.cinput, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
-                            args.set_weights, set_weights_epoch, args.activate_both_lang, args.free_pos,
+                            args.set_weights, args.set_weights_epoch, args.activate_both_lang, args.free_pos,
                             args.ignore_tense_and_det))
 
     inputs = InputFormatter(directory=args.input, language=args.lang, use_semantic_gender=args.gender,
@@ -343,17 +337,17 @@ if __name__ == "__main__":
             else:  # only copy the epoch we wanted (such as epoch 0)
                 os.makedirs(destination_folder)
                 copy_files_endswith(src=src_folder, dest=destination_folder,
-                                    ends_with="_%s.npz" % set_weights_epoch)
-                if set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
-                    os.system("rename s/_%s/_0/ %s/*.npz" % (set_weights_epoch, '%s/weights' % inputs.directory))
-                    set_weights_epoch = 0
+                                    ends_with="_%s" % args.set_weights_epoch)
+                if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
+                    os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
+                    args.set_weights_epoch = 0
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                          cognate_experiment=args.cognate_experiment, momentum=args.momentum,
                          set_weights_folder=inputs.directory if args.set_weights else None,
                          input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
-                         set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                         set_weights_epoch=args.set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
         if args.use_multiprocessing and args.sim > 1:
             process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))

@@ -135,8 +135,7 @@ class DualPath:
         self.srn.connect_layers("pred_compress", "output")
         if not self.only_evaluate:  # else they will be loaded again at the evaluate_network phrase
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
-                                  results_dir=self.inputs.directory, plot_stats=False,
-                                  simulation_num=self.simulation_num)
+                                  results_dir=self.inputs.directory, simulation_num=self.simulation_num)
 
     def feed_line(self, line, weights_role_concept, epoch=None, backpropagate=False, activate_target_language=False):
         produced_sent_ids = []
@@ -188,7 +187,8 @@ class DualPath:
             epoch = start_from_epoch
             # weights_role_concept = self.inputs.weights_role_concept['training']
             while epoch < self.epochs:  # start training for x epochs
-                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():  # shuffle and train
+                for train_line in self.inputs.trainlines_df.reindex(
+                        torch.randperm(self.inputs.num_train)).itertuples():  # shuffle and train
                     # train_line = self.inputs.trainlines_df.iloc[1817]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
@@ -210,7 +210,7 @@ class DualPath:
             self.set_level_logger = self.init_logger('set_level')
             self.evaluate_network(set_names=set_names)
 
-    def evaluate_network(self, set_names, top_down_language_activation=True):
+    def evaluate_network(self, set_names, top_down_language_activation=False):
         """
         :param set_names: ['test', 'training'] or ['test'] if only the test set is evaluated
         :param top_down_language_activation: activates both languages during the whole test duration
@@ -262,7 +262,7 @@ class DualPath:
                 counter = defaultdict(int)
                 counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
-                                      set_weights_epoch=epoch, plot_stats=False)
+                                      set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     # line = set_lines.iloc[line_idx]   # FIXME
                     produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message),
@@ -361,7 +361,6 @@ class DualPath:
                                                                              feature="determiners")
                             has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                feature="tense")
-                            # print('det, tense:', has_wrong_det, has_wrong_tense)
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                                 counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
                                 print(produced_sentence, "correct meaning,FIXME")  # FIXME
@@ -377,9 +376,9 @@ class DualPath:
                                     counter['pronoun_errors_flex'] += 1
                                     has_pronoun_error_flex = True
                     if epoch > 0:
+                        # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
                         meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
-                        pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos)
-
+                        pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos or flexible_order)
                         log_info = (epoch, produced_sentence, line.target_sentence,
                                     pos, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:

@@ -49,7 +49,7 @@ class Plotter:
     def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
-            test_value = self.percentage(self.results[item]['test'].numpy(), test_percentage_lst[item_idx])  # .numpy()
+            test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx]).numpy()
             plt.plot(self.epoch_range, test_value,
                      label=item.replace('_', ' ').replace('code switches', 'code-switches'))
             if 'test-std_error' in self.results[item]:

@@ -2,7 +2,6 @@
 import sys
 import os
 from copy import deepcopy
-import numpy as np
 from modules.plotter import Plotter, torch
 from collections import defaultdict
 from torch.distributions import normal
@@ -50,51 +49,31 @@ class SimpleRecurrentNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def load_weights(self, results_dir, set_weights_folder, plot_stats, set_weights_epoch, simulation_num=None):
-        if not set_weights_folder:
-            self._create_dir_if_not_exists(results_dir)
-            torch.manual_seed(simulation_num if not None else 18)  # set number of simulation as the seed
+    def load_weights(self, results_dir, set_weights_folder, set_weights_epoch, simulation_num=None):
+        if set_weights_folder:
+            weights_fname = os.path.join(set_weights_folder, "weights", "w_%s" % set_weights_epoch)
+            self.layers = torch.load(weights_fname)
+        else:
+            if not set_weights_folder:
+                self._create_dir_if_not_exists(results_dir)
+                torch.manual_seed(simulation_num if not None else 18)  # set number of simulation as the seed
 
-        stats = defaultdict(list)
-        for layer in self.layers:
-            if not layer.in_size:
-                continue
-            # weights folder should contain the same num of simulations (or more)
-            if set_weights_folder:
-                w_dir = os.path.join(set_weights_folder, "weights")
-                weights_fname = os.path.join(w_dir, "weights_%s_%s.npz" % (layer.name, set_weights_epoch))
-                layer.in_weights = torch.tensor(np.load(weights_fname)['arr_0'])
-                # layer.in_weights = torch.jit.load(weights_fname)['arr_0']
-                # FIXMElayer.in_weights = torch.load(os.path.join(w_dir, weights_fname))['arr_0']
-            else:
+            for layer in self.layers:
+                if not layer.in_size:
+                    continue
                 layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 m = normal.Normal(0, layer.sd)
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
-                # layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
-                # xxx = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
-
-                # yyy = torch.randn(layer.in_size + int(layer.has_bias), layer.size)
-                stats['means'].append(layer.in_weights.mean())
-                stats['std'].append(layer.in_weights.std())
-                stats['labels'].append(layer.name)
-                np.savez_compressed("%s/weights/weights_%s_0.npz" % (results_dir, layer.name), layer.in_weights)
-                if self.debug_messages:
-                    with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
-                        f.write("name, max, min, mean, std\n"
-                                "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
-                                                      stats['means'][-1], stats['std'][-1]))
-                if plot_stats:
-                    plt = Plotter(results_dir=results_dir)
-                    plt.plot_layer_stats(stats)
-
+            torch.save(self.layers, "%s/weights/w_%s" % (results_dir, set_weights_epoch))
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
-        for layer in self.backpropagated_layers:
-            np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
+        """for layer in self.backpropagated_layers:
+            np.savez_compressed("%s/weights/weights_%s" % (results_dir, epoch), layer.in_weights)"""
+        torch.save(self.layers, "%s/weights/w_%s" % (results_dir, epoch))
 
     def set_message_reset_context(self, updated_role_concept, info, activate_language):
         weights_concept_role = torch.t(updated_role_concept)
@@ -117,7 +96,7 @@ class SimpleRecurrentNetwork:
         else:
             event_sem.activation = torch.tensor(info.event_sem_activations)  # info.event_sem_activations  # FIXME
         if activate_language:
-            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act)) # FIXME
+            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))  # FIXME
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -217,12 +196,7 @@ class SimpleRecurrentNetwork:
         # Calculate error[Eo](target - output)
         output_layer = self.get_layer("output")
         self._calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
-
-        if output_layer.activation_function == "softmax":
-            output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
-        elif output_layer.activation_function == "tanh":
-            output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
-                                     tanh_derivative(output_layer.activation))
+        output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
@@ -253,11 +227,8 @@ class SimpleRecurrentNetwork:
         self.current_layer.delta = torch.matmul(torch.t(self.convert_to_2d(self.current_layer.in_activation,
                                                                            transpose=True)),
                                                 self.convert_to_2d(self.current_layer.gradient))
-        # self.current_layer.delta = torch.matmul(self.convert_to_2d(self.current_layer.in_activation).t(),
-        #                                        self.convert_to_2d(self.current_layer.gradient))  # FIXME: mm?
-        # np .dot(np.atleast_2d(self.current_layer.in_activation).T, np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
+        len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(sum(self.current_layer.delta ** 2))
         if len_delta > 1:
             self.current_layer.delta = self.current_layer.delta / len_delta
 
@@ -341,7 +312,8 @@ class NeuronLayer:
         self.convert_input = convert_input
         self.size = size
         self.sd = 0  # it is used to initialize weights
-        self.activation = torch.zeros(size, dtype=torch.float64)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.activation = torch.empty(size,
+                                      dtype=torch.float64)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
         self.target_activation = torch.zeros(size, dtype=torch.float64)
         self.error_out = []
         self.total_error = []
