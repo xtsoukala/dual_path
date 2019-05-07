@@ -120,6 +120,9 @@ if __name__ == "__main__":
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
+    parser.add_argument('--convert', dest='convert_input', action='store_true',
+                        help='In some cases we want to manipulate the given input')
+    parser.set_defaults(convert_input=False)
     parser.add_argument('--crole', dest='crole', action='store_true',
                         help='If (role copy) is set, the produced role layer is copied back to the comprehension layer')
     parser.set_defaults(crole=False)
@@ -174,6 +177,9 @@ if __name__ == "__main__":
     parser.add_argument('--tener', dest='replace_haber', action='store_true',
                         help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
     parser.set_defaults(replace_haber=False)
+    parser.add_argument('--haber_frequency', dest='test_haber_frequency', action='store_true',
+                        help='Run auxiliary asymmetry experiment making haber and tener perfect synonyms')
+    parser.set_defaults(test_haber_frequency=False)
     parser.add_argument('--gender_error_experiment', dest='pronoun_experiment', action='store_true',
                         help='Evaluate pronoun production')
     parser.set_defaults(pronoun_experiment=False)
@@ -297,7 +303,8 @@ if __name__ == "__main__":
                             overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
                             trainingset=args.trainingset, testset=args.testset, fixed_weights=args.fw,
                             fixed_weights_identif=args.fwi, use_word_embeddings=args.word_embeddings,
-                            monolingual_only=args.monolingual, replace_haber_tener=args.replace_haber)
+                            monolingual_only=args.monolingual, replace_haber_tener=args.replace_haber,
+                            test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []

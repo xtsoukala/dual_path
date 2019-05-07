@@ -48,7 +48,6 @@ class Plotter:
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-
     def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
@@ -153,13 +152,14 @@ class Plotter:
             new_label = 'verb'
         return new_label
 
-    def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
+    def plot_alternational_insertional_switching(self, indeces, items_to_plot, legend, label='% of correct sentences',
+                                                 filename_suffix=None):
         original_idx = list(indeces)
         insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
         alternations = [x for x in indeces if x.startswith('alt')]
         labels = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
         index_size = np.arange(len(labels))
-        fname = ['insertional.pdf', 'alternational.pdf']
+        fname = ['insertional', 'alternational']
         for type, indeces in enumerate([insertions, alternations]):
             fig, ax = plt.subplots()
             rects = []
@@ -167,6 +167,8 @@ class Plotter:
                 sorted_by_label = sorted(list(zip([self.rename_label(x) for x in indeces],
                                                   [x for ind, x in enumerate(self.cs_results[item])
                                                    if original_idx[ind] in indeces])))
+                labels = [x[0] for x in sorted_by_label]
+                index_size = np.arange(len(labels))
                 rects.append(ax.bar(index_size + (self.bar_width * i), [x[1][0] for x in sorted_by_label],
                                     self.bar_width, yerr=[x[1][1] for x in sorted_by_label]))
             if self.title:
@@ -174,12 +176,12 @@ class Plotter:
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
             ax.set_ylim(bottom=0)
             ax.legend(([x[0] for x in rects]), legend, loc='upper left')
-            ax.set_title(fname[type].replace('.pdf', ''), fontsize=16)
-            ax.set_ylabel('% of correct sentences')
+            ax.set_title(fname[type], fontsize=16)
+            ax.set_ylabel(label)
             ax.set_xticklabels(labels, rotation=55)  # rotate labels to fit better
             ax.tick_params(axis='both', labelsize=14)
             plt.tight_layout()  # make room for labels
-            filename = '%s/%s' % (self.results_dir, fname[type])
+            filename = self.get_plot_path(fname[type] if not filename_suffix else fname[type] + filename_suffix)
             plt.savefig(filename)
             plt.close()
 
@@ -277,12 +279,12 @@ class Plotter:
 
             # make sure there is still something to be plotted after the manipulations
             if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
+                self.plot_alternational_insertional_switching(label='CS types (%% of correctly produced test set)',
+                                                              indeces=all_cs_types,
+                                                              legend=('target lang: Spanish', 'target lang: English'),
+                                                              items_to_plot=['type_correct_test_last_epoch_es',
+                                                                             'type_correct_test_last_epoch_en'])
                 if False:
-                    self.plot_bar_chart(label='CS types (%% of correctly produced %s set)' % 'test',
-                                        indeces=all_cs_types, legend=('target lang: Spanish', 'target lang: English'),
-                                        fname='code_switches_correct_test_set_last_epoch',
-                                        items_to_plot=['type_correct_test_last_epoch_es',
-                                                       'type_correct_test_last_epoch_en'])
                     # !------------ Now plot all CS types per epoch  ------------#
                     if self.plot_detailed_cs:
                         for i, cs_type in enumerate(all_cs_types):
@@ -435,9 +437,11 @@ class Plotter:
                         if include_ff:
                             items_to_plot.append('type_correct_%s-ff_last_epoch' % dataset_type)
                             legend.append('FF')
-                        self.plot_bar_chart(label='CS types (%% of %s set - last epoch)' % dataset_type, legend=legend,
-                                            items_to_plot=items_to_plot, indeces=all_cs_types,
-                                            fname='type_cs_cognate_experiment_last_epoch_%sset' % dataset_type)
+                        self.plot_alternational_insertional_switching(label='CS types (%% of %s set - last epoch)' %
+                                                                            dataset_type, legend=legend,
+                                                                      items_to_plot=items_to_plot, indeces=all_cs_types,
+                                                                      filename_suffix='type_cs_cognate_experiment_last_'
+                                                                            'epoch_%sset' % dataset_type)
                         # !------------ Now plot all CS types per epoch for COGNATE EXPERIMENT  ------------#
                         for i, cs_type in enumerate(all_cs_types):
                             results_lst = [self.cs_results['type_correct_%s' % dataset_type][i],

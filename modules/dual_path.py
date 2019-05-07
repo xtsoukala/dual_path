@@ -208,7 +208,7 @@ class DualPath:
             self.set_level_logger = self.init_logger('set_level')
             self.evaluate_network(set_names=set_names)
 
-    def evaluate_network(self, set_names, top_down_language_activation=True):
+    def evaluate_network(self, set_names, top_down_language_activation=False):
         """
         :param set_names: ['test', 'training'] or ['test'] if only the test set is evaluated
         :param top_down_language_activation: activates both languages during the whole test duration
@@ -227,6 +227,7 @@ class DualPath:
                 set_name: [] for set_name in set_names
             }
         }
+
         if self.auxiliary_experiment:
             for aux in ['is', 'has']:
                 for point in ['participle', 'aux', 'after', 'right_after']:
@@ -272,9 +273,9 @@ class DualPath:
                     debug_sentence = False  # debug specific sentence
                     if debug_sentence:
                         logger.warning('Debugging sentence pair')
-                        produced_sentence = 'él ha pateado .'
-                        target_sentence = 'he has jumped .'
-                        target_lang = 'en'
+                        produced_sentence = 'la anfitriona tiene pateado el bolígrafo .'
+                        target_sentence = 'la anfitriona ha pateado el bolígrafo .'
+                        target_lang = 'es'
                         produced_idx = self.inputs.sentence_indeces(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indeces(target_sentence)
@@ -302,7 +303,7 @@ class DualPath:
                         counter['correct_pos'] += 1
                         has_correct_pos = True
                         if not code_switched:
-                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, line.target_sentence_idx)
+                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
                         else:  # only count grammatically correct CS sentences -- determine CS type here
                             cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx, target_lang,
                                                                          top_down_language_activation)

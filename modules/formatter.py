@@ -6,6 +6,8 @@ import pickle
 import pandas as pd
 import numpy as np
 import operator
+import glob
+import subprocess
 from collections import defaultdict, Counter
 
 try:
@@ -16,7 +18,8 @@ except:  # python 2
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset, overt_pronouns,
-                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
+                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener,
+                 test_haber_frequency, convert_input):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -27,11 +30,16 @@ class InputFormatter:
             self.identifiability += ['M', 'F']
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.convert_input = convert_input
         self.replace_haber_tener = replace_haber_tener
-        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+        if replace_haber_tener and convert_input:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
             self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
                                 (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
+        self.test_haber_frequency = test_haber_frequency
+        if test_haber_frequency and convert_input:
+            self.make_haber_and_tener_synonyms(directory)
+
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -54,6 +62,7 @@ class InputFormatter:
         self.period_idx = self.get_lexicon_index('.')
         self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
+        self.haber_tener_idx = self.df_query_to_idx("morpheme_es == 'tiene' or morpheme_es == 'ha'", lang='es')
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
@@ -93,23 +102,41 @@ class InputFormatter:
 
     def update_sets(self, new_directory):
         self.directory = new_directory
-        if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
+        if self.replace_haber_tener and self.convert_input:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
+        elif self.test_haber_frequency and self.convert_input:
+            self.make_haber_and_tener_synonyms(new_directory)
         self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()  # re-read files
         self.num_train = len(self.trainlines_df)
         self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
+    @staticmethod
+    def make_haber_and_tener_synonyms(directory):
+        fname = "%s/training.in" % directory
+        os.system("sed -i -e 's/ ha / tiene /g' %s" % fname)
+        num = int(subprocess.check_output("cat %s | grep -w tiene | wc -l" % fname, shell=True))
+        num = num / 2  # only convert half of the instances
+        os.system("awk '{for(i=1;i<=NF;i++){if(x<%s&&$i==\"tiene\"){x++;sub(\"tiene\",\"ha\",$i)}}}1' %s > "
+                  "tmp && mv tmp %s" % (num, fname, fname))
+
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
+        if (self.test_haber_frequency and self.filter_list(out_sentence_idx, self.haber_tener_idx) ==
+                self.filter_list(trg_sentence_idx, self.haber_tener_idx)):  # remove haber/tener and check
+                return True
         # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        out_sentence_idx = [x for x in out_sentence_idx if x not in self.to_prepositions_idx]
-        trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.to_prepositions_idx]
+        out_sentence_idx = self.filter_list(out_sentence_idx, self.to_prepositions_idx)
+        trg_sentence_idx = self.filter_list(trg_sentence_idx, self.to_prepositions_idx)
         if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
             return True
         return False
+
+    @staticmethod
+    def filter_list(lst, filtered_items):
+        return [x for x in lst if x not in filtered_items]
 
     def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos, out_sentence_idx):
         """
