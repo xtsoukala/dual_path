@@ -4,11 +4,12 @@ import logging
 import multiprocessing as mp
 import sys
 import platform
+import json
+import argparse
 from datetime import datetime
 from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
-import argparse
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -114,9 +115,10 @@ if __name__ == "__main__":
                                                              'sim_from and sim_to values')
     parser.add_argument('-sim_to', type=positive_int, help='See sim_from')
     parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
-    parser.add_argument('-threshold', type=int, default=50,
+    parser.add_argument('-threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
+    parser.add_argument('-config', default=False, help='Read arguments from file')
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -187,9 +189,16 @@ if __name__ == "__main__":
                         help='Ignore mistakes on determiners (definiteness) and tense (past, present)')
     parser.set_defaults(ignore_tense_and_det=False)
     parser.add_argument('--nomultiprocessing', '--no_multiprocessing', dest='use_multiprocessing', action='store_false',
-                        help='Use multiprocessing for parallel simulations')
+                        help='Do not use multiprocessing for parallel simulations')
     parser.set_defaults(use_multiprocessing=True)
+    parser.add_argument('--separate', dest='separate_hidden_layers', action='store_true',
+                        help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
+    parser.set_defaults(separate_hidden_layers=False)
     args = parser.parse_args()
+
+    if args.config:  # read params from file
+        with open(args.config, 'r') as f:
+            args.__dict__ = json.load(f)
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
@@ -281,23 +290,8 @@ if __name__ == "__main__":
         logging.warning("Learning rate will NOT be decreased, it is set to %s" % args.final_lrate)
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
-    simulation_logger = logging.getLogger('simulation')
-    simulation_logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler("%s/simulation.log" % results_dir)
-    simulation_logger.propagate = False  # no stdout to console
-    simulation_logger.addHandler(fh)
-
-    simulation_logger.info(("Input: %s %s\nTitle:%s\nHidden layers: %s\nInitial learn rate: %s\nDecrease lr: %s%s\n"
-                            "Compress: %s\nCopy role: %s\nCopy input: %s\nPro-drop language:%s\nUse "
-                            "gender info:%s\novert_pronouns (overt es pronouns):%s%%\nFixed weights: concept-role: %s, "
-                            "identif-role: %s\nSet weights folder: %s (epoch: %s)\nExclude lang during testing:%s\n"
-                            "Allow free structure production:%s\nIgnore tense and determiners when evaluating:%s") %
-                           (results_dir, "(%s)" % original_input_path if original_input_path else "", args.title,
-                            args.hidden, args.lrate, args.decrease_lrate, " (%s)" % args.final_lrate
-                            if (args.final_lrate and args.decrease_lrate) else "", args.compress, args.crole,
-                            args.cinput, args.prodrop, args.gender, args.overt_pronouns, args.fw, args.fwi,
-                            args.set_weights, set_weights_epoch, args.activate_both_lang, args.free_pos,
-                            args.ignore_tense_and_det))
+    with open('%s/commandline_args.txt' % results_dir, 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
     inputs = InputFormatter(directory=args.input, language=args.lang, use_semantic_gender=args.gender,
                             overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
@@ -338,10 +332,6 @@ if __name__ == "__main__":
     for sim in simulation_range:
         if args.sim > 1:
             inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))
-            if args.cognate_experiment:
-                simulation_logger.info("Number of cognates and false friends in training set for sim %s: %s/%s" %
-                                       (
-                                       sim, sum(inputs.trainlines_df.message.str.count(',(COG|FF)')), inputs.num_train))
         if args.set_weights:
             destination_folder = '%s/weights' % inputs.directory
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
@@ -361,7 +351,8 @@ if __name__ == "__main__":
                          set_weights_folder=inputs.directory if args.set_weights else None,
                          input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval)
+                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
+                         separate_hidden_layers=args.separate_hidden_layers)
         if args.use_multiprocessing and args.sim > 1:
             process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
             process.start()
@@ -410,8 +401,10 @@ if __name__ == "__main__":
             if args.eval_training:
                 eval_sets.add('training')
             results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
+
             with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
                 pickle.dump(results_mean_and_std, pckl)
+
             plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
                            epochs=args.epochs)
             plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
@@ -419,13 +412,13 @@ if __name__ == "__main__":
                               num_test=inputs.num_test, num_train=inputs.num_train, test_df=inputs.testlines_df,
                               auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
             if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
-                simulation_logger.info("Code-switched percentage (test set): %s" %
-                                       Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],
-                                                          inputs.num_test))
+                with open("%s/results.log" % results_dir, 'w') as f:
+                    f.write("Code-switched percentage (test set): %s" %
+                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], inputs.num_test))
 
-    simulation_logger.info("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun "
-                           "errors:%s/%s\n%s%s" %
-                           (inputs.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err,
-                            args.sim, "Successful simulations:%s/%s" % (num_valid_simulations, args.sim)
-                            if num_valid_simulations else "", "\nIndeces of (almost) failed simulations: %s" %
-                                                              ", ".join(failed_sim_id) if failed_sim_id else ""))
+    with open("%s/results.log" % results_dir, 'w') as f:
+        f.write("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n"
+                "%s%s" % (inputs.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err, args.sim,
+                          "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations
+                          else "", "\nIndeces of (almost) failed simulations: %s"
+                                   % ", ".join(failed_sim_id) if failed_sim_id else ""))

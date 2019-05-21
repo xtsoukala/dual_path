@@ -15,17 +15,12 @@ def training_is_successful(x, threshold, num_test):
 
 
 main_dir = '../simulations/'
-results_dir = '../simulations/auxiliary_asymmetry-enes_sim60_h110_c70_fw30_e30_haber_tener/initial_run/haber_test.in/'
-# results_dir = '../simulations/2019-02-15/16.16.44_esen_sim60_h110_c70_fw30_e15/'
-# results_dir = '../simulations/2019-02-14/esen_sim60_h110_c70_fw30_e30_test'
-# results_dir = main_dir + '2019-02-18/22.39.07_esen_sim60_h90_c50_fw20_e20'
-# results_dir = main_dir + '2019-02-16/late_esen_sim30_h80_c40_fw20_e15'
-results_dir = main_dir + 'cmcl_2019-03-01/haber_model'
-#results_dir = main_dir + '2019-05-05/19.51.57_esen_sim60_h110_c70_fw30_e30'
+results_dir = main_dir + 'cmcl_2019-03-01/code_switching_patterns'
+results_dir = main_dir + '2019-05-21/13.24.40_esen_sim6_h110_c70_fw30_e15'
 num_sim = 60
 epochs = 30
-performance_threshold = 90
-test_name = 'test_aux.in'
+performance_threshold = 75
+test_name = 'test.in'
 training_name = 'training.in'
 num_test_set = int(subprocess.check_output("wc -l %s/input/%s" % (results_dir, test_name), shell=True).split()[0])
 num_train = int(subprocess.check_output("wc -l %s/input/%s" % (results_dir, training_name), shell=True).split()[0])
@@ -52,21 +47,26 @@ for sim in range(num_sim):  # read results from all simulations
 
 if all_results:
     valid_results = []
-    print("Failed simulations:")
+    failed_simulations = []
     for i, simulation in enumerate(all_results):
         if i not in excluded_list and training_is_successful(simulation['correct_meaning']['test'],
                                                              threshold=performance_threshold, num_test=num_test_set):
             valid_results.append(simulation)
             if not training_is_successful(simulation['correct_meaning']['test'], threshold=80, num_test=num_test_set):
-                print("[%s]" % i)  # flag it, even if it's included in the final analysis
+                failed_simulations.append("[%s]" % i)  # flag it, even if it's included in the final analysis
         else:
-            print(i)  # keep track of simulations that failed
+            failed_simulations.append(str(i))
+
+    if failed_simulations:
+        print("Failed simulations: %s" % ' '.join(failed_simulations))
+
     num_valid_simulations = len(valid_results)  # some might have been discarded
 
     if num_valid_simulations:  # take the average of results and plot
         results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=evaluated_sets, epochs=epochs)
         with open("%s/summary_edited_results.pickled" % edited_dir, 'wb') as pckl:
             pickle.dump(results_mean_and_std, pckl)
+        # print(results_mean_and_std)
         plot = Plotter(results_dir=edited_dir, summary_sim=num_valid_simulations, title=title, epochs=epochs)
         test_df = pd.read_csv(os.path.join(results_dir, "input/%s" % test_name), names=['target_sentence', 'message'],
                               sep='## ', engine='python')

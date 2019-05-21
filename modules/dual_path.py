@@ -22,7 +22,7 @@ class DualPath:
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
-                 only_evaluate, allow_cognate_boost=False, simulation_num=None):
+                 only_evaluate, separate_hidden_layers, allow_cognate_boost=False, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -67,9 +67,10 @@ class DualPath:
         self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
+        self.separate_hidden_layers = separate_hidden_layers
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
                                           debug_messages=srn_debug, include_role_copy=role_copy,
-                                          include_input_copy=input_copy)
+                                          include_input_copy=input_copy, separate_hidden_layers=separate_hidden_layers)
         self.initialize_srn()
 
     def init_logger(self, name):
@@ -100,7 +101,14 @@ class DualPath:
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
-        self.srn.add_layer("hidden", self.hidden_size, recurrent=True)
+        if self.separate_hidden_layers:
+            print(self.hidden_size)
+            print(int(self.hidden_size * 2 / 3), int(self.hidden_size / 3))
+            self.srn.add_layer("hidden_semantic", int(self.hidden_size * 2 / 3), recurrent=True)
+            self.srn.add_layer("hidden_syntactic", int(self.hidden_size / 3), recurrent=True)
+        else:
+            self.srn.add_layer("hidden", self.hidden_size, recurrent=True)
+
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
         self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
@@ -121,13 +129,24 @@ class DualPath:
         if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
             self.srn.add_layer("role_copy", self.inputs.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
-        self.srn.connect_layers("role", "hidden")
-        self.srn.connect_layers("compress", "hidden")
-        self.srn.connect_layers("eventsem", "hidden")
-        self.srn.connect_layers("target_lang", "hidden")
-        # hidden to predicted and output layers
-        self.srn.connect_layers("hidden", "pred_role")
-        self.srn.connect_layers("hidden", "pred_compress")
+
+        if self.separate_hidden_layers:
+            self.srn.connect_layers("role", "hidden_semantic")
+            self.srn.connect_layers("eventsem", "hidden_semantic")
+            self.srn.connect_layers("target_lang", "hidden_semantic")
+            self.srn.connect_layers("compress", "hidden_syntactic")
+            # hidden to predicted and output layers
+            self.srn.connect_layers("hidden_semantic", "pred_role")
+            self.srn.connect_layers("hidden_syntactic", "pred_compress")
+        else:
+            self.srn.connect_layers("role", "hidden")
+            self.srn.connect_layers("eventsem", "hidden")
+            self.srn.connect_layers("target_lang", "hidden")
+            self.srn.connect_layers("compress", "hidden")
+            # hidden to predicted and output layers
+            self.srn.connect_layers("hidden", "pred_role")
+            self.srn.connect_layers("hidden", "pred_compress")
+
         self.srn.connect_layers("pred_role", "pred_identifiability")
         self.srn.connect_layers("pred_role", "pred_concept")
         self.srn.connect_layers("pred_identifiability", "output")

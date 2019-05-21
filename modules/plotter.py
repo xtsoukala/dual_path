@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 sns.set(palette="colorblind")
-sns.set_style("white")  # whitegrid
+sns.set_style("whitegrid")  # white
 
 
 class Plotter:
@@ -150,6 +150,8 @@ class Plotter:
             new_label = 'preposition'
         elif 'verb' in x:
             new_label = 'verb'
+        elif 'pron' in x:
+            new_label = 'pronoun'
         return new_label
 
     def plot_alternational_insertional_switching(self, indeces, items_to_plot, legend, label='% of correct sentences',
@@ -279,7 +281,7 @@ class Plotter:
 
             # make sure there is still something to be plotted after the manipulations
             if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
-                self.plot_alternational_insertional_switching(label='CS types (%% of correctly produced test set)',
+                self.plot_alternational_insertional_switching(label='CS types (% of correctly produced test set)',
                                                               indeces=all_cs_types,
                                                               legend=('target lang: Spanish', 'target lang: English'),
                                                               items_to_plot=['type_correct_test_last_epoch_es',
