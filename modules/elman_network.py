@@ -26,14 +26,12 @@ class SimpleRecurrentNetwork:
         self.lesion_syntax = False
         self.lesion_semantics = False
         self.syntactic_layers = ['compress', 'pred_compress']
-        self.semantic_layers = ['role', 'pred_concept', 'pred_identifiability',
-                                'eventsem', 'target_lang']
+        self.semantic_layers = ['pred_concept', 'role'] #['role', 'pred_concept', 'pred_identifiability', 'eventsem']#, 'target_lang']
         self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
         self.dir = rdir
         self.mse = defaultdict(list)
         self.divergence_error = defaultdict(list)
-        self.python_version = sys.version
 
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
@@ -174,7 +172,9 @@ class SimpleRecurrentNetwork:
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
                 if (start_of_sentence and self.lesion_syntax and incoming_layer.name in self.syntactic_layers or
                         self.lesion_semantics and incoming_layer.name in self.semantic_layers):
-                    layer.in_weights[layer.in_activation.size:layer.in_activation.size+incoming_layer.size:2] = 0.0009
+                    lesion_step = 1  # 11% for syntax, 5% for semantics
+                    layer.in_weights[layer.in_activation.size:layer.in_activation.size+incoming_layer.size] = 0
+
                 layer.in_activation = np.concatenate((layer.in_activation, incoming_layer.activation), axis=0)
             if layer.is_recurrent:  # hidden layer only (include context activation)
                 layer.in_activation = np.concatenate((layer.in_activation, layer.context_activation), axis=0)
@@ -293,13 +293,7 @@ class SimpleRecurrentNetwork:
         if not os.path.isdir('%s/weights' % results_dir):
             # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
             # exception even though we have checked.
-            if self.python_version.startswith('3'):
-                os.makedirs('%s/weights' % results_dir, exist_ok=True)
-            else:
-                try:
-                    os.mkdir('%s/weights' % results_dir)
-                except IOError:
-                    print('%s/weights already exists' % results_dir)
+            os.makedirs('%s/weights' % results_dir, exist_ok=True)
 
     def get_layer(self, layer_name):
         return self.layers[self.layer_idx[layer_name]]

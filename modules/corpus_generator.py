@@ -22,7 +22,6 @@ class SetsGenerator:
         :param use_full_verb_form:
         :param aux_experiment: whether we're running the auxiliary experiment (haber/estar asymmetry in CS)
         """
-        self.python_version = sys.version[0]
         self.allow_free_structure_production = allow_free_structure_production
         self.lang = lang
         self.L1 = lang if len(lang) == 2 else lang[:2]  # take first 2 letters as L1
@@ -108,7 +107,7 @@ class SetsGenerator:
         res = self.lexicon_df.query("pos == 'participle' and concept == '%s'" % concept)
         prog = res['morpheme_%s' % lang].loc[res['aspect'] == 'prog'].max()
         perfect = res['morpheme_%s' % lang].loc[res['aspect'] == 'perfect'].max()
-        sent = sentence.replace(' has ', ' is ').replace(' ha ', ' está ').replace(perfect, prog)  # Python2 error
+        sent = sentence.replace(' has ', ' is ').replace(' ha ', ' está ').replace(perfect, prog)
         return sent, msg
 
     def generate_sentence_structures(self, num_sentences, percentage_l2):
@@ -257,10 +256,7 @@ class SetsGenerator:
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
                 gender = self.get_df_gender(morpheme_df, prev_gender=gender)
-                if self.python_version == '2':
-                    sentence.append(morpheme_df.values[0].decode("utf-8"))  # otherwise non-ascii (es) chars throw error
-                else:
-                    sentence.append(morpheme_df.values[0])
+                sentence.append(morpheme_df.values[0])
                 if pos == 'pron':  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender,
                                                                        exclude_cognates=exclude_cognates)

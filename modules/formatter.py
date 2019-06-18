@@ -6,14 +6,9 @@ import pickle
 import pandas as pd
 import numpy as np
 import operator
-import glob
 import subprocess
 from collections import defaultdict, Counter
-
-try:
-    from itertools import zip_longest as zp
-except:  # python 2
-    from itertools import izip as zp
+from itertools import zip_longest as zp
 
 
 class InputFormatter:
@@ -616,12 +611,6 @@ def get_minimum_and_maximum_idx(clean_sentence):
 
 def is_not_nan(x):
     if x == x:
-        return True
-    return False
-
-
-def is_not_empty(x):
-    if x != [] and sum(x) > 0:  # do not simplify
         return True
     return False
 

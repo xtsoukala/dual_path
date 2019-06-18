@@ -16,10 +16,10 @@ def training_is_successful(x, threshold, num_test):
 
 main_dir = '../simulations/'
 results_dir = main_dir + 'cmcl_2019-03-01/code_switching_patterns'
-results_dir = main_dir + '2019-05-21/13.24.40_esen_sim6_h110_c70_fw30_e15'
+results_dir = main_dir + '2019-06-14/12.15.17_esen_sim2_h110_c70_fw30_e10'
 num_sim = 60
 epochs = 30
-performance_threshold = 75
+performance_threshold = 5
 test_name = 'test.in'
 training_name = 'training.in'
 num_test_set = int(subprocess.check_output("wc -l %s/input/%s" % (results_dir, test_name), shell=True).split()[0])
@@ -67,13 +67,13 @@ if all_results:
         with open("%s/summary_edited_results.pickled" % edited_dir, 'wb') as pckl:
             pickle.dump(results_mean_and_std, pckl)
         # print(results_mean_and_std)
-        plot = Plotter(results_dir=edited_dir, summary_sim=num_valid_simulations, title=title, epochs=epochs)
+        plot = Plotter(results_dir=edited_dir, summary_sim=num_valid_simulations, title=title, epochs=epochs,
+                       num_training=num_train, num_test=num_test_set)
         test_df = pd.read_csv(os.path.join(results_dir, "input/%s" % test_name), names=['target_sentence', 'message'],
                               sep='## ', engine='python')
 
         plot.plot_results(results_mean_and_std, cognate_experiment=cognate_experiment,
                           test_sentences_with_pronoun=test_sentences_with_pronoun,
-                          num_test=num_test_set, num_train=num_train, test_df=test_df,
                           auxiliary_experiment=auxiliary_experiment, evaluated_datasets=evaluated_sets)
 
         import sys; sys.exit()

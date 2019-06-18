@@ -1,4 +1,4 @@
-from modules.formatter import is_not_empty, np, extract_cs_keys, defaultdict
+from modules.formatter import np, extract_cs_keys
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -11,9 +11,11 @@ sns.set_style("whitegrid")  # white
 
 
 class Plotter:
-    def __init__(self, results_dir, summary_sim, title, epochs=0):
+    def __init__(self, results_dir, summary_sim, title, num_training, num_test, epochs=0):
         self.results_dir = results_dir
         self.num_epochs = epochs
+        self.num_training = num_training
+        self.num_test = num_test
         self.epoch_range = range(epochs)
         self.bar_width = 0.35
         self.cs_results = {}
@@ -22,23 +24,27 @@ class Plotter:
         self.summary_sim = summary_sim
         self.plot_detailed_cs = False
 
-    def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, ylabel, ylim, fname,
-                               legend_loc='upper right'):
-        for item_idx, item in enumerate(items_to_plot):
-            test_value = self.percentage(self.results[item]['test'], test_percentage)
-            plt.plot(self.epoch_range, test_value, label=item)
-            if 'test-std_error' in self.results[item]:
-                test_std_error = self.results[item]['test-std_error']
-                lower_bound = self.percentage(self.results[item]['test'] - test_std_error, test_percentage)
-                upper_bound = self.percentage(self.results[item]['test'] + test_std_error, test_percentage)
-                plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.2)
+    def plot_changes_over_time(self, items_to_plot, ylabel, ylim, fname, legend_loc='upper right', test_percentage=None,
+                               training_percentage=None):
+        if test_percentage is None:
+            test_percentage = self.num_test
+        if training_percentage is None:
+            training_percentage = self.num_training
 
-            if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
-                plt.plot(self.epoch_range, training_value, label="%s (Training)" % item, linestyle='--')
+        for set_name in ['test', 'training']:
+            if set_name == 'test':
+                percentage = test_percentage if test_percentage is not None else self.num_test
+            else:
+                percentage = training_percentage if training_percentage is not None else self.num_training
+            for item_idx, item in enumerate(items_to_plot):
+                if set_name in self.results[item]:
+                    value = self.percentage(self.results[item][set_name], percentage)
+                    plt.plot(self.epoch_range, value, label=item + " (training)" if set_name == 'training' else item)
+                    if '%s-std_error' % set_name in self.results[item]:
+                        std_error = self.results[item]['%s-std_error' % set_name]
+                        lower_bound = self.percentage(self.results[item][set_name] - std_error, percentage)
+                        upper_bound = self.percentage(self.results[item][set_name] + std_error, percentage)
+                        plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.2)
         plt.xlabel('epochs')
         if ylabel:
             plt.ylabel(ylabel)
@@ -48,7 +54,7 @@ class Plotter:
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
+    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst, ylabel, ylim,
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
@@ -63,11 +69,8 @@ class Plotter:
                 plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.2)
 
             if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
-                plt.plot(self.epoch_range, training_value, label="%s (Training)" % item, linestyle='--')
+                training_value = self.percentage(self.results[item]['training'], training_percentage_lst[item_idx])
+                plt.plot(self.epoch_range, training_value, label="%s (training)" % item, linestyle='--')
         plt.xlabel('epochs')
         if ylabel:
             plt.ylabel(ylabel)
@@ -177,7 +180,8 @@ class Plotter:
                 ax.set_title(self.title)
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
             ax.set_ylim(bottom=0)
-            ax.legend(([x[0] for x in rects]), legend, loc='upper left')
+            if all(len(x) for x in rects) > 0:
+                ax.legend(([x[0] for x in rects]), legend, loc='upper left')
             ax.set_title(fname[type], fontsize=16)
             ax.set_ylabel(label)
             ax.set_xticklabels(labels, rotation=55)  # rotate labels to fit better
@@ -221,9 +225,10 @@ class Plotter:
         plt.savefig(filename)
         plt.close()
 
-    def plot_results(self, results, num_train, num_test, test_df, test_sentences_with_pronoun,
-                     cognate_experiment, auxiliary_experiment, evaluated_datasets):
+    def plot_results(self, results, test_sentences_with_pronoun, cognate_experiment, auxiliary_experiment,
+                     evaluated_datasets):
         correct_test = results['correct_meaning']['test']
+        correct_training = results['correct_meaning']['training'] if 'training' in results['correct_meaning'] else 0
         self.results = results
         if 'all_cs_types' in self.results:
             all_cs_types = self.results['all_cs_types']
@@ -231,20 +236,19 @@ class Plotter:
             all_cs_types = extract_cs_keys([self.results], set_names=evaluated_datasets)
 
         self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], ylabel='Percentage correct (%)',
-                                    test_percentage=num_test, training_percentage=num_train, ylim=100,
-                                    fname="performance", legend_loc='lower right')
+                                    ylim=100, fname="performance", legend_loc='lower right')
         # !------------  CODE-SWITCHES ------------!
         correct_code_switches = results['correct_code_switches']['test']
         if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             self.plot_changes_over_time(items_to_plot=['correct_code_switches', 'all_code_switches'],
-                                        test_percentage=num_test, training_percentage=num_train, ylim=40,
-                                        ylabel='%% CS among %s set' % 'test',
+                                        ylim=40, ylabel='%% CS among %s set' % 'test',
                                         fname='code_switches_%s_set' % 'test')
 
             self.plot_multiple_changes_over_time(items_to_plot=['correct_code_switches', 'correct_meaning'],
                                                  legend_loc='lower right',
-                                                 test_percentage_lst=[correct_test, num_test],
-                                                 training_percentage=None, ylim=90, ylabel=None,
+                                                 test_percentage_lst=[correct_test, self.num_test],
+                                                 training_percentage_lst=[correct_training, self.num_training],
+                                                 ylim=90, ylabel=None,
                                                  fname='performance_and_code_switches')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
             self.plot_changes_over_time(ylim=40, items_to_plot=['correct_code_switches'],
@@ -478,14 +482,8 @@ class Plotter:
 
     @staticmethod
     def percentage(x, total):
-        if isinstance(total, int) and total == 0:
+        """if isinstance(total, int) and total == 0:
             return float('NaN')
         if isinstance(x, list):
-            x = np.array(x)
+            x = np.array(x)"""
         return np.true_divide(x * 100, total, where=x != 0)  # avoid division by 0
-
-    @staticmethod
-    def is_nd_array_or_list(x):
-        if isinstance(x, (list, np.ndarray)):
-            return True
-        return False

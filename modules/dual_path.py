@@ -102,8 +102,6 @@ class DualPath:
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
         if self.separate_hidden_layers:
-            print(self.hidden_size)
-            print(int(self.hidden_size * 2 / 3), int(self.hidden_size / 3))
             self.srn.add_layer("hidden_semantic", int(self.hidden_size * 2 / 3), recurrent=True)
             self.srn.add_layer("hidden_syntactic", int(self.hidden_size / 3), recurrent=True)
         else:

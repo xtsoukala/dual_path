@@ -161,12 +161,9 @@ if __name__ == "__main__":
                         help='Use morphemes for verbs (i.e., splitting into lemma/suffix) instead of full lexeme')
     parser.set_defaults(full_verb=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
-                        help='The model is not given role information in the event semantics and it it therefore '
+                        help='The model is not given role information in the event semantics and it is therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
     parser.set_defaults(free_pos=False)
-    parser.add_argument('--filler', dest='filler', action='store_true',
-                        help='Add filler word ("actually", "pues") at the beginning of the sentence')
-    parser.set_defaults(filler=False)
     parser.add_argument('--emb', dest='word_embeddings', action='store_true',
                         help='Represent semantics using word embeddings instead of one-hot vectors.')
     parser.set_defaults(word_embeddings=False)
@@ -188,9 +185,6 @@ if __name__ == "__main__":
     parser.add_argument('--flex_eval', dest='ignore_tense_and_det', action='store_true',
                         help='Ignore mistakes on determiners (definiteness) and tense (past, present)')
     parser.set_defaults(ignore_tense_and_det=False)
-    parser.add_argument('--nomultiprocessing', '--no_multiprocessing', dest='use_multiprocessing', action='store_false',
-                        help='Do not use multiprocessing for parallel simulations')
-    parser.set_defaults(use_multiprocessing=True)
     parser.add_argument('--separate', dest='separate_hidden_layers', action='store_true',
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
@@ -214,12 +208,8 @@ if __name__ == "__main__":
         args.input = args.set_weights
 
     if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
-        if sys.version[0] == '3':
-            args.compress = int(args.hidden * (2 / 3))
-        else:  # Python 2
-            import math
+        args.compress = int(args.hidden * (2 / 3))
 
-            args.compress = int(math.ceil(120 * 0.66))
     # if not args.hidden: we could measure the lexicon size and compute the number of layers by dividing by 2
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
     results_dir = "simulations/%s%s/%s_%s_sim%s_h%s_c%s_fw%s_e%s" % ((args.resdir if args.resdir else ""),
@@ -324,9 +314,7 @@ if __name__ == "__main__":
         if platform.system() == 'Linux':
             os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
 
-    if args.use_multiprocessing:
-        processes = []
-
+    processes = []
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     # run the simulations
     for sim in simulation_range:
@@ -353,17 +341,12 @@ if __name__ == "__main__":
                          set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                          auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
                          separate_hidden_layers=args.separate_hidden_layers)
-        if args.use_multiprocessing and args.sim > 1:
-            process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
-            process.start()
-            processes.append(process)
-        else:
-            dualp.start_network(evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
-                                start_from_epoch=starting_epoch)
+        process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
+        process.start()
+        processes.append(process)
 
-    if args.use_multiprocessing and args.sim > 1:
-        for p in processes:
-            p.join()
+    for p in processes:
+        p.join()
 
     layers_with_softmax_act_function = ""
     for layer in dualp.srn.backpropagated_layers:
@@ -406,11 +389,11 @@ if __name__ == "__main__":
                 pickle.dump(results_mean_and_std, pckl)
 
             plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                           epochs=args.epochs)
+                           epochs=args.epochs, num_training=inputs.num_train, num_test=inputs.num_test)
             plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
                               test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
-                              num_test=inputs.num_test, num_train=inputs.num_train, test_df=inputs.testlines_df,
-                              auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
+                              auxiliary_experiment=args.auxiliary_experiment,
+                              evaluated_datasets=eval_sets)
             if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                 with open("%s/results.log" % results_dir, 'w') as f:
                     f.write("Code-switched percentage (test set): %s" %
