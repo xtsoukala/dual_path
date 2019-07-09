@@ -1,14 +1,23 @@
 import matplotlib
-from modules.formatter import is_not_empty, np, extract_cs_keys, defaultdict, torch, true_divide
-
 matplotlib.use('Agg')  # needed for the server only
+from modules.formatter import extract_cs_keys, torch, true_divide
+import seaborn as sns
 import matplotlib.pyplot as plt
+
+# import matplotlib
+# matplotlib.use('Agg')  # needed for the server only
+
+
+sns.set(palette="colorblind")
+sns.set_style("whitegrid")  # white
 
 
 class Plotter:
-    def __init__(self, results_dir, summary_sim, title, epochs=0):
+    def __init__(self, results_dir, summary_sim, title, num_training, num_test, epochs=0):
         self.results_dir = results_dir
         self.num_epochs = epochs
+        self.num_training = num_training
+        self.num_test = num_test
         self.epoch_range = range(epochs)
         self.bar_width = 0.35
         self.cs_results = {}
@@ -16,57 +25,28 @@ class Plotter:
         self.title = title
         self.summary_sim = summary_sim
         self.plot_detailed_cs = False
-        # green:4daf4a, orange:ff7f00, purple:984ea3, grey: 999999, brown:a65628, red:e41a1c, blue:377eb8, yellow:dede00
-        self.cblind_friendly = ['#4daf4a', '#a65628', '#ff7f00', '#999999', '#984ea3', '#377eb8', '#e41a1c', '#dede00']
-        self.colors = [('#4daf4a', '#dede00'), ('#984ea3', '#999999'), ('#377eb8', '')]
-        self.color_bars = ['#4daf4a', '#984ea3', '#dede00', '#999999', '#e41a1c', '#377eb8', '#ff7f00', '#4daf4a',
-                           '#a65628', '#984ea3', '#999999', '#e41a1c', '#dede00'] * 9
-        line_styles = ['-', '--', '-.', ':'] * 10
-        markers = ['.', ',', '+', '^', '*', 'x', '<', '>'] * 10
-        self.assigned_colors = defaultdict()
-        self.assigned_linestyle = defaultdict()
-        self.assigned_markers = defaultdict()
-        c = 0
-        for i in ['is', 'has']:
-            for p in ['participle', 'aux', 'right_after', 'after']:
-                self.assigned_colors["%s_%s" % (i, p)] = self.cblind_friendly[c]
-                self.assigned_colors["%s_%s_es_en" % (i, p)] = self.cblind_friendly[c]
-                self.assigned_linestyle["%s_%s" % (i, p)] = line_styles[c]
-                self.assigned_linestyle["%s_%s_es_en" % (i, p)] = line_styles[c]
 
-                self.assigned_markers["%s_%s" % (i, p)] = markers[c]
-                self.assigned_markers["%s_%s_es_en" % (i, p)] = markers[c]
-                c += 1
+    def plot_changes_over_time(self, items_to_plot, ylabel, ylim, fname, legend_loc='upper right', test_percentage=None,
+                               training_percentage=None):
+        if test_percentage is None:
+            test_percentage = self.num_test
+        if training_percentage is None:
+            training_percentage = self.num_training
 
-        self.assigned_colors['progressive_tener'] = self.assigned_colors['progressive_aux'] = '#999999'
-        self.assigned_colors['perfect_tener'] = self.assigned_colors['perfect_aux'] = '#377eb8'
-        self.assigned_colors['progressive'] = self.assigned_colors['progressive_participle'] = '#4daf4a'
-        self.assigned_colors['perfect'] = self.assigned_colors['perfect_participle'] = '#984ea3'
-
-        self.assigned_markers['progressive_tener'] = self.assigned_markers['progressive_aux'] = ','
-        self.assigned_markers['perfect_tener'] = self.assigned_markers['perfect_aux'] = 'x'
-        self.assigned_markers['progressive'] = self.assigned_markers['progressive_participle'] = '.'
-        self.assigned_markers['perfect'] = self.assigned_markers['perfect_participle'] = '*'
-
-    def plot_changes_over_time(self, items_to_plot, test_percentage, training_percentage, ylabel, ylim, fname,
-                               legend_loc='upper right'):
-        for item_idx, item in enumerate(items_to_plot):
-            test_value = self.percentage(self.results[item]['test'], test_percentage)
-            plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0], label=item)
-            if 'test-std_error' in self.results[item]:
-                test_std_error = self.results[item]['test-std_error']
-                lower_bound = self.percentage(self.results[item]['test'] - test_std_error, test_percentage)
-                upper_bound = self.percentage(self.results[item]['test'] + test_std_error, test_percentage)
-                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.colors[item_idx][0],
-                                 alpha=0.2)
-
-            if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
-                plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
-                         label="%s (Training)" % item, linestyle='--')
+        for set_name in ['test', 'training']:
+            if set_name == 'test':
+                percentage = test_percentage if test_percentage is not None else self.num_test
+            else:
+                percentage = training_percentage if training_percentage is not None else self.num_training
+            for item_idx, item in enumerate(items_to_plot):
+                if set_name in self.results[item]:
+                    value = self.percentage(self.results[item][set_name], percentage)
+                    plt.plot(self.epoch_range, value, label=item + " (training)" if set_name == 'training' else item)
+                    if '%s-std_error' % set_name in self.results[item]:
+                        std_error = self.results[item]['%s-std_error' % set_name]
+                        lower_bound = self.percentage(self.results[item][set_name] - std_error, percentage)
+                        upper_bound = self.percentage(self.results[item][set_name] + std_error, percentage)
+                        plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.2)
         plt.xlabel('epochs')
         if ylabel:
             plt.ylabel(ylabel)
@@ -76,11 +56,11 @@ class Plotter:
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage, ylabel, ylim,
+    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst, ylabel, ylim,
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
-            plt.plot(self.epoch_range, test_value, color=self.colors[item_idx][0],
+            plt.plot(self.epoch_range, test_value,
                      label=item.replace('_', ' ').replace('code switches', 'code-switches'))
             if 'test-std_error' in self.results[item]:
                 test_std_error = self.results[item]['test-std_error']
@@ -88,22 +68,17 @@ class Plotter:
                                               test_percentage_lst[item_idx])
                 upper_bound = self.percentage(self.results[item]['test'] + test_std_error,
                                               test_percentage_lst[item_idx])
-                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=self.colors[item_idx][0],
-                                 alpha=0.2)
+                plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.2)
 
             if 'training' in self.results[item]:
-                if is_not_empty(training_percentage):
-                    training_value = self.percentage(self.results[item]['training'], training_percentage)
-                else:
-                    training_value = self.results[item]['training']
-                plt.plot(self.epoch_range, training_value, color=self.colors[item_idx][1],
-                         label="%s (Training)" % item, linestyle='--')
+                training_value = self.percentage(self.results[item]['training'], training_percentage_lst[item_idx])
+                plt.plot(self.epoch_range, training_value, label="%s (training)" % item, linestyle='--')
         plt.xlabel('epochs')
         if ylabel:
             plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
-        plt.xticks(np.arange(1, 30, 2))
+        plt.xticks(torch.arange(1, max(self.epoch_range), 2))
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig(self.get_plot_path(fname))
         plt.close()
@@ -111,14 +86,12 @@ class Plotter:
     def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='lower right'):
         for i, result in enumerate(results):
             legend_label = legend[i]
-            color = self.assigned_colors[legend_label] if legend_label in self.assigned_colors else self.color_bars[i]
-            marker = self.assigned_markers[legend_label] if legend_label in self.assigned_markers else None
             res, std = result
-            plt.plot(self.epoch_range, res, color=color, label=legend_label, marker=marker)
+            plt.plot(self.epoch_range, res, label=legend_label)
             if std is not None:
                 lower_bound = [x - y for x, y in zip(res, std)]
                 upper_bound = [x + y for x, y in zip(res, std)]
-                plt.fill_between(self.epoch_range, lower_bound, upper_bound, facecolor=color, alpha=0.2)
+                plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.3)
         plt.xlabel('epochs')
         plt.ylabel(label)
         plt.ylim([0, ylim])
@@ -129,8 +102,7 @@ class Plotter:
         plt.close()
 
     def get_plot_path(self, fname):
-        return "%s/%s%s.pdf" % (self.results_dir, "%s" % (('summary_%s_' % self.summary_sim)
-                                                          if self.summary_sim else ''), fname)
+        return "%s/%s_%s.pdf" % (self.results_dir, self.summary_sim, fname)
 
     @staticmethod
     def adjust_y_axis(result):
@@ -145,11 +117,11 @@ class Plotter:
         for i, item in enumerate(items_to_plot):
             if not only_last_epoch:
                 rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for x in self.cs_results[item]],
-                                    self.bar_width, color=self.color_bars[i],
+                                    self.bar_width,  # color=self.color_bars[i],
                                     yerr=[x[1] for x in self.cs_results[item]]))
             else:
-                rects.append(ax.bar(index_size + (self.bar_width * i), self.cs_results[item][-1][0],
-                                    self.bar_width, color=self.color_bars[i], yerr=self.cs_results[item][-1][1]))
+                rects.append(ax.bar(index_size + (self.bar_width * i), item[0][-1],  # self.cs_results[item][-1][0],
+                                    self.bar_width, yerr=item[1][-1]))
 
         if label:
             ax.set_ylabel(label)
@@ -157,38 +129,67 @@ class Plotter:
             ax.set_title(self.title)
         ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
         ax.set_ylim(bottom=0)
-        ax.legend(([x[0] for x in rects]), legend)
+        if legend:
+            ax.legend(legend)
+
         ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
         plt.tight_layout()  # make room for labels
-        fname = '%s/"summary_%s_%s_cs.pdf' % (self.results_dir, self.summary_sim, fname)
+        fname = '%s/%s_%s_cs.pdf' % (self.results_dir, self.summary_sim, fname)
         plt.savefig(fname)
         plt.close()
 
-    def plot_bar_chart(self, indeces, label, items_to_plot, legend, fname):
+    @staticmethod
+    def rename_label(x):
+        new_label = x
+        if 'adj' in x:
+            new_label = 'adjective'
+        elif 'aux' in x:
+            new_label = 'auxiliary'
+        elif 'det' in x:
+            new_label = 'determiner'
+        elif 'noun' in x:
+            new_label = 'noun'
+        elif 'participle' in x:
+            new_label = 'participle'
+        elif 'prep' in x:
+            new_label = 'preposition'
+        elif 'verb' in x:
+            new_label = 'verb'
+        elif 'pron' in x:
+            new_label = 'pronoun'
+        return new_label
+
+    def plot_alternational_insertional_switching(self, indeces, items_to_plot, legend, label='% of correct sentences',
+                                                 filename_suffix=None):
         original_idx = list(indeces)
         insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
         alternations = [x for x in indeces if x.startswith('alt')]
-
-        fname = ['insertions.pdf', 'alternations.pdf']
+        labels = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
+        index_size = torch.arange(len(labels))
+        fname = ['insertional', 'alternational']
         for type, indeces in enumerate([insertions, alternations]):
-            index_size = np.arange(len(indeces))
             fig, ax = plt.subplots()
             rects = []
             for i, item in enumerate(items_to_plot):
-                rects.append(ax.bar(index_size + (self.bar_width * i), [x[0] for ind, x in
-                                                                        enumerate(self.cs_results[item])
-                                                                        if original_idx[ind] in indeces],
-                                    self.bar_width, color=self.color_bars[i], yerr=[x[1] for ind, x in
-                                                                                    enumerate(self.cs_results[item])
-                                                                                    if original_idx[ind] in indeces]))
+                sorted_by_label = sorted(list(zip([self.rename_label(x) for x in indeces],
+                                                  [x for ind, x in enumerate(self.cs_results[item])
+                                                   if original_idx[ind] in indeces])))
+                labels = [x[0] for x in sorted_by_label]
+                index_size = torch.arange(len(labels))
+                rects.append(ax.bar(index_size + (self.bar_width * i), [x[1][0] for x in sorted_by_label],
+                                    self.bar_width, yerr=[x[1][1] for x in sorted_by_label]))
             if self.title:
                 ax.set_title(self.title)
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
             ax.set_ylim(bottom=0)
-            ax.legend(([x[0] for x in rects]), legend, loc='upper left')
-            ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
+            if all(len(x) for x in rects) > 0:
+                ax.legend(([x[0] for x in rects]), legend, loc='upper left')
+            ax.set_title(fname[type], fontsize=16)
+            ax.set_ylabel(label)
+            ax.set_xticklabels(labels, rotation=55)  # rotate labels to fit better
+            ax.tick_params(axis='both', labelsize=14)
             plt.tight_layout()  # make room for labels
-            filename = '%s/%s' % (self.results_dir, fname[type])
+            filename = self.get_plot_path(fname[type] if not filename_suffix else fname[type] + filename_suffix)
             plt.savefig(filename)
             plt.close()
 
@@ -204,17 +205,18 @@ class Plotter:
 
         fig, ax = plt.subplots()
 
-        index = np.arange(n_groups)
+        index = torch.arange(n_groups)
         bar_width = 0.3
         opacity = 0.7
 
         error_config = {'ecolor': '0.3'}
 
         ax.bar(index, means_prog, bar_width, alpha=opacity,
-               color='#4daf4a', yerr=std_prog, error_kw=error_config, label='auxiliary')
+               # color='#4daf4a',
+               yerr=std_prog, error_kw=error_config, label='auxiliary')
 
         ax.bar(index + bar_width, means_perfect, bar_width, alpha=opacity,
-               color='#984ea3', yerr=std_perfect, error_kw=error_config, label='participle')
+               yerr=std_perfect, error_kw=error_config, label='participle')
 
         ax.set_xticks(index + bar_width / 2)
         ax.set_xticklabels(('progressive', 'perfect'))
@@ -225,9 +227,10 @@ class Plotter:
         plt.savefig(filename)
         plt.close()
 
-    def plot_results(self, results, num_train, num_test, test_df, test_sentences_with_pronoun,
-                     cognate_experiment, auxiliary_experiment, evaluated_datasets):
+    def plot_results(self, results, test_sentences_with_pronoun, cognate_experiment, auxiliary_experiment,
+                     evaluated_datasets):
         correct_test = results['correct_meaning']['test']
+        correct_training = results['correct_meaning']['training'] if 'training' in results['correct_meaning'] else 0
         self.results = results
         if 'all_cs_types' in self.results:
             all_cs_types = self.results['all_cs_types']
@@ -235,20 +238,19 @@ class Plotter:
             all_cs_types = extract_cs_keys([self.results], set_names=evaluated_datasets)
 
         self.plot_changes_over_time(items_to_plot=['correct_meaning', 'correct_pos'], ylabel='Percentage correct (%)',
-                                    test_percentage=num_test, training_percentage=num_train, ylim=100,
-                                    fname="performance", legend_loc='lower right')
+                                    ylim=100, fname="performance", legend_loc='lower right')
         # !------------  CODE-SWITCHES ------------!
         correct_code_switches = results['correct_code_switches']['test']
         if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             self.plot_changes_over_time(items_to_plot=['correct_code_switches', 'all_code_switches'],
-                                        test_percentage=num_test, training_percentage=num_train, ylim=40,
-                                        ylabel='%% CS among %s set' % 'test',
+                                        ylim=40, ylabel='%% CS among %s set' % 'test',
                                         fname='code_switches_%s_set' % 'test')
 
             self.plot_multiple_changes_over_time(items_to_plot=['correct_code_switches', 'correct_meaning'],
                                                  legend_loc='lower right',
-                                                 test_percentage_lst=[correct_test, num_test],
-                                                 training_percentage=None, ylim=90, ylabel=None,
+                                                 test_percentage_lst=[correct_test, self.num_test],
+                                                 training_percentage_lst=[correct_training, self.num_training],
+                                                 ylim=90, ylabel=None,
                                                  fname='performance_and_code_switches')
             # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
             self.plot_changes_over_time(ylim=40, items_to_plot=['correct_code_switches'],
@@ -285,35 +287,39 @@ class Plotter:
 
             # make sure there is still something to be plotted after the manipulations
             if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
-                self.plot_bar_chart(label='CS types (%% of correctly produced %s set)' % 'test',
-                                    indeces=all_cs_types, legend=('target lang: Spanish', 'target lang: English'),
-                                    fname='code_switches_correct_test_set_last_epoch',
-                                    items_to_plot=['type_correct_test_last_epoch_es',
-                                                   'type_correct_test_last_epoch_en'])
-                # !------------ Now plot all CS types per epoch  ------------#
-                if self.plot_detailed_cs:
-                    for i, cs_type in enumerate(all_cs_types):
-                        self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
-                                                    ylim=15, legend=('target lang: Spanish', 'target lang: English'),
-                                                    fname='code_switches_correct_test_%s' % cs_type,
-                                                    results=[self.cs_results['type_correct_test_es'][i],
-                                                             self.cs_results['type_correct_test_en'][i]])
+                self.plot_alternational_insertional_switching(label='CS types (% of correctly produced test set)',
+                                                              indeces=all_cs_types,
+                                                              legend=('target lang: Spanish', 'target lang: English'),
+                                                              items_to_plot=['type_correct_test_last_epoch_es',
+                                                                             'type_correct_test_last_epoch_en'])
+                if False:
+                    # !------------ Now plot all CS types per epoch  ------------#
+                    if self.plot_detailed_cs:
+                        for i, cs_type in enumerate(all_cs_types):
+                            self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
+                                                        ylim=15,
+                                                        legend=('target lang: Spanish', 'target lang: English'),
+                                                        fname='code_switches_correct_test_%s' % cs_type,
+                                                        results=[self.cs_results['type_correct_test_es'][i],
+                                                                 self.cs_results['type_correct_test_en'][i]])
 
-                # Code-switches per message
-                per_message = sorted([k for k in results.keys() if k[0].isupper()])
-                with open("%s/per_message.csv" % self.results_dir, "w") as f:
-                    f.writelines("%s,N,message\n" % ','.join(map(str, self.epoch_range)))
-                    for key in per_message:
-                        f.writelines('%s,%s,"%s"\n' % (','.join(["%s (%s)" % (str(x), str(y))
-                                                                 for x, y in zip(results[key]['test'],
-                                                                                 results[key]['test-std_error'])]
-                                                                if 'test-std_error' in results[key]
-                                                                   and results[key]['test-std_error'] is not None and
-                                                                   not isinstance(results[key]['test-std_error'], int)
-                                                                else map(str, results[key]['test'])) if
-                                                       not isinstance(results[key]['test'], int)
-                                                       else "," * self.num_epochs,
-                                                       sum(test_df.message.str.count(key)), key))
+                    # Code-switches per message
+                    per_message = sorted([k for k in results.keys() if k[0].isupper()])
+                    with open("%s/per_message.csv" % self.results_dir, "w") as f:
+                        f.writelines("%s,N,message\n" % ','.join(map(str, self.epoch_range)))
+                        for key in per_message:
+                            f.writelines('%s,%s,"%s"\n' % (','.join(["%s (%s)" % (str(x), str(y))
+                                                                     for x, y in zip(results[key]['test'],
+                                                                                     results[key]['test-std_error'])]
+                                                                    if 'test-std_error' in results[key]
+                                                                       and results[key][
+                                                                           'test-std_error'] is not None and
+                                                                       not isinstance(results[key]['test-std_error'],
+                                                                                      int)
+                                                                    else map(str, results[key]['test'])) if
+                                                           not isinstance(results[key]['test'], int)
+                                                           else "," * self.num_epochs,
+                                                           sum(test_df.message.str.count(key)), key))
                 if auxiliary_experiment:
                     all_correct = {'has': [], 'is': []}
                     for aux in ['is', 'has']:
@@ -439,9 +445,11 @@ class Plotter:
                         if include_ff:
                             items_to_plot.append('type_correct_%s-ff_last_epoch' % dataset_type)
                             legend.append('FF')
-                        self.plot_bar_chart(label='CS types (%% of %s set - last epoch)' % dataset_type, legend=legend,
-                                            items_to_plot=items_to_plot, indeces=all_cs_types,
-                                            fname='type_cs_cognate_experiment_last_epoch_%sset' % dataset_type)
+                        self.plot_alternational_insertional_switching(label='CS types (%% of %s set - last epoch)' %
+                                                                            dataset_type, legend=legend,
+                                                                      items_to_plot=items_to_plot, indeces=all_cs_types,
+                                                                      filename_suffix='type_cs_cognate_experiment_last_'
+                                                                            'epoch_%sset' % dataset_type)
                         # !------------ Now plot all CS types per epoch for COGNATE EXPERIMENT  ------------#
                         for i, cs_type in enumerate(all_cs_types):
                             results_lst = [self.cs_results['type_correct_%s' % dataset_type][i],
@@ -476,16 +484,4 @@ class Plotter:
 
     @staticmethod
     def percentage(x, total):
-        if isinstance(total, int) and total == 0:
-            return float('NaN')
-        if isinstance(x, list):
-            x = torch.tensor(x)
-        return true_divide(x * 100, total, where=x != 0)  # avoid division by 0
-
-    @staticmethod
-    def is_nd_array_or_list(x):
-        type(x)
-        sys.exit()
-        if isinstance(x, (list, np .ndarray)):
-            return True
-        return False
+        return true_divide(x * 100, total).numpy()

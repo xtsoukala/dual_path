@@ -22,7 +22,7 @@ class DualPath:
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
-                 only_evaluate, allow_cognate_boost=False, simulation_num=None):
+                 only_evaluate, separate_hidden_layers, allow_cognate_boost=False, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -67,9 +67,10 @@ class DualPath:
         self.input_copy = input_copy
         self.set_weights_folder = set_weights_folder
         self.set_weights_epoch = set_weights_epoch
+        self.separate_hidden_layers = separate_hidden_layers
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
                                           debug_messages=srn_debug, include_role_copy=role_copy,
-                                          include_input_copy=input_copy)
+                                          include_input_copy=input_copy, separate_hidden_layers=separate_hidden_layers)
         self.initialize_srn()
 
     def init_logger(self, name):
@@ -100,7 +101,12 @@ class DualPath:
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", len(self.inputs.languages))
-        self.srn.add_layer("hidden", self.hidden_size, recurrent=True)
+        if self.separate_hidden_layers:
+            self.srn.add_layer("hidden_semantic", int(self.hidden_size * 2 / 3), recurrent=True)
+            self.srn.add_layer("hidden_syntactic", int(self.hidden_size / 3), recurrent=True)
+        else:
+            self.srn.add_layer("hidden", self.hidden_size, recurrent=True)
+
         # If pred_role is not softmax the model performs poorly on determiners.
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
         self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
@@ -121,13 +127,24 @@ class DualPath:
         if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
             self.srn.add_layer("role_copy", self.inputs.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
-        self.srn.connect_layers("role", "hidden")
-        self.srn.connect_layers("compress", "hidden")
-        self.srn.connect_layers("eventsem", "hidden")
-        self.srn.connect_layers("target_lang", "hidden")
-        # hidden to predicted and output layers
-        self.srn.connect_layers("hidden", "pred_role")
-        self.srn.connect_layers("hidden", "pred_compress")
+
+        if self.separate_hidden_layers:
+            self.srn.connect_layers("role", "hidden_semantic")
+            self.srn.connect_layers("eventsem", "hidden_semantic")
+            self.srn.connect_layers("target_lang", "hidden_semantic")
+            self.srn.connect_layers("compress", "hidden_syntactic")
+            # hidden to predicted and output layers
+            self.srn.connect_layers("hidden_semantic", "pred_role")
+            self.srn.connect_layers("hidden_syntactic", "pred_compress")
+        else:
+            self.srn.connect_layers("role", "hidden")
+            self.srn.connect_layers("eventsem", "hidden")
+            self.srn.connect_layers("target_lang", "hidden")
+            self.srn.connect_layers("compress", "hidden")
+            # hidden to predicted and output layers
+            self.srn.connect_layers("hidden", "pred_role")
+            self.srn.connect_layers("hidden", "pred_compress")
+
         self.srn.connect_layers("pred_role", "pred_identifiability")
         self.srn.connect_layers("pred_role", "pred_concept")
         self.srn.connect_layers("pred_identifiability", "output")
@@ -138,14 +155,15 @@ class DualPath:
                                   results_dir=self.inputs.directory, plot_stats=False,
                                   simulation_num=self.simulation_num)
 
-    def feed_line(self, line, weights_role_concept, epoch=None, backpropagate=False):
+    def feed_line(self, line, weights_role_concept, epoch=None, backpropagate=False, activate_target_language=False):
         produced_sent_ids = []
         append_to_produced = produced_sent_ids.append
         # self.srn.set_message_reset_context(updated_role_concept=self.inputs.get_weights_role_concept(line.message),
         #print(line)
         #print(weights_role_concept)
         #print(line.event_sem_activations)
-        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line)
+        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line,
+                                           activate_language=(activate_target_language or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         for trg_idx in line.target_sentence_idx + [None] * (5 if not backpropagate else 0):
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
@@ -155,7 +173,7 @@ class DualPath:
                 self.srn.backpropagate(epoch)
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
-                if self.activate_both_lang and prod_idx is None:
+                if activate_target_language and prod_idx is None and self.activate_both_lang:
                     # TODO: play with activations, e.g. activate the target language slightly more
                     # ones or: [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
                     self.srn.update_layer_activation("target_lang", activation=torch.ones(2))
@@ -163,7 +181,6 @@ class DualPath:
                 append_to_produced(prod_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if period produced
                     break
-                print(self.inputs.sentence_from_indeces(produced_sent_ids))
 
             if self.allow_cognate_boost and self.activate_both_lang and prod_idx in self.inputs.cognate_idx:
                 self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(line.lang))  # cognate boost
@@ -183,6 +200,7 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
+        :param start_from_epoch: training can start from a later epoch
         """
         if not self.only_evaluate:
             epoch = start_from_epoch
@@ -193,7 +211,7 @@ class DualPath:
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
                     #print("LINE:", train_line)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
-                                   backpropagate=True)
+                                   backpropagate=True, activate_target_language=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
                         self.srn.learn_rate -= self.lrate_decrease_step
                 epoch += 1  # increase number of epochs, begin new iteration
@@ -211,9 +229,11 @@ class DualPath:
             self.set_level_logger = self.init_logger('set_level')
             self.evaluate_network(set_names=set_names)
 
-    def evaluate_network(self, set_names):
+    def evaluate_network(self, set_names, top_down_language_activation=False):
         """
         :param set_names: ['test', 'training'] or ['test'] if only the test set is evaluated
+        :param top_down_language_activation: activates both languages during the whole test duration
+        (not just after the production of the first word)
         """
         results = {
             'correct_meaning': {
@@ -228,6 +248,7 @@ class DualPath:
                 set_name: [] for set_name in set_names
             }
         }
+
         if self.auxiliary_experiment:
             for aux in ['is', 'has']:
                 for point in ['participle', 'aux', 'after', 'right_after']:
@@ -239,6 +260,9 @@ class DualPath:
         if self.pronoun_experiment:
             results['pronoun_errors_flex'] = {set_name: [] for set_name in set_names}
             results['pronoun_errors'] = {set_name: [] for set_name in set_names}
+
+        if top_down_language_activation:
+            self.srn.update_layer_activation("target_lang", activation=torch.ones(2))
 
         for set_name in set_names:
             if set_name == 'test':
@@ -260,19 +284,24 @@ class DualPath:
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
                                       set_weights_epoch=epoch, plot_stats=False)
                 for line in set_lines.itertuples():
-                    # line = set_lines.loc[line_idx]   # FIXME: weights_role_concept[line_idx])
-                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message))
+                    # line = set_lines.iloc[line_idx]   # FIXME
+                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message),
+                                                  activate_target_language=not top_down_language_activation)
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
 
-                    target_pos, target_sentence_idx = line.target_pos, line.target_sentence_idx
+                    target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
 
-                    """produced_sentence = 'the woman has jumped .'
-                    target_sentence = 'la mujer ha saltado .'
-                    produced_idx = self.inputs.sentence_indeces(produced_sentence)
-                    produced_pos = self.inputs.sentence_pos(produced_idx)
-                    target_sentence_idx = self.inputs.sentence_indeces(target_sentence)
-                    target_pos = self.inputs.sentence_pos(target_sentence_idx)"""
+                    debug_sentence = False  # debug specific sentence
+                    if debug_sentence:
+                        logger.warning('Debugging sentence pair')
+                        produced_sentence = 'la anfitriona tiene pateado el bolígrafo .'
+                        target_sentence = 'la anfitriona ha pateado el bolígrafo .'
+                        target_lang = 'es'
+                        produced_idx = self.inputs.sentence_indeces(produced_sentence)
+                        produced_pos = self.inputs.sentence_pos(produced_idx)
+                        target_sentence_idx = self.inputs.sentence_indeces(target_sentence)
+                        target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
                     has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
                                                                                                  False, None)
@@ -283,9 +312,6 @@ class DualPath:
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
                                                                                                 target_pos,
                                                                                                 produced_idx)
-                    # FIXME: if the "allowed structures" are corrected we won't need this step
-                    produced_pos = self.inputs.replace_verb_with_auxiliary(produced_pos)
-                    target_pos = self.inputs.replace_verb_with_auxiliary(target_pos)
 
                     code_switched = self.inputs.is_code_switched(produced_idx, target_lang_idx=target_sentence_idx[0])
                     if code_switched:
@@ -299,16 +325,18 @@ class DualPath:
                         counter['correct_pos'] += 1
                         has_correct_pos = True
                         if not code_switched:
-                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, line.target_sentence_idx)
+                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
                         else:  # only count grammatically correct CS sentences -- determine CS type here
-                            cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx)
-                            #if cs_type == "inter-sentential":  # for now don't count it as CS
-                            #    correct_meaning = True
-                            if cs_type:  # TODO: check the failed sentences too
+                            cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx, target_lang,
+                                                                         top_down_language_activation)
+                            if top_down_language_activation and cs_type == "inter-sentential":  # don't count it as CS
+                                correct_meaning = True
+                                code_switched = False
+                            elif cs_type:  # TODO: check the failed sentences too
                                 counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True
                                 counter['correct_code_switches'] += 1
-                                cs_type_with_lang = "%s-%s" % (line.lang, cs_type)
+                                cs_type_with_lang = "%s-%s" % (target_lang, cs_type)
                                 counter['type_code_switches'][cs_type_with_lang] += 1
                                 if self.cognate_experiment:  # check for cognates vs FFs vs regular (no lang)
                                     if ',COG' in line.message:
@@ -342,24 +370,24 @@ class DualPath:
                                                 if switched_after_es_en:
                                                     counter['%s_right_after_es_en' % aux] += 1
 
-                                        counter["correct_cs_%s_%s" % (aux, line.lang)] += 1
+                                        counter["correct_cs_%s_%s" % (aux, target_lang)] += 1
                         if correct_meaning:
                             counter['correct_meaning'] += 1
                             # this contains number of ALL correct progressive/perfect sentences, even the CS ones
-                            counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', line.lang)] += 1
+                            counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', target_lang)] += 1
                             counter[line.event_sem_message] += 1
                         else:
                             has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                              feature="determiners")
                             has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                feature="tense")
+                            # print('det, tense:', has_wrong_det, has_wrong_tense)
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                                 counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
                                 print(produced_sentence, "correct meaning,FIXME")  # FIXME
                                 correct_meaning += 1
                                 counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message
-                                                           else 'is', line.lang)] += 1
-
+                                                           else 'is', target_lang)] += 1
                         if epoch > 0 and self.pronoun_experiment:  # only check the grammatical sentences
                             if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
                                 if self.inputs.test_meaning_without_pronouns(produced_idx, line.target_sentence_idx):
@@ -371,6 +399,7 @@ class DualPath:
                     if epoch > 0:
                         meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
                         pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos)
+
                         log_info = (epoch, produced_sentence, line.target_sentence,
                                     pos, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:

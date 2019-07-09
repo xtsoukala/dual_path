@@ -6,18 +6,18 @@ import pickle
 import pandas as pd
 import numpy as np
 import torch
+import math
 import torch.multiprocessing as mp
+import operator
+import subprocess
 from collections import defaultdict, Counter
-
-try:
-    from itertools import zip_longest as zp
-except:  # python 2
-    from itertools import izip as zp
+from itertools import zip_longest as zp
 
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset, overt_pronouns,
-                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener):
+                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener,
+                 test_haber_frequency, convert_input):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -28,11 +28,16 @@ class InputFormatter:
             self.identifiability += ['M', 'F']
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.convert_input = convert_input
         self.replace_haber_tener = replace_haber_tener
-        if replace_haber_tener:  # call sed to replace training and test files with "tener"
+        if replace_haber_tener and convert_input:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
             self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
                                 (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
+        self.test_haber_frequency = test_haber_frequency
+        if test_haber_frequency and convert_input:
+            self.make_haber_and_tener_synonyms(directory)
+
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -43,6 +48,10 @@ class InputFormatter:
         self.event_semantics = self._read_file_to_list('event_semantics.in')
         self.prodrop = prodrop
         self.emphasis_percentage = overt_pronouns
+        self.translation_cache = {}
+        self.code_switched_type_cache = {}
+        self.switch_points_cache = {}
+        self.concept_to_morpheme_cache = {}
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
@@ -51,6 +60,7 @@ class InputFormatter:
         self.period_idx = self.get_lexicon_index('.')
         self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
+        self.haber_tener_idx = self.df_query_to_idx("morpheme_es == 'tiene' or morpheme_es == 'ha'", lang='es')
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
@@ -90,23 +100,41 @@ class InputFormatter:
 
     def update_sets(self, new_directory):
         self.directory = new_directory
-        if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
+        if self.replace_haber_tener and self.convert_input:  # call sed to replace training and test files with "tener"
             os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
+        elif self.test_haber_frequency and self.convert_input:
+            self.make_haber_and_tener_synonyms(new_directory)
         self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()  # re-read files
         self.num_train = len(self.trainlines_df)
         self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
 
+    @staticmethod
+    def make_haber_and_tener_synonyms(directory):
+        fname = "%s/training.in" % directory
+        os.system("sed -i -e 's/ ha / tiene /g' %s" % fname)
+        num = int(subprocess.check_output("cat %s | grep -w tiene | wc -l" % fname, shell=True))
+        num = num / 2  # only convert half of the instances
+        os.system("awk '{for(i=1;i<=NF;i++){if(x<%s&&$i==\"tiene\"){x++;sub(\"tiene\",\"ha\",$i)}}}1' %s > "
+                  "tmp && mv tmp %s" % (num, fname, fname))
+
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
+        if (self.test_haber_frequency and self.filter_list(out_sentence_idx, self.haber_tener_idx) ==
+                self.filter_list(trg_sentence_idx, self.haber_tener_idx)):  # remove haber/tener and check
+                return True
         # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        out_sentence_idx = [x for x in out_sentence_idx if x not in self.to_prepositions_idx]
-        trg_sentence_idx = [x for x in trg_sentence_idx if x not in self.to_prepositions_idx]
+        out_sentence_idx = self.filter_list(out_sentence_idx, self.to_prepositions_idx)
+        trg_sentence_idx = self.filter_list(trg_sentence_idx, self.to_prepositions_idx)
         if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
             return True
         return False
+
+    @staticmethod
+    def filter_list(lst, filtered_items):
+        return [x for x in lst if x not in filtered_items]
 
     def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos, out_sentence_idx):
         """
@@ -183,7 +211,7 @@ class InputFormatter:
             return True
         return False
 
-    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx):
+    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx, target_lang, top_down_language_activation):
         """ Types of code-switches:
                 - intra-sentential (in the middle of the sentence)
                 - inter-sentential (full switch at sentence boundaries)
@@ -191,51 +219,64 @@ class InputFormatter:
                 - noun borrowing? (if no determiners were switched)
             Note: Returns FALSE if the message conveyed was not correct
         """
-        # "translate" message into the target language
-        trg_lang = self.get_target_language_from_sentence_idx(trg_sentence_idx)
-        translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx, trg_lang)
-        # check for insertions (cases where only 1 idx is from the other language)
-        insertion_type = self.check_for_insertions(out_sentence_idx, trg_lang)
-        if insertion_type:
-            for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
-                if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
-                    return insertion_type
-        # Now check for alternational switching - compare with target sentence
-        for translated_sentence_idx in translated_sentence_candidates:
-            cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, trg_sentence_idx)
-            if cs_type:  # if not False no need to look further
-                return cs_type
-        # no CS type found. Either the meaning was incorrect or the produced lang was different than the "target" one
-        return False
-
-    def get_target_language_from_sentence_idx(self, sentence_idx):
-        lang = self.L1
-        if sentence_idx[0] >= self.code_switched_idx:
-            lang = self.L2
-        return lang
+        out_idx = repr(out_sentence_idx)
+        cache = self.query_cache(out_idx, self.code_switched_type_cache)
+        if not cache:
+            # "translate" message into the target language
+            translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
+                                                                                            target_lang)
+            # check for insertions (cases where only 1 idx is from the other language)
+            insertion_type = self.check_for_insertions(out_sentence_idx,
+                                                       None if top_down_language_activation else target_lang)
+            if insertion_type:
+                for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
+                    if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
+                        self.code_switched_type_cache[out_idx] = insertion_type
+                        return insertion_type
+            # Now check for alternational switching - compare with target sentence
+            for translated_sentence_idx in translated_sentence_candidates:
+                cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx,
+                                                             trg_sentence_idx)
+                if cs_type:  # if not False no need to look further
+                    self.code_switched_type_cache[out_idx] = cs_type
+                    return cs_type
+            # no CS type found. Either the meaning was incorrect or the produced lang was different than the target one
+            cache = False
+            self.code_switched_type_cache[out_idx] = cache
+        return cache
 
     def check_for_insertions(self, out_sentence_idx, target_lang):
         non_shared_idx = [w for w in out_sentence_idx if w not in self.shared_idx]
         l2_words = sum(1 for i in non_shared_idx if i >= self.code_switched_idx)
         l1_words = sum(1 for i in non_shared_idx if i < self.code_switched_idx)
-        if ((target_lang == self.L2 and l1_words >= l2_words and out_sentence_idx[0] < self.code_switched_idx) or
-                (target_lang == self.L1 and l1_words <= l2_words and out_sentence_idx[0] >= self.code_switched_idx)):
-            print(out_sentence_idx, self.sentence_from_indeces(out_sentence_idx), target_lang, 'RESOLVE',
-                  l1_words, l2_words)
 
-        if target_lang == self.L2:  # test for L1 insertions
-            check_idx = [i for i in non_shared_idx if i < self.code_switched_idx]
-        else:  # check for L2 insertions
-            check_idx = [i for i in non_shared_idx if i >= self.code_switched_idx]
+        filter_idx = operator.lt if target_lang == self.L2 or l2_words > l1_words else operator.ge
+        check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
+
+        if target_lang and not check_idx:
+            # all words were in the "non-target" language. Doesn't really count as inter-sentential as
+            # no language was set at the beginning of the sentence
+            return "inter-sentential"
 
         check_idx_pos = [self.pos_lookup(w) for w in check_idx]
         if len(set(check_idx_pos)) == 1:
             return check_idx_pos[0]
         return False
 
+    @staticmethod
+    def query_cache(out_idx, cache):
+        if out_idx in cache:
+            return cache[out_idx]
+        return []
+
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang):
-        trans = [self.find_equivalent_translation_idx(idx, trg_lang) for i, idx in enumerate(out_sentence_idx)]
-        return [list(x for x in tup) for tup in list(itertools.product(*trans))]
+        out_idx = repr(out_sentence_idx)
+        cache = self.query_cache(out_idx, self.translation_cache)
+        if not cache:
+            trans = [self.find_equivalent_translation_idx(idx, trg_lang) for i, idx in enumerate(out_sentence_idx)]
+            cache = [list(x for x in tup) for tup in list(itertools.product(*trans))]
+            self.translation_cache[out_idx] = cache
+        return cache
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
@@ -273,33 +314,38 @@ class InputFormatter:
         return True
 
     def check_switch_points(self, sentence_indeces, sentence_pos, pos_of_interest='aux'):
-        # assumption: lexicon contains first EN and then ES words
-        (at, right_after, after, at_esen, right_after_esen, after_esen,
-         after_anywhere, after_anywhere_esen) = (False, False, False, False, False, False, False, False)
-        if pos_of_interest in sentence_pos:
-            pos_idx = sentence_pos.index(pos_of_interest)
-        else:
-            pos_idx = sentence_pos.index('verb')
-        if pos_idx:
-            # check switch before pos_of_interest
-            at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
-            # check Spanish-to-English direction
-            at_esen = True if at and sentence_indeces[pos_idx] >= self.code_switched_idx else False
-            # check switch right after (e.g. between aux and participle)
-            right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
-                                                target_lang_idx=sentence_indeces[pos_idx])
-            right_after_esen = (True if right_after and sentence_indeces[pos_idx] < self.code_switched_idx
-                                else False)
-            # check switch at the end (e.g. after aux and participle)
-            after = self.is_code_switched(sentence_indeces[pos_idx + 1:pos_idx + 3],
-                                          target_lang_idx=sentence_indeces[pos_idx + 1])
-            after_esen = True if after and sentence_indeces[pos_idx + 1] < self.code_switched_idx else False
+        out_idx = repr(sentence_indeces)
+        cache = self.query_cache(out_idx, self.switch_points_cache)
+        if not cache:
+            # FIXME: current assumption: lexicon contains first EN and then ES words
+            (at, right_after, after, at_esen, right_after_esen, after_esen, after_anywhere,
+             after_anywhere_esen) = (False, False, False, False, False, False, False, False)
+            pos_idx = None
+            if pos_of_interest in sentence_pos:
+                pos_idx = sentence_pos.index(pos_of_interest)
+            if pos_idx:
+                # check switch before pos_of_interest
+                at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
+                # check Spanish-to-English direction
+                at_esen = True if at and sentence_indeces[pos_idx] >= self.code_switched_idx else False
+                # check switch right after (e.g. between aux and participle)
+                right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
+                                                    target_lang_idx=sentence_indeces[pos_idx])
+                right_after_esen = (True if right_after and sentence_indeces[pos_idx] < self.code_switched_idx
+                                    else False)
+                # check switch at the end (e.g. after aux and participle)
+                after = self.is_code_switched(sentence_indeces[pos_idx + 1:pos_idx + 3],
+                                              target_lang_idx=sentence_indeces[pos_idx + 1])
+                after_esen = True if after and sentence_indeces[pos_idx + 1] < self.code_switched_idx else False
 
-            after_anywhere = self.is_code_switched(sentence_indeces[pos_idx + 1:],
-                                                   target_lang_idx=sentence_indeces[pos_idx + 1])
-            after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] < self.code_switched_idx
-                                   else False)
-        return at, right_after, after, after_anywhere, at_esen, right_after_esen, after_esen, after_anywhere_esen
+                after_anywhere = self.is_code_switched(sentence_indeces[pos_idx + 1:],
+                                                       target_lang_idx=sentence_indeces[pos_idx + 1])
+                after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] < self.code_switched_idx
+                                       else False)
+            cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
+                     after_esen, after_anywhere_esen)
+            self.switch_points_cache[out_idx] = cache
+        return cache
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
         """
@@ -339,8 +385,14 @@ class InputFormatter:
         return self.lexicon.index(word)
 
     def concept_to_morphemes(self, lex_idx, target_lang):
-        current_lang = self.L1 if target_lang == self.L2 else self.L2
-        return self.df_query_to_idx("morpheme_%s == '%s'" % (current_lang, self.lexicon[lex_idx]), lang=target_lang)
+        idx = repr((lex_idx, target_lang))
+        cache = self.query_cache(idx, self.concept_to_morpheme_cache)
+        if not cache:
+            current_lang = self.L1 if target_lang == self.L2 else self.L2
+            cache = self.df_query_to_idx("morpheme_%s == '%s'" % (current_lang, self.lexicon[lex_idx]),
+                                         lang=target_lang)
+            self.concept_to_morpheme_cache[idx] = cache
+        return cache
 
     def _number_of_test_pronouns(self):
         return sum(self.testlines_df.target_sentence.str.count('(^| )(s)?he '))
@@ -372,9 +424,20 @@ class InputFormatter:
         return df, weights_role_concept
 
     def read_allowed_pos(self):
-        """ returns all allowed POS structures in the training file """
-        return [list([i.replace('aux', 'verb') for i in x]) for x in set(tuple(x)
-                                                                         for x in self.trainlines_df.target_pos)]
+        """ returns all (distinct) allowed POS structures in the training file (list of lists) """
+        return list(map(list, set(map(tuple, self.trainlines_df.target_pos))))
+
+    @staticmethod
+    def correct_auxiliary_phrase(pos):
+        if 'verb' in pos and 'participle' in pos:
+            pos = list([i.replace('verb', 'aux') for i in pos])
+        elif 'aux' in pos and 'verb' in pos:
+            pos = list([i.replace('verb', 'participle') for i in pos])
+        elif pos.count('verb') == 2:
+            p_idx = pos.index('verb')
+            pos[p_idx] = 'aux'
+            pos[p_idx + 1] = 'participle'
+        return pos
 
     def _read_file_to_list(self, fname):
         """
@@ -421,41 +484,14 @@ class InputFormatter:
         """
         return [self.get_lexicon_index(w) for w in sentence.split()]
 
-    # TODO: remove_period?
-    def sentence_pos(self, sentence_idx_lst, remove_period=False):
+    def sentence_pos(self, sentence_idx_lst):
         """
         :param sentence_idx_lst: sentence in list format. Either contains activations in the lexicon for the sentence
         or the words (in that case, convert_to_idx should be set to True)
-        :param remove_period: whether to remove the period (last element) from the sentence (useful when checking POS)
-        :return:
+        :return: returns a list with the POS tags of a sentence
         """
-        if remove_period and sentence_idx_lst[-1] == self.period_idx:
-            sentence_idx_lst = sentence_idx_lst[:-1]
         pos = [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
-        if 'aux' in pos:
-            idx = pos.index('aux')
-            pos[idx] = 'verb'
-        """if pos.count('verb') > 1:
-            idx = pos.index('verb')
-            pos[idx] = 'aux'
-            pos[idx + 1] = 'participle'
-        elif 'verb' in pos and 'participle' in pos:
-            pos = [w.replace('verb', 'aux') for w in pos]"""
-        return pos
-
-    @staticmethod
-    def replace_verb_with_auxiliary(sentence_pos):
-        if 'participle' in sentence_pos:
-            idx = sentence_pos.index('participle')
-            sentence_pos[idx-1] = 'aux'
-        elif sentence_pos.count('verb') == 2:
-            idx = sentence_pos.index('verb')
-            sentence_pos[idx] = 'aux'
-            sentence_pos[idx+1] = 'participle'
-        elif 'aux' in sentence_pos and 'verb' in sentence_pos:
-            idx = sentence_pos.index('verb')
-            sentence_pos[idx] = 'participle'
-        return sentence_pos
+        return self.correct_auxiliary_phrase(pos)
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -558,7 +594,7 @@ class InputFormatter:
         pass
 
     def training_is_successful(self, x, threshold):
-        return np.true_divide(x[-1] * 100, self.num_test) >= threshold
+        return true_divide(x[-1] * 100, self.num_test) >= threshold
 
     def df_query_to_idx(self, query, lang=None):
         if lang:
@@ -586,23 +622,20 @@ def is_not_nan(x):
     return False
 
 
-def is_not_empty(x):
-    if x != [] and sum(x) > 0:  # do not simplify
-        return True
-    return False
+def get_np_mean_and_std_err(x, squared_num_simulations):
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x).float()
+    #return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
+    return x.mean(0), standard_error(x.std(0), squared_num_simulations)  # mean of lists (per column)
 
 
-def get_np_mean_and_std_err(x, summary_sim):
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
-    return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
-
-
-def standard_error(std, num_simulations):
-    return true_divide(std, torch.sqrt(num_simulations))
+def standard_error(std, squared_num_simulations):
+    #print('SE', std, num_simulations)
+    return true_divide(std, squared_num_simulations)
 
 
 def true_divide(x, total):
+    #print('TD', x, total)
     return torch.div(x, total)
 
 
@@ -647,7 +680,8 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in results_sum.keys():
         for set_name in evaluated_sets:
-            np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name], summary_sim=len(valid_results))
+            np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name],
+                                                          squared_num_simulations=math.sqrt(len(valid_results)))
             if np_mean is not False:
                 results_sum[key]["%s-std_error" % set_name] = np_std_err
                 results_sum[key][set_name] = np_mean
