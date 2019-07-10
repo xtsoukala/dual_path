@@ -7,13 +7,13 @@ import json
 import argparse
 from datetime import datetime
 from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, torch
-import torch.multiprocessing as mp
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
 
-
 if torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+torch.multiprocessing.set_start_method('spawn', force=True)
+mp = torch.multiprocessing
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):

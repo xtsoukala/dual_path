@@ -89,6 +89,7 @@ class SimpleRecurrentNetwork:
         weights_concept_role = torch.t(updated_role_concept)
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
+            print(type(role_layer.in_weights), type(weights_concept_role))
             role_layer.in_weights[x] = weights_concept_role[x]
 
         # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)

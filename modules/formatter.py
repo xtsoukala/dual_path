@@ -555,7 +555,7 @@ class InputFormatter:
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         print(self.roles_size, self.identif_and_concept_size)
-        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
+        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size), device=torch.device('cpu'))
         print(weights_role_concept)
         for info in message.split(';'):
             role, what = info.split("=")
