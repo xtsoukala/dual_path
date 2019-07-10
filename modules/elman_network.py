@@ -2,7 +2,7 @@
 import sys
 import os
 from copy import deepcopy
-from modules.plotter import Plotter, torch, true_divide
+from modules.plotter import torch, true_divide
 from collections import defaultdict
 from torch.distributions import normal
 

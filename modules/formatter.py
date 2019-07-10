@@ -554,7 +554,9 @@ class InputFormatter:
                             gives information about the event-semantics (E)
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
+        print(self.roles_size, self.identif_and_concept_size)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
+        print(weights_role_concept)
         for info in message.split(';'):
             role, what = info.split("=")
             if role != "E":  # retrieve activations for the event-sem layer
