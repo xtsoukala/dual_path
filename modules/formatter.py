@@ -3,9 +3,9 @@ import re
 import itertools
 import math
 import operator
-from modules import defaultdict, Counter, np, pd, pickle, os
 import subprocess
 from itertools import zip_longest as zp
+from modules import defaultdict, Counter, np, pd, pickle, os, torch
 
 
 class InputFormatter:
@@ -549,9 +549,7 @@ class InputFormatter:
                             gives information about the event-semantics (E)
         """
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        print(self.roles_size, self.identif_and_concept_size)
-        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        print(weights_role_concept)
+        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size), device=torch.device('cpu'))
         for info in message.split(';'):
             role, what = info.split("=")
             if role != "E":  # retrieve activations for the event-sem layer
@@ -628,10 +626,6 @@ def standard_error(std, squared_num_simulations):
     return true_divide(std, squared_num_simulations)
 
 
-def true_divide(x, total):
-    return torch.div(x, total)
-
-
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
     cs_keys = []
     for sim in sim_with_type_code_switches:
@@ -641,6 +635,10 @@ def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=
     if strip_language_info:
         res = strip_language_info_and_std_err(res)
     return res
+
+
+def true_divide(x, total):
+    return torch.div(x, total)
 
 
 def compute_mean_and_std(valid_results, epochs, evaluated_sets):

@@ -1,7 +1,8 @@
-from modules.formatter import extract_cs_keys, true_divide
-from modules import torch, np
+from modules import torch, np, extract_cs_keys
 import seaborn as sns
 import matplotlib.pyplot as plt
+from modules.formatter import true_divide
+
 
 # import matplotlib
 # matplotlib.use('Agg')  # needed for the server only
@@ -169,7 +170,6 @@ class Plotter:
         #index_size = torch.arange(len(labels_full))
         fname = ['insertional', 'alternational']
         for type, indeces in enumerate([insertions, alternations]):
-            print('@@', type, indeces)
             fig, ax = plt.subplots()
             rects = []
             for i, item in enumerate(items_to_plot):

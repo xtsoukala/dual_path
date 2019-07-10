@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from copy import deepcopy
-from modules.plotter import true_divide
-from modules import os, torch, sys
 from collections import defaultdict
+from modules import os, torch, sys
+from modules.formatter import true_divide
 
 
 class SimpleRecurrentNetwork:

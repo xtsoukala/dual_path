@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
 import shutil
-import logging
 import platform
 import json
 import argparse
 from datetime import datetime
-from modules.formatter import InputFormatter, compute_mean_and_std
-from modules.dual_path import DualPath
-from modules.plotter import Plotter
-from modules import torch, os, pickle, sys
+from modules import os, pickle, sys, mp, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -305,8 +301,8 @@ if __name__ == "__main__":
         os.environ["NUMEXPR_NUM_THREADS"] = "1"
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["OPENBLAS_NUM_THREADS"] = "1"  # priorities: OPENBLAS_NUM_THREADS > OMP_NUM_THREADS
-        if platform.system() == 'Linux':
-            os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing
+        """if platform.system() == 'Linux':
+            os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing"""
 
     processes = []
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
