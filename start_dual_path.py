@@ -1,19 +1,14 @@
 # -*- coding: utf-8 -*-
 import shutil
 import logging
-import sys
 import platform
 import json
 import argparse
 from datetime import datetime
-from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, torch
-import torch.multiprocessing as mp
+from modules.formatter import InputFormatter, compute_mean_and_std
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
-
-
-if torch.cuda.is_available():
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+from modules import torch, os, pickle, sys
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):

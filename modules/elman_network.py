@@ -1,15 +1,8 @@
 # -*- coding: utf-8 -*-
-import sys
-import os
 from copy import deepcopy
-from modules.plotter import torch, true_divide
+from modules.plotter import true_divide
+from modules import os, torch, sys
 from collections import defaultdict
-from torch.distributions import normal
-
-
-if torch.cuda.is_available():
-    print('CUDA')
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 
 class SimpleRecurrentNetwork:
@@ -38,6 +31,7 @@ class SimpleRecurrentNetwork:
         self.dir = rdir
         self.mse = defaultdict(list)
         self.divergence_error = defaultdict(list)
+        self.normal_distribution = torch.distributions.normal.Normal
 
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
@@ -74,7 +68,7 @@ class SimpleRecurrentNetwork:
                 layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
-                m = normal.Normal(0, layer.sd)
+                m = self.normal_distribution(0, layer.sd)
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
             torch.save(self.layers, "%s/weights/w_%s" % (results_dir, set_weights_epoch))
         self.reset_context_delta_and_crole()

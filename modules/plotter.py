@@ -1,5 +1,5 @@
-from modules.formatter import extract_cs_keys, torch, true_divide
-import numpy as np
+from modules.formatter import extract_cs_keys, true_divide
+from modules import torch, np
 import seaborn as sns
 import matplotlib.pyplot as plt
 

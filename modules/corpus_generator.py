@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 import random
-import os
 import codecs
 from datetime import datetime
-import pandas as pd
-import sys
+from modules import pd, os, sys
 import re
 import time
 

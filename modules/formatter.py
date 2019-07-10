@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
 import re
-import os
 import itertools
-import pickle
-import pandas as pd
-import numpy as np
-import torch
 import math
 import operator
-from collections import defaultdict, Counter
+from modules import defaultdict, Counter, np, pd, pickle, os
 import subprocess
 from itertools import zip_longest as zp
 
