@@ -7,10 +7,9 @@ import pandas as pd
 import numpy as np
 import torch
 import math
-import torch.multiprocessing as mp
 import operator
-import subprocess
 from collections import defaultdict, Counter
+import subprocess
 from itertools import zip_longest as zp
 
 
@@ -296,7 +295,7 @@ class InputFormatter:
             cs_type = "alt. (%s)" % check_idx_pos[0]
         else:
             print("No CS detected for: %s %s" % (out_sentence_idx, self.sentence_from_indeces(out_sentence_idx)))
-            sys.exit()
+            import sys;sys.exit()
         return cs_type
 
     def is_code_switched(self, sentence_indeces, target_lang_idx):
@@ -416,11 +415,6 @@ class InputFormatter:
         df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
         (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
          df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
-        #print(df['event_sem_activations'], type(df['event_sem_activations']))
-        #print(df['event_sem_activations'].values.astype(float))
-        #df['event_sem_activations'] = torch.tensor(df['event_sem_activations'].values.astype(float))
-        #print(df['event_sem_activations'], type(df['event_sem_activations']))
-        #sys.exit
         return df, weights_role_concept
 
     def read_allowed_pos(self):
@@ -500,11 +494,13 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = np.zeros(self.event_sem_size) #[0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
+        event_sem_activations = np.zeros(
+            self.event_sem_size)  # [0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = [0.] * self.languages_size #torch.zeros(self.languages_size) #np.zeros(self.languages_size)
+        target_lang_activations = [
+                                      0.] * self.languages_size  # torch.zeros(self.languages_size) #np.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -624,18 +620,18 @@ def is_not_nan(x):
 
 def get_np_mean_and_std_err(x, squared_num_simulations):
     if not isinstance(x, torch.Tensor):
+        if len(x) > 1:
+            x = np.array(x)
+            return x.mean(axis=0), np.true_divide(x.std(axis=0), squared_num_simulations)
         x = torch.tensor(x).float()
-    #return x.mean(axis=0), standard_error(x.std(axis=0), summary_sim)  # mean of lists (per column)
     return x.mean(0), standard_error(x.std(0), squared_num_simulations)  # mean of lists (per column)
 
 
 def standard_error(std, squared_num_simulations):
-    #print('SE', std, num_simulations)
     return true_divide(std, squared_num_simulations)
 
 
 def true_divide(x, total):
-    #print('TD', x, total)
     return torch.div(x, total)
 
 
@@ -674,7 +670,7 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
                     if key in simulation['type_code_switches'][set_name]:
                         results_sum[key][set_name].append(simulation['type_code_switches'][set_name][key][:epochs])
                     else:  # fill with 0
-                        results_sum[key][set_name].append([0] * epochs)
+                        results_sum[key][set_name].append([0] * epochs)#torch.zeros(epochs))
                 else:
                     results_sum[key][set_name].append(simulation[key][set_name][:epochs])
     # now compute MEAN and STANDARD ERROR of all simulations

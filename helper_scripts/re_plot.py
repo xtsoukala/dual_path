@@ -16,9 +16,9 @@ def training_is_successful(x, threshold, num_test):
 
 main_dir = '../simulations/'
 results_dir = main_dir + 'cmcl_2019-03-01/code_switching_patterns'
-results_dir = main_dir + '2019-06-14/12.15.17_esen_sim2_h110_c70_fw30_e10'
-num_sim = 60
-epochs = 30
+results_dir = main_dir + '2019-07-10/09.49.32_esen_sim4_h110_c70_fw30_e6'
+num_sim = 4
+epochs = 6
 performance_threshold = 5
 test_name = 'test.in'
 training_name = 'training.in'

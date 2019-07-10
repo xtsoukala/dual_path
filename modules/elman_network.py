@@ -2,7 +2,6 @@
 import sys
 import os
 from copy import deepcopy
-import numpy as np
 from modules.plotter import Plotter, torch, true_divide
 from collections import defaultdict
 from torch.distributions import normal
@@ -60,51 +59,31 @@ class SimpleRecurrentNetwork:
         second.in_size += first.size
         second.in_layers.append(first)
 
-    def load_weights(self, results_dir, set_weights_folder, plot_stats, set_weights_epoch, simulation_num=None):
-        if not set_weights_folder:
-            self._create_dir_if_not_exists(results_dir)
-            torch.manual_seed(simulation_num if not None else 18)  # set number of simulation as the seed
+    def load_weights(self, results_dir, set_weights_folder, set_weights_epoch, simulation_num=None):
+        if set_weights_folder:
+            weights_fname = os.path.join(set_weights_folder, "weights", "w_%s" % set_weights_epoch)
+            self.layers = torch.load(weights_fname)
+        else:
+            if not set_weights_folder:
+                self._create_dir_if_not_exists(results_dir)
+                torch.manual_seed(simulation_num if not None else 18)  # set number of simulation as the seed
 
-        stats = defaultdict(list)
-        for layer in self.layers:
-            if not layer.in_size:
-                continue
-            # weights folder should contain the same num of simulations (or more)
-            if set_weights_folder:
-                w_dir = os.path.join(set_weights_folder, "weights")
-                weights_fname = os.path.join(w_dir, "weights_%s_%s.npz" % (layer.name, set_weights_epoch))
-                layer.in_weights = torch.tensor(np.load(weights_fname)['arr_0'])
-                # layer.in_weights = torch.jit.load(weights_fname)['arr_0']
-                # FIXMElayer.in_weights = torch.load(os.path.join(w_dir, weights_fname))['arr_0']
-            else:
+            for layer in self.layers:
+                if not layer.in_size:
+                    continue
                 layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
                 m = normal.Normal(0, layer.sd)
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
-                # layer.in_weights = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
-                # xxx = np.random.normal(0, layer.sd, size=[layer.in_size + int(layer.has_bias), layer.size])
-
-                # yyy = torch.randn(layer.in_size + int(layer.has_bias), layer.size)
-                stats['means'].append(layer.in_weights.mean())
-                stats['std'].append(layer.in_weights.std())
-                stats['labels'].append(layer.name)
-                np.savez_compressed("%s/weights/weights_%s_0.npz" % (results_dir, layer.name), layer.in_weights)
-                if self.debug_messages:
-                    with open('%s/weights/weight_stats.out' % results_dir, 'a') as f:
-                        f.write("name, max, min, mean, std\n"
-                                "%s,%g,%g,%g,%g\n" % (layer.name, layer.in_weights.max(), layer.in_weights.min(),
-                                                      stats['means'][-1], stats['std'][-1]))
-                if plot_stats:
-                    plt = Plotter(results_dir=results_dir)
-                    plt.plot_layer_stats(stats)
-
+            torch.save(self.layers, "%s/weights/w_%s" % (results_dir, set_weights_epoch))
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
-        for layer in self.backpropagated_layers:
-            np.savez_compressed("%s/weights/weights_%s_%s.npz" % (results_dir, layer.name, epoch), layer.in_weights)
+        """for layer in self.backpropagated_layers:
+            np.savez_compressed("%s/weights/weights_%s" % (results_dir, epoch), layer.in_weights)"""
+        torch.save(self.layers, "%s/weights/w_%s" % (results_dir, epoch))
 
     def set_message_reset_context(self, updated_role_concept, info, activate_language):
         weights_concept_role = torch.t(updated_role_concept)
@@ -127,7 +106,7 @@ class SimpleRecurrentNetwork:
         else:
             event_sem.activation = torch.tensor(info.event_sem_activations)  # info.event_sem_activations  # FIXME
         if activate_language:
-            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))
+            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))  # FIXME
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -183,8 +162,6 @@ class SimpleRecurrentNetwork:
         for layer in self.feedforward_layers:
             layer.in_activation = torch.tensor([])
             for incoming_layer in layer.in_layers:
-                # print(layer.name, incoming_layer.name, layer.in_activation, '---')
-                # print(incoming_layer.activation, '+++')
                 # combines the activation of all previous layers (e.g. role and compress and... to hidden)
                 if (start_of_sentence and self.lesion_syntax and incoming_layer.name in self.syntactic_layers or
                         self.lesion_semantics and incoming_layer.name in self.semantic_layers):
@@ -201,12 +178,12 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = torch.zeros(layer.size)  # set role_copy to zero
                 continue
-            dot_product = torch.matmul(layer.in_activation, layer.in_weights)  # FIXME: or mm?
+            dot_product = torch.matmul(layer.in_activation, layer.in_weights)
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
                 layer.activation = torch.nn.functional.softmax(dot_product, dim=0) #softmax(dot_product)
             elif layer.activation_function == "tanh":
-                layer.activation = tanh_activation(dot_product)
+                layer.activation = dot_product.tanh()
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
@@ -248,12 +225,7 @@ class SimpleRecurrentNetwork:
         # Calculate error[Eo](target - output)
         output_layer = self.get_layer("output")
         self._calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
-
-        if output_layer.activation_function == "softmax":
-            output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
-        elif output_layer.activation_function == "tanh":
-            output_layer.gradient = ((convert_range(output_layer.target_activation) - output_layer.activation) *
-                                     tanh_derivative(output_layer.activation))
+        output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
@@ -274,7 +246,6 @@ class SimpleRecurrentNetwork:
             error_out = self.current_layer.error_out[0]
             for i in range(1, len(self.current_layer.error_out)):
                 error_out = error_out.add(self.current_layer.error_out[i])
-            # print('ERROR:', error_out)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
@@ -284,25 +255,14 @@ class SimpleRecurrentNetwork:
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
-
-        # print(self.current_layer.name, self.current_layer.in_activation, self.current_layer.gradient)
-        # print('----')
-        # print(self.convert_to_2d(self.current_layer.in_activation))
-        # print(self.convert_to_2d(self.current_layer.in_activation).t())
         self.current_layer.delta = torch.matmul(torch.t(self.convert_to_2d(self.current_layer.in_activation,
                                                                            transpose=True)),
                                                 self.convert_to_2d(self.current_layer.gradient))
-        # print("DELTA:", self.current_layer.delta)
-        # sys.exit()
-        # self.current_layer.delta = torch.matmul(self.convert_to_2d(self.current_layer.in_activation).t(),
-        #                                        self.convert_to_2d(self.current_layer.gradient))  # FIXME: mm?
-        # np .dot(np.atleast_2d(self.current_layer.in_activation).T, np.atleast_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
         len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
         #print(len_delta)
         if len_delta > 1:
             self.current_layer.delta = true_divide(self.current_layer.delta, len_delta)
-        #sys.exit()
 
         self.current_layer.delta *= self.learn_rate
         if self.debug_messages:
@@ -311,7 +271,7 @@ class SimpleRecurrentNetwork:
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
         self.current_layer.total_error = torch.matmul(self.current_layer.gradient,
-                                                      torch.t(self.current_layer.in_weights))  # FIXME: mm?
+                                                      torch.t(self.current_layer.in_weights))
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -366,7 +326,7 @@ class SimpleRecurrentNetwork:
         """
         As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
         """
-        return true_divide(1.0, number_of_inputs)
+        return 1.0 / number_of_inputs
 
 
 class NeuronLayer:
@@ -384,8 +344,9 @@ class NeuronLayer:
         self.convert_input = convert_input
         self.size = size
         self.sd = 0  # it is used to initialize weights
-        self.activation = torch.zeros(size)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
-        self.target_activation = torch.zeros(size)
+        self.activation = torch.empty(size,
+                                      dtype=torch.float64)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.target_activation = torch.zeros(size, dtype=torch.float64)
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
@@ -409,14 +370,11 @@ class NeuronLayer:
 
 def convert_range(matrix, min_val=-1, max_val=1):
     """ Converts range between min and max values. NOTE: This seems to be creating some issues during training. """
+    print('CONVERT')
     if matrix.sum() == 0:
         return matrix + min_val
     else:
-        return true_divide((max_val - min_val) * (matrix - matrix.min()), (matrix.max() - matrix.min())) + min_val
-
-
-def tanh_activation(x):
-    return torch.tanh(x)
+        return ((max_val - min_val) * (matrix - matrix.min()) / (matrix.max() - matrix.min())) + min_val
 
 
 def tanh_derivative(x, input_activation=False):
@@ -428,15 +386,6 @@ def tanh_derivative(x, input_activation=False):
         return 1.0 - tanh_activation(x).pow(2)
     else:
         return 1.0 - x.pow(2)
-
-
-def softmax(x):
-    """ Compute softmax values for each sets of scores in x. Normalize input otherwise the exponential of a high number
-    will be NaN. Following Chang's advice, normalize by rounding, e.g. to 4 """
-    normalized_x = x - x.min()
-    return true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())  # FIXME: round?
-    # return round(true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum()))
-    # return torch.round((true_divide(torch.exp(normalized_x), torch.exp(normalized_x).sum())), 4)
 
 
 def softmax_derivative(x):

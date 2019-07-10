@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 from collections import defaultdict
-from modules.elman_network import SimpleRecurrentNetwork, torch
-from modules.formatter import pickle, true_divide
+from modules.elman_network import SimpleRecurrentNetwork
+from modules.formatter import pickle, torch
 
 
 class DualPath:
@@ -55,8 +55,8 @@ class DualPath:
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
         num_epochs_decreasing_step = 10
-        self.lrate_decrease_step = true_divide(learn_rate - final_learn_rate,
-                                               self.inputs.num_train * num_epochs_decreasing_step)
+        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_train *
+                                                                      num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -152,16 +152,12 @@ class DualPath:
         self.srn.connect_layers("pred_compress", "output")
         if not self.only_evaluate:  # else they will be loaded again at the evaluate_network phrase
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
-                                  results_dir=self.inputs.directory, plot_stats=False,
-                                  simulation_num=self.simulation_num)
+                                  results_dir=self.inputs.directory, simulation_num=self.simulation_num)
 
     def feed_line(self, line, weights_role_concept, epoch=None, backpropagate=False, activate_target_language=False):
         produced_sent_ids = []
         append_to_produced = produced_sent_ids.append
-        # self.srn.set_message_reset_context(updated_role_concept=self.inputs.get_weights_role_concept(line.message),
-        #print(line)
-        #print(weights_role_concept)
-        #print(line.event_sem_activations)
+        # updated_role_concept=self.inputs.get_weights_role_concept(line.message)
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line,
                                            activate_language=(activate_target_language or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
@@ -171,6 +167,8 @@ class DualPath:
             if backpropagate:
                 prod_idx = trg_idx  # training with target word, NOT produced one
                 self.srn.backpropagate(epoch)
+                # FIXME: REMOVE
+                append_to_produced(self.srn.get_max_output_activation())
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if activate_target_language and prod_idx is None and self.activate_both_lang:
@@ -184,6 +182,7 @@ class DualPath:
 
             if self.allow_cognate_boost and self.activate_both_lang and prod_idx in self.inputs.cognate_idx:
                 self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(line.lang))  # cognate boost
+
         if not backpropagate:
             return produced_sent_ids
 
@@ -202,17 +201,17 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         :param start_from_epoch: training can start from a later epoch
         """
+        # cpu = torch.device('cpu')  # randperm doesn't support GPU
         if not self.only_evaluate:
             epoch = start_from_epoch
             # weights_role_concept = self.inputs.weights_role_concept['training']
-            while epoch < self.epochs:  # start training for x epochs (shuffle training set)
-                for train_line in self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():
-                    # train_line = self.inputs.trainlines_df.loc[i]
+            while epoch < self.epochs:  # start training for x epochs; shuffle before each iteration
+                for train_line_idx in torch.randperm(self.inputs.num_train).tolist(): #self.inputs.trainlines_df.reindex(torch.randperm(self.inputs.num_train)).itertuples():
+                    train_line = self.inputs.trainlines_df.iloc[train_line_idx]
                     # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
-                    #print("LINE:", train_line)
                     self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
                                    backpropagate=True, activate_target_language=True)
-                    if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly until it reaches 2 epochs
+                    if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
                 epoch += 1  # increase number of epochs, begin new iteration
                 self.srn.save_weights(results_dir=self.inputs.directory, epoch=epoch)
@@ -282,7 +281,7 @@ class DualPath:
                 counter = defaultdict(int)
                 counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
-                                      set_weights_epoch=epoch, plot_stats=False)
+                                      set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     # line = set_lines.iloc[line_idx]   # FIXME
                     produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message),
@@ -381,7 +380,6 @@ class DualPath:
                                                                              feature="determiners")
                             has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                feature="tense")
-                            # print('det, tense:', has_wrong_det, has_wrong_tense)
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
                                 counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
                                 print(produced_sentence, "correct meaning,FIXME")  # FIXME
@@ -397,9 +395,9 @@ class DualPath:
                                     counter['pronoun_errors_flex'] += 1
                                     has_pronoun_error_flex = True
                     if epoch > 0:
+                        # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
                         meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
-                        pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos)
-
+                        pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos or flexible_order)
                         log_info = (epoch, produced_sentence, line.target_sentence,
                                     pos, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:

@@ -6,9 +6,14 @@ import platform
 import json
 import argparse
 from datetime import datetime
-from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, mp
+from modules.formatter import InputFormatter, compute_mean_and_std, os, pickle, torch
+import torch.multiprocessing as mp
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
+
+
+if torch.cuda.is_available():
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -96,7 +101,7 @@ if __name__ == "__main__":
                         type=float, default=0.9)
     parser.add_argument('-set_weights', '-sw',
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('-set_weights_epoch', '-swe', type=int,
+    parser.add_argument('-set_weights_epoch', '-swe', type=int, default=0,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('-fw', '-fixed_weights', type=int, default=30,  # 20
                         help='Fixed weight value for concept-role connections')
@@ -195,13 +200,8 @@ if __name__ == "__main__":
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
-    if args.only_eval and not (args.set_weights or set_weights_epoch):
-        sys.exit('No pre-trained weights found. Check the set-weights folder (args.set_weights: %s) and epochs '
-                 '(set_weights_epoch: %s).' % (args.set_weights, set_weights_epoch))
-
-    if args.set_weights and not args.only_eval and not set_weights_epoch:
-        set_weights_epoch = 0
-        logging.warning("Set pre-trained weight epoch to 0. If this is not what you intended abort the training.")
+    if args.only_eval and not args.set_weights:
+        sys.exit('No pre-trained weights found. Check the set-weights folder (set_weights: %s)' % args.set_weights)
 
     if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
         args.input = args.set_weights
@@ -327,10 +327,10 @@ if __name__ == "__main__":
             else:  # only copy the epoch we wanted (such as epoch 0)
                 os.makedirs(destination_folder)
                 copy_files_endswith(src=src_folder, dest=destination_folder,
-                                    ends_with="_%s.npz" % set_weights_epoch)
-                if set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
-                    os.system("rename s/_%s/_0/ %s/*.npz" % (set_weights_epoch, '%s/weights' % inputs.directory))
-                    set_weights_epoch = 0
+                                    ends_with="_%s" % args.set_weights_epoch)
+                if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
+                    os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
+                    args.set_weights_epoch = 0
         dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          compress_size=args.compress, activate_both_lang=args.activate_both_lang,

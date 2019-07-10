@@ -1,6 +1,5 @@
-import matplotlib
-matplotlib.use('Agg')  # needed for the server only
 from modules.formatter import extract_cs_keys, torch, true_divide
+import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -19,7 +18,7 @@ class Plotter:
         self.num_training = num_training
         self.num_test = num_test
         self.epoch_range = range(epochs)
-        self.bar_width = 0.35
+        self.bar_width = 0.3
         self.cs_results = {}
         self.results = {}
         self.title = title
@@ -60,6 +59,8 @@ class Plotter:
                                         fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
+            if not isinstance(test_value, np.ndarray):
+                test_value = test_value.numpy()
             plt.plot(self.epoch_range, test_value,
                      label=item.replace('_', ' ').replace('code switches', 'code-switches'))
             if 'test-std_error' in self.results[item]:
@@ -164,10 +165,11 @@ class Plotter:
         original_idx = list(indeces)
         insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
         alternations = [x for x in indeces if x.startswith('alt')]
-        labels = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
-        index_size = torch.arange(len(labels))
+        labels_full = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
+        #index_size = torch.arange(len(labels_full))
         fname = ['insertional', 'alternational']
         for type, indeces in enumerate([insertions, alternations]):
+            print('@@', type, indeces)
             fig, ax = plt.subplots()
             rects = []
             for i, item in enumerate(items_to_plot):
@@ -176,10 +178,8 @@ class Plotter:
                                                    if original_idx[ind] in indeces])))
                 labels = [x[0] for x in sorted_by_label]
                 index_size = torch.arange(len(labels))
-                rects.append(ax.bar(index_size + (self.bar_width * i), [x[1][0] for x in sorted_by_label],
+                rects.append(ax.bar(index_size + self.bar_width * (i + 1), [x[1][0] for x in sorted_by_label],
                                     self.bar_width, yerr=[x[1][1] for x in sorted_by_label]))
-            if self.title:
-                ax.set_title(self.title)
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
             ax.set_ylim(bottom=0)
             if all(len(x) for x in rects) > 0:
@@ -484,4 +484,10 @@ class Plotter:
 
     @staticmethod
     def percentage(x, total):
-        return true_divide(x * 100, total).numpy()
+        if isinstance(x, np.ndarray):
+            perc = np.true_divide(x * 100, total, where=total!=0)
+        elif isinstance(x, torch.tensor):
+            perc = true_divide(x * 100, total).numpy()
+        else:
+            perc = x * 100 / total
+        return perc
