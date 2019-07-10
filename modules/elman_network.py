@@ -75,6 +75,7 @@ class SimpleRecurrentNetwork:
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
+        self._create_dir_if_not_exists(results_dir)
         """for layer in self.backpropagated_layers:
             np.savez_compressed("%s/weights/weights_%s" % (results_dir, epoch), layer.in_weights)"""
         torch.save(self.layers, "%s/weights/w_%s" % (results_dir, epoch))

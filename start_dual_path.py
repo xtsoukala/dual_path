@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import shutil
-import platform
 import json
 import argparse
 from datetime import datetime
@@ -296,20 +295,30 @@ if __name__ == "__main__":
 
         del input_sets, input_files  # we no longer need it
 
-        os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
+        """os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
         os.environ["MKL_NUM_THREADS"] = "1"
         os.environ["NUMEXPR_NUM_THREADS"] = "1"
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["OPENBLAS_NUM_THREADS"] = "1"  # priorities: OPENBLAS_NUM_THREADS > OMP_NUM_THREADS
-        """if platform.system() == 'Linux':
+        if platform.system() == 'Linux':
             os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing"""
 
     processes = []
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
+    dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+                     epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
+                     compress_size=args.compress, activate_both_lang=args.activate_both_lang,
+                     cognate_experiment=args.cognate_experiment, momentum=args.momentum,
+                     set_weights_folder=inputs.directory if args.set_weights else None,
+                     input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
+                     set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
+                     separate_hidden_layers=args.separate_hidden_layers)
     # run the simulations
     for sim in simulation_range:
         if args.sim > 1:
             inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))
+            dualp.simulation_num = sim
         if args.set_weights:
             destination_folder = '%s/weights' % inputs.directory
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
@@ -322,7 +331,8 @@ if __name__ == "__main__":
                 if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
                     os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
                     args.set_weights_epoch = 0
-        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+        dualp.start_network(args.eval_test, args.eval_training, starting_epoch)
+        """dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                          cognate_experiment=args.cognate_experiment, momentum=args.momentum,
@@ -333,7 +343,7 @@ if __name__ == "__main__":
                          separate_hidden_layers=args.separate_hidden_layers)
         process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
         process.start()
-        processes.append(process)
+        processes.append(process)"""
 
     for p in processes:
         p.join()

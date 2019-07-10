@@ -210,8 +210,9 @@ class DualPath:
                                    backpropagate=True, activate_target_language=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
-                epoch += 1  # increase number of epochs, begin new iteration
+                #print(self.inputs.directory, epoch)
                 self.srn.save_weights(results_dir=self.inputs.directory, epoch=epoch)
+                epoch += 1  # increase number of epochs, begin new iteration
 
         set_names = set()
         if evaluate_training_set:
