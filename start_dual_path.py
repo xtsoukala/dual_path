@@ -336,8 +336,7 @@ if __name__ == "__main__":
                 if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
                     os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
                     args.set_weights_epoch = 0
-        dualp.start_network(args.eval_test, args.eval_training, starting_epoch)
-        """dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
+        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                          epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                          compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                          cognate_experiment=args.cognate_experiment, momentum=args.momentum,
@@ -348,7 +347,7 @@ if __name__ == "__main__":
                          separate_hidden_layers=args.separate_hidden_layers)
         process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
         process.start()
-        processes.append(process)"""
+        processes.append(process)
 
     for p in processes:
         p.join()
