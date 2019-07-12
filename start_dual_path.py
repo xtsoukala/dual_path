@@ -32,7 +32,7 @@ def copy_specific_files(src, dest, filename_starts_with_list=('test', 'training'
 
 
 def create_input_for_simulation(simulation_number, directory, sets, original_input, cognate_experiment,
-                                generate_num, l2_percentage, auxiliary_experiment):
+                                generate_num, l2_percentage, auxiliary_experiment, len_lang):
     rdir = "%s/%s" % (directory, simulation_number)
     os.makedirs(rdir)
     if sets:  # generate new test/training sets
@@ -50,7 +50,7 @@ def create_input_for_simulation(simulation_number, directory, sets, original_inp
                                                            save_files=False)
                 if auxiliary_experiment:
                     sets.sets.aux_experiment = True
-                    if len(args.lang) > 2:
+                    if len_lang > 2:
                         sets.sets.generate_auxiliary_experiment_sentences(training_sentences=training,
                                                                           percentage_l2=l2_percentage)
     elif original_input:  # use existing test/training set (copy them first)
@@ -192,6 +192,7 @@ if __name__ == "__main__":
     generate_num = args.generate_num
     l2_percentage = args.l2_percentage
     auxiliary_experiment = args.auxiliary_experiment
+    len_lang = len(args.lang)
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
@@ -253,7 +254,7 @@ if __name__ == "__main__":
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos))
-        if args.args.cognate_experiment:
+        if args.cognate_experiment:
             input_sets.generate_for_cognate_experiment(num_sentences=args.generate_num,
                                                        percentage_l2=args.l2_percentage)
         else:
@@ -261,7 +262,7 @@ if __name__ == "__main__":
                                                            percentage_l2=args.l2_percentage)
             if args.auxiliary_experiment:
                 input_sets.sets.aux_experiment = True
-                if len(args.lang) > 2:
+                if len_lang > 2:
                     input_sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
                                                                             percentage_l2=args.l2_percentage)
     if not args.title:
@@ -291,7 +292,7 @@ if __name__ == "__main__":
         for sim_num in simulation_range:  # first create all input files
             process = mp.Process(target=create_input_for_simulation,
                                  args=(sim_num, results_dir, input_sets, original_input_path, cognate_experiment,
-                                       generate_num, l2_percentage, auxiliary_experiment))
+                                       generate_num, l2_percentage, auxiliary_experiment, len_lang))
             process.start()
             input_files.append(process)
 
