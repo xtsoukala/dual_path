@@ -188,6 +188,11 @@ if __name__ == "__main__":
         with open(args.config, 'r') as f:
             args.__dict__ = json.load(f)
 
+    cognate_experiment = args.cognate_experiment
+    generate_num = args.generate_num
+    l2_percentage = args.l2_percentage
+    auxiliary_experiment = args.auxiliary_experiment
+
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
     if args.only_eval and not args.set_weights:
@@ -215,7 +220,7 @@ if __name__ == "__main__":
         args.threshold = 30
         if not args.testset:
             args.testset = 'test_aux.in'
-    elif args.cognate_experiment:
+    elif cognate_experiment:
         args.activate_both_lang = True
 
     original_input_path = None  # keep track of the original input in case it was copied
@@ -248,7 +253,7 @@ if __name__ == "__main__":
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos))
-        if args.cognate_experiment:
+        if args.args.cognate_experiment:
             input_sets.generate_for_cognate_experiment(num_sentences=args.generate_num,
                                                        percentage_l2=args.l2_percentage)
         else:
@@ -285,8 +290,8 @@ if __name__ == "__main__":
         input_files = []
         for sim_num in simulation_range:  # first create all input files
             process = mp.Process(target=create_input_for_simulation,
-                                 args=(sim_num, results_dir, input_sets, original_input_path, args.cognate_experiment,
-                                       args.generate_num, args.l2_percentage, args.auxiliary_experiment))
+                                 args=(sim_num, results_dir, input_sets, original_input_path, cognate_experiment,
+                                       generate_num, l2_percentage, auxiliary_experiment))
             process.start()
             input_files.append(process)
 
