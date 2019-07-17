@@ -486,7 +486,7 @@ class Plotter:
     def percentage(x, total):
         if isinstance(x, np.ndarray):
             perc = np.true_divide(x * 100, total, where=total!=0)
-        elif isinstance(x, torch.tensor):
+        elif isinstance(x, torch.Tensor):
             perc = true_divide(x * 100, total).numpy()
         else:
             perc = x * 100 / total

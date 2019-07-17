@@ -10,9 +10,9 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 
 class SetsGenerator:
-    def __init__(self, results_dir, use_simple_semantics, allow_free_structure_production, use_full_verb_form,
-                 cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv, aux_experiment=False,
-                 seed=0, default_L2='en', include_ff=False):
+    def __init__(self, use_simple_semantics, allow_free_structure_production,
+                 use_full_verb_form, cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv,
+                 aux_experiment, input_dir=None, sim_results_dir=None, seed=0, default_L2='en', include_ff=False):
         """
         :param results_dir:
         :param use_simple_semantics:
@@ -25,20 +25,18 @@ class SetsGenerator:
         self.L1 = lang if len(lang) == 2 else lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else lang[2:]
         self.seed = seed
+        self.random = random
         self.use_full_verb = use_full_verb_form
         self.cognate_percentage = cognate_percentage
         self.aux_experiment = aux_experiment
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
                                                  cognates=True if cognate_percentage > 0 else False,
                                                  use_simple_semantics=use_simple_semantics)
-        """self.lexicon_size = len(pd.unique(self.lexicon_df[["morpheme_%s" % self.L1,
-                                                           "morpheme_%s" % self.L2]
-                                          if self.L2 or not monolingual_only
-                                          else ["morpheme_%s" % self.L1]].values.ravel('K')))"""
-        self.results_dir = results_dir
-        if os.path.isdir(self.results_dir):  # if this folder name exists already add a timestamp at the end
-            self.results_dir += datetime.now().strftime(".%S")
-        os.makedirs(self.results_dir)
+        self.results_dir = sim_results_dir
+        self.input_dir = input_dir
+        if input_dir:
+            os.mkdir(input_dir)
+        self.input_dir_empty = True
         self.genders = [x for x in self.lexicon_df.semantic_gender.dropna().unique() if '-' not in x]
         self.determiners = self.get_determiners_from_lexicon()
         self.concepts = self.lexicon_df.concept.dropna().unique()
@@ -53,23 +51,27 @@ class SetsGenerator:
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
 
-    def generate_general(self, num_sentences, percentage_l2, cognates_experiment=False, save_files=True):
+    def set_new_results_dir(self, results_dir):
+        if os.path.isdir(results_dir):  # if this folder name exists already add a timestamp at the end
+            results_dir += datetime.now().strftime(".%S")
+        os.makedirs(results_dir)
+        self.results_dir = results_dir
+
+    def generate_general(self, num_training, percentage_l2, cognates_experiment=False):
         """
-        :param num_sentences: number of training AND test sentences to be generated
+        :param num_training: number of training sentences to be generated
         :param percentage_l2: percentage of L2 (e.g., English) vs L1
         :param cognates_experiment: (if True) include cognates and ff only in training sets
-        :param save_files: whether to save lexicon/concepts etc or just training/test sets
         """
         if not cognates_experiment:
             # (re)set the seed if it's not part of the cognate experiment (where this function is called twice)
-            random.seed(self.seed)
+            self.random.seed(self.seed)
 
-        if len(self.lang) == 2 and percentage_l2 != 0:
+        if len(self.lang) == 2 and percentage_l2 != 0:  # correct L2 percentage in monolingual setting
             percentage_l2 = 0
 
-        num_train, num_test = self.calculate_number_of_sentences_per_set(num_sentences)
-
-        sentence_structures_train = self.generate_sentence_structures(num_train, percentage_l2=percentage_l2)
+        num_test = self.calculate_num_of_test_sentences(num_training)
+        sentence_structures_train = self.generate_sentence_structures(num_training, percentage_l2=percentage_l2)
         sentence_structures_test = self.generate_sentence_structures(num_test, percentage_l2=percentage_l2)
         # save only training set if we're selecting sentences for the cognate experiment
         # test_fname = "test.in" if not aux_experiment else "test_all.in" if not cognates_experiment else None
@@ -79,17 +81,18 @@ class SetsGenerator:
                                            max_cognate=0 if cognates_experiment else num_test * self.cognate_percentage)
         training_set = self.generate_sentences(sentence_structures_train, fname="training.in",
                                                exclude_test_sentences=test_set,
-                                               max_cognate=num_train * self.cognate_percentage)
-        assert num_test == len(test_set) and num_train == len(training_set)
-        if save_files:
+                                               max_cognate=num_training * self.cognate_percentage)
+        assert num_test == len(test_set) and num_training == len(training_set)
+        if self.input_dir_empty:
+            self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
             self.save_lexicon_and_structures_to_csv()
         # if cognates_experiment or self.aux_experiment:  # return sets of message/sentence pairs
         return test_set, training_set
 
-    def generate_auxiliary_experiment_sentences(self, training_sentences, percentage_l2, num_test_sentences=1000):
+    def generate_auxiliary_experiment_sentences(self, training_set, percentage_l2, num_test_sentences=1000):
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            percentage_l2=percentage_l2)
-        self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_sentences,
+        self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set,
                                 max_cognate=(num_test_sentences // 2) * self.cognate_percentage)
 
     def replace_perfect_with_progressive(self, sentence, message):
@@ -108,6 +111,9 @@ class SetsGenerator:
         sent = sentence.replace(' has ', ' is ').replace(' ha ', ' está ').replace(perfect, prog)
         return sent, msg
 
+    def get_random_row(self, data_len):
+        return self.random.randint(0, data_len - 1)
+
     def generate_sentence_structures(self, num_sentences, percentage_l2):
         """
         :param num_sentences: number of message/sentence pairs that need to be generated
@@ -121,11 +127,11 @@ class SetsGenerator:
         l1_times_repeat = int(num_l1 // self.num_structures_L1)
         l1_mod_repeat = int(num_l1 % self.num_structures_L1)
         # TODO: take percentages into consideration if not set to NaN
-        sentence_structures = pd.concat([self.structures_df[['message', self.L1]]] * l1_times_repeat,
-                                        ignore_index=True, sort=False)
+        sentence_structures = pd.concat([self.structures_df[['message', self.L1]]] *
+                                        l1_times_repeat, ignore_index=True, sort=False)
         sentence_structures = list(sentence_structures.itertuples(index=False, name=None))
         for i in range(l1_mod_repeat):
-            row = random.randint(0, self.num_structures_L1 - 1)  # select random row
+            row = self.get_random_row(self.num_structures_L1)
             sentence_structures.append((self.structures_df['message'].iloc[row], self.structures_df[self.L1].iloc[row]))
 
         sentence_structures = [("%s,%s" % (i[0], self.L1), i[1]) for i in sentence_structures]
@@ -133,13 +139,13 @@ class SetsGenerator:
             l2_times_repeat = int(num_l2 // self.num_structures_L2)
             l2_mod_repeat = int(num_l2 % self.num_structures_L2)
             if l2_times_repeat:
-                l2_df = pd.concat([self.structures_df[['message', self.L2]]] * l2_times_repeat,
-                                  ignore_index=True, sort=False)
+                l2_df = pd.concat([self.structures_df[['message', self.L2]]] *
+                                  l2_times_repeat, ignore_index=True, sort=False)
                 l2_structures = [("%s,%s" % (i[0], self.L2), i[1])
                                  for i in list(l2_df.itertuples(index=False, name=None))]
                 sentence_structures.extend(l2_structures)
             for i in range(l2_mod_repeat):
-                row = random.randint(0, self.num_structures_L2 - 1)
+                row = self.get_random_row(self.num_structures_L2)
                 sentence_structures.append((self.structures_df['message'].iloc[row] + "," + self.L2,
                                             self.structures_df[self.L2].iloc[row]))
         generated_structures = len(sentence_structures)
@@ -147,11 +153,11 @@ class SetsGenerator:
             sentences_to_append = num_sentences - generated_structures
             print("Appending %s more L1 row(s)" % sentences_to_append)
             for i in range(sentences_to_append):
-                row = random.randint(0, self.num_structures_L1 - 1)  # select random row
+                row = self.get_random_row(self.num_structures_L1)  # select random row
                 sentence_structures.append((self.structures_df['message'].iloc[row] + "," + self.L1,
                                             self.structures_df[self.L1].iloc[row]))
         assert num_sentences == len(sentence_structures)
-        random.shuffle(sentence_structures)
+        self.random.shuffle(sentence_structures)
         return sentence_structures
 
     def generate_aux_perfect_sentence_structures(self, num_sentences, percentage_l2):
@@ -175,7 +181,7 @@ class SetsGenerator:
                                         ignore_index=True, sort=False)
         sentence_structures = list(sentence_structures.itertuples(index=False, name=None))
         for i in range(l1_mod_repeat):
-            row = random.randint(0, num_structures_L1 - 1)  # select random row
+            row = self.get_random_row(num_structures_L1)  # select random row
             sentence_structures.append((aux_structures['message'].iloc[row], aux_structures[self.L1].iloc[row]))
 
         sentence_structures = [("%s,%s" % (i[0], self.L1), i[1]) for i in sentence_structures]
@@ -189,10 +195,10 @@ class SetsGenerator:
                                  for i in list(l2_df.itertuples(index=False, name=None))]
                 sentence_structures.extend(l2_structures)
             for i in range(l2_mod_repeat):
-                row = random.randint(0, num_structures_L2 - 1)
+                row = self.get_random_row(num_structures_L2)
                 sentence_structures.append((aux_structures['message'].iloc[row] + "," + self.L2,
                                             aux_structures[self.L2].iloc[row]))
-        random.shuffle(sentence_structures)
+        self.random.shuffle(sentence_structures)
         return sentence_structures
 
     def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=[],
@@ -212,23 +218,17 @@ class SetsGenerator:
         time_start = time.time()
         while remaining_structures:  # while loop needed because of the unique sentence restriction
             if time.time() - time_start > 60:
-                if self.aux_experiment and len(self.lang) == 2:
-                    print("You might want to increase the size of the lexicon or decrease the number of allowed "
-                          "structures; the generator doesn't have enough material to generate %s more structures: %s "
-                          "(total: %s). fname: %s. Simulation: %s" % (len(remaining_structures), remaining_structures,
-                                                                      len(sentence_structures), fname, self.seed))
-                    exclude_test_sentences = []
-                else:
-                    sys.exit("You might want to increase the size of the lexicon or the number of allowed structures; "
-                             "the generator doesn't have enough material to generate %s more structures: %s" %
-                             (len(remaining_structures), remaining_structures))
+                sys.exit("You might want to increase the size of the lexicon or decrease the number of allowed "
+                         "structures; the generator doesn't have enough material to generate %s more structures: "
+                         "%s (total: %s). Simulation: %s" % (len(remaining_structures), set(remaining_structures),
+                                                             len(sentence_structures), self.seed))
             remaining_structures, generated_pairs, max_cognate = self.structures_to_sentences(remaining_structures,
                                                                                               generated_pairs,
                                                                                               exclude_test_sentences,
                                                                                               exclude_cognates,
                                                                                               replace_aux_sentences,
                                                                                               max_cognate=max_cognate)
-        random.shuffle(generated_pairs)
+        self.random.shuffle(generated_pairs)
         if fname:  # fname is None in the cognate experiment case
             with codecs.open('%s/%s' % (self.results_dir, fname), 'w', "utf-8") as f:
                 for sentence, message in generated_pairs:
@@ -336,23 +336,24 @@ class SetsGenerator:
                 print(query)
             sys.exit("Empty cache: %s %s" % (params, cache))  # throw an error if cache is empty
         selected = cache[['morpheme_%s' % lang, 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
-                          'is_cognate', 'is_false_friend']].iloc[random.randint(0, cache.shape[0] - 1)]
+                          'is_cognate', 'is_false_friend']].iloc[self.get_random_row(cache.shape[0])]
         return selected
 
     def save_lexicon_and_structures_to_csv(self):
         # Matches strings between ;E= or ,           E.g., 'PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
         # "?" is necessary for multiple matches
-        event_semantics = self.structures_df['message'].str.extractall(';E=|,?([A-Z-]*)(,|$)')[0].dropna().unique()
-        self.list_to_file("event_semantics", event_semantics)
-        self.list_to_file("identifiability", self.identifiability)
-        self.list_to_file("target_lang", set(self.target_lang))
-        self.list_to_file("roles", self.roles)
-        self.list_to_file("concepts", self.concepts)
-        self.lexicon_df.to_csv('%s/lexicon.csv' % self.results_dir, encoding='utf-8', index=False)
-        self.structures_df.to_csv('%s/structures.csv' % self.results_dir, encoding='utf-8', index=False)
+        if not os.listdir(self.input_dir):
+            event_semantics = self.structures_df['message'].str.extractall(';E=|,?([A-Z-]*)(,|$)')[0].dropna().unique()
+            self.list_to_file("event_semantics", event_semantics)
+            self.list_to_file("identifiability", self.identifiability)
+            self.list_to_file("target_lang", set(self.target_lang))
+            self.list_to_file("roles", self.roles)
+            self.list_to_file("concepts", self.concepts)
+            self.lexicon_df.to_csv('%s/lexicon.csv' % self.input_dir, encoding='utf-8', index=False)
+            self.structures_df.to_csv('%s/structures.csv' % self.input_dir, encoding='utf-8', index=False)
 
     def list_to_file(self, fname, content):
-        with open('%s/%s.in' % (self.results_dir, fname), 'w') as f:
+        with open('%s/%s.in' % (self.input_dir, fname), 'w') as f:
             f.write("%s" % "\n".join(content))
 
     def get_determiners_from_lexicon(self):
@@ -466,15 +467,13 @@ class SetsGenerator:
         return msg
 
     @staticmethod
-    def calculate_number_of_sentences_per_set(num_sentences, percentage_test_set=0.2):
+    def calculate_num_of_test_sentences(num_training, percentage_test_set=0.2):
         """
-        :param num_sentences: Number of sentences that need to be generated
+        :param num_training: Number of training sentences
         :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
         :return: Number of sentences for training and test sets
         """
-        num_test = int(percentage_test_set * num_sentences)
-        num_train = num_sentences - num_test
-        return num_train, num_test
+        return int((num_training * 100 / 80) * percentage_test_set)
 
     @staticmethod
     def get_df_concept(morpheme_df):
@@ -506,11 +505,11 @@ class SetsGenerator:
 
 if __name__ == "__main__":
     # store under "generated/" if folder was not specified
-    sets = SetsGenerator(results_dir="../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M"),
+    sets = SetsGenerator(sim_results_dir="../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M"),
                          cognate_percentage=0, use_full_verb_form=True, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='en',
                          lexicon_csv='../corpus/lexicon_aux_limited.csv', structures_csv='../corpus/structures.csv')
     # sets.generate_general(num_sentences=2500, percentage_l2=0.5)
-    test, train = sets.generate_general(num_sentences=3500, percentage_l2=0.5)
+    test, training = sets.generate_general(num_training=3000, percentage_l2=0.5)
     if len(sets.lang) > 2:
-        sets.generate_auxiliary_experiment_sentences(num_test_sentences=1000, training_sentences=train, percentage_l2=0)
+        sets.generate_auxiliary_experiment_sentences(num_test_sentences=1000, training_set=training, percentage_l2=0)

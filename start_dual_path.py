@@ -3,7 +3,7 @@ import shutil
 import json
 import argparse
 from datetime import datetime
-from modules import os, pickle, sys, mp, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter
+from modules import os, lzma, pickle, sys, mp, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter
 
 
 def copy_dir(src, dst, symlinks=False, ignore=None):
@@ -19,42 +19,45 @@ def copy_dir(src, dst, symlinks=False, ignore=None):
 
 
 def copy_files_endswith(src, dest, ends_with=".in"):
+    os.makedirs(dest)
     for filename in os.listdir(src):
         if filename.endswith(ends_with):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def copy_specific_files(src, dest, filename_starts_with_list=('test', 'training')):
-    for filename in os.listdir(src):
-        for starts in filename_starts_with_list:
-            if filename.startswith(starts):
-                shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
+def create_all_input_files(number_of_simulations, arguments):
+    input_files = []
+    for sim_num in number_of_simulations:  # first create all input files
+        process = mp.Process(target=create_input_for_simulation,
+                             args=arguments+(sim_num,))
+        process.start()
+        input_files.append(process)
+    for p in input_files:
+        p.join()
 
 
-def create_input_for_simulation(simulation_number, directory, sets, original_input, cognate_experiment,
-                                generate_num, l2_percentage, auxiliary_experiment, len_lang):
-    rdir = "%s/%s" % (directory, simulation_number)
-    os.makedirs(rdir)
-    if sets:  # generate new test/training sets
-        if simulation_number == 0:  # copy the .in files under the /input folder
-            copy_specific_files(os.path.join("%s/input" % directory), rdir)
+def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, l2_percentage,
+                                auxiliary_experiment, simulation_number):
+    sets.sets.set_new_results_dir("%s/%s" % (results_directory, simulation_number))
+    sets.sets.seed = simulation_number  # set new seed for language generator
+    if cognate_experiment:
+        sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
+    else:
+        test_set, training_set = sets.sets.generate_general(num_training=training_num, percentage_l2=l2_percentage)
+        if auxiliary_experiment:
+            sets.sets.aux_experiment = True
+            sets.sets.generate_auxiliary_experiment_sentences(training_set=training_set, percentage_l2=l2_percentage)
+
+
+def check_given_input_path(input_path):
+    if not os.path.isfile(os.path.join(input_path, "test.in")) and 'input' not in input_path:
+        corrected_dir = os.path.join(input_path, "input")  # the user may have forgotten to add the 'input' dir
+        if os.path.exists(corrected_dir):
+            input_path = corrected_dir
         else:
-            sets.sets.results_dir = rdir
-            sets.sets.seed = simulation_number  # set new seed for language generator
-            if cognate_experiment:
-                sets.generate_for_cognate_experiment(num_sentences=generate_num,
-                                                     percentage_l2=l2_percentage,
-                                                     save_files=False)
-            else:
-                tst, training = sets.sets.generate_general(num_sentences=generate_num, percentage_l2=l2_percentage,
-                                                           save_files=False)
-                if auxiliary_experiment:
-                    sets.sets.aux_experiment = True
-                    if len_lang > 2:
-                        sets.sets.generate_auxiliary_experiment_sentences(training_sentences=training,
-                                                                          percentage_l2=l2_percentage)
-    elif original_input:  # use existing test/training set (copy them first)
-        copy_files_endswith(os.path.join(original_input, str(simulation_number)), rdir)
+            sys.exit('No input folder found in the path (%s)' % input_path)
+    logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % input_path)
+    return input_path
 
 
 if __name__ == "__main__":
@@ -99,8 +102,8 @@ if __name__ == "__main__":
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('-generate_num', type=int, default=3800, help='Sum of test/training sentences to be generated '
-                                                                      '(only if no input was set)')  # 3500
+    parser.add_argument('-generate_training_num', type=int, default=3000, help='Sum of test/training sentences to be '
+                                                                               'generated (only if no input was set)')
     parser.add_argument('-title', help='Title for the plots')
     parser.add_argument('-sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
@@ -189,10 +192,9 @@ if __name__ == "__main__":
             args.__dict__ = json.load(f)
 
     cognate_experiment = args.cognate_experiment
-    generate_num = args.generate_num
+    training_num = args.generate_training_num
     l2_percentage = args.l2_percentage
     auxiliary_experiment = args.auxiliary_experiment
-    len_lang = len(args.lang)
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
@@ -224,21 +226,18 @@ if __name__ == "__main__":
     elif cognate_experiment:
         args.activate_both_lang = True
 
-    original_input_path = None  # keep track of the original input in case it was copied
-    input_sets = None
     if not args.testset:
         args.testset = 'test.in'
+
+    input_dir = '%s/input' % results_dir
+    num_training = args.generate_training_num
     if args.input:  # generate a new set (unless "input" was also set)
-        if not os.path.isfile(os.path.join(args.input, "test.in")) and 'input' not in args.input:
-            corrected_dir = os.path.join(args.input, "input")  # the user may have forgotten to add the 'input' dir
-            if os.path.exists(corrected_dir):
-                args.input = corrected_dir
-            else:
-                sys.exit('No input folder found in the path (%s)' % args.input)
-        logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % args.input)
-        copy_dir(args.input, '%s/input' % results_dir)
-        original_input_path = args.input.replace("/input", "")  # remove the "input" part, sets are in the sub folders
-        args.input = '%s/input' % results_dir  # the specific simulation files will be copied later
+        given_input_path = check_given_input_path(args.input)
+        copy_dir(given_input_path, input_dir)
+        existing_input_path = given_input_path.replace("/input", "")  # remove "/input", the sets are in the sub folders
+        for sim in simulation_range:
+            copy_files_endswith(src=os.path.join(existing_input_path, str(sim)), dest="%s/%s" % (results_dir, sim))
+        num_training = sum(1 for line in open("%s/%s/%s" % (results_dir, sim, args.trainingset)))
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
 
@@ -248,23 +247,17 @@ if __name__ == "__main__":
         if not args.structures:
             args.structures = 'corpus/%sstructures.csv' % experiment_dir
         logging.warning("Using %s (lexicon) and %s (structures)" % (args.lexicon, args.structures))
-        args.input = "%s/input/" % results_dir
         input_sets = ExperimentSets(
-            sets_gen=SetsGenerator(results_dir=args.input, use_full_verb_form=args.full_verb, lang=args.lang,
+            sets_gen=SetsGenerator(input_dir=input_dir, use_full_verb_form=args.full_verb, lang=args.lang,
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
-                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos))
-        if args.cognate_experiment:
-            input_sets.generate_for_cognate_experiment(num_sentences=args.generate_num,
-                                                       percentage_l2=args.l2_percentage)
-        else:
-            test, train = input_sets.sets.generate_general(num_sentences=args.generate_num,
-                                                           percentage_l2=args.l2_percentage)
-            if args.auxiliary_experiment:
-                input_sets.sets.aux_experiment = True
-                if len_lang > 2:
-                    input_sets.sets.generate_auxiliary_experiment_sentences(training_sentences=train,
-                                                                            percentage_l2=args.l2_percentage)
+                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos,
+                                   aux_experiment=args.auxiliary_experiment),)
+        create_all_input_files(number_of_simulations=simulation_range,
+                               arguments=(results_dir, input_sets, cognate_experiment,
+                                          training_num, l2_percentage, auxiliary_experiment))
+        del input_sets  # we no longer need it
+
     if not args.title:
         lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
                               'el': 'Greek monolingual model', 'enes': 'Bilingual en-es model',
@@ -278,36 +271,17 @@ if __name__ == "__main__":
     with open('%s/commandline_args.txt' % results_dir, 'w') as f:
         json.dump(args.__dict__, f, indent=2)
 
-    inputs = InputFormatter(directory=args.input, language=args.lang, use_semantic_gender=args.gender,
-                            overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
-                            trainingset=args.trainingset, testset=args.testset, fixed_weights=args.fw,
-                            fixed_weights_identif=args.fwi, use_word_embeddings=args.word_embeddings,
-                            monolingual_only=args.monolingual, replace_haber_tener=args.replace_haber,
-                            test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
     num_valid_simulations = None
     simulations_with_pron_err = 0
     failed_sim_id = []
-    if args.sim > 1:
-        input_files = []
-        for sim_num in simulation_range:  # first create all input files
-            process = mp.Process(target=create_input_for_simulation,
-                                 args=(sim_num, results_dir, input_sets, original_input_path, cognate_experiment,
-                                       generate_num, l2_percentage, auxiliary_experiment, len_lang))
-            process.start()
-            input_files.append(process)
 
-        for p in input_files:
-            p.join()
-
-        del input_sets, input_files  # we no longer need it
-
-        """os.environ["VECLIB_MAXIMUM_THREADS"] = "1"  # multiprocessing + numpy hang on Mac OS
-        os.environ["MKL_NUM_THREADS"] = "1"
-        os.environ["NUMEXPR_NUM_THREADS"] = "1"
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["OPENBLAS_NUM_THREADS"] = "1"  # priorities: OPENBLAS_NUM_THREADS > OMP_NUM_THREADS
-        if platform.system() == 'Linux':
-            os.system("taskset -p 0xff %d" % os.getpid())  # change task affinity to correctly use multiprocessing"""
+    formatted_input = InputFormatter(directory=input_dir, language=args.lang, use_semantic_gender=args.gender,
+                                     overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
+                                     num_training=num_training, training_set_name=args.trainingset,
+                                     test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
+                                     use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
+                                     replace_haber_tener=args.replace_haber,
+                                     test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
 
     processes = []
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
@@ -315,37 +289,32 @@ if __name__ == "__main__":
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                      cognate_experiment=args.cognate_experiment, momentum=args.momentum,
-                     set_weights_folder=inputs.directory if args.set_weights else None,
-                     input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
+                     set_weights_folder=formatted_input.directory if args.set_weights else None,
+                     input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
                      separate_hidden_layers=args.separate_hidden_layers)
-    # run the simulations
-    for sim in simulation_range:
-        if args.sim > 1:
-            inputs.update_sets(new_directory="%s/%s" % (results_dir, sim))
-            dualp.simulation_num = sim
+    for sim in simulation_range:   # run the simulations
+        formatted_input.update_sets(new_directory="%s/%s" % (results_dir, sim))
+
         if args.set_weights:
-            destination_folder = '%s/weights' % inputs.directory
+            destination_folder = '%s/weights' % formatted_input.directory
+            dualp.set_weights_folder = formatted_input.directory if args.set_weights else None
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
             if args.only_eval or args.continue_training:  # copy all weights
                 copy_dir(src_folder, destination_folder)
-            else:  # only copy the epoch we wanted (such as epoch 0)
-                os.makedirs(destination_folder)
+            else:  # only copy the starting epoch (such as epoch 0)
                 copy_files_endswith(src=src_folder, dest=destination_folder,
                                     ends_with="_%s" % args.set_weights_epoch)
                 if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
-                    os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch, '%s/weights' % inputs.directory))
+                    os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch,
+                                                         '%s/weights' % formatted_input.directory))
                     args.set_weights_epoch = 0
-        dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                         epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                         compress_size=args.compress, activate_both_lang=args.activate_both_lang,
-                         cognate_experiment=args.cognate_experiment, momentum=args.momentum,
-                         set_weights_folder=inputs.directory if args.set_weights else None,
-                         input_class=inputs, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=sim,
-                         set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                         auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
-                         separate_hidden_layers=args.separate_hidden_layers)
+
+        dualp.simulation_num = sim
+        dualp.input_class = formatted_input
+        dualp.set_weights_epoch = set_weights_epoch
+
         process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
         process.start()
         processes.append(process)
@@ -359,16 +328,17 @@ if __name__ == "__main__":
             layers_with_softmax_act_function += ", %s" % layer.name
     del dualp
 
-    if args.sim > 1 and args.eval_test:  # aggregate and plot results
+    if args.eval_test:  # aggregate and plot results
         valid_results = []
         for sim in simulation_range:  # read results from all simulations
             if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
-                with open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
+                with lzma.open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
                     simulation = pickle.load(f)
 
-                if inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=args.threshold):
+                if formatted_input.training_is_successful(simulation['correct_meaning']['test'],
+                                                          threshold=args.threshold):
                     valid_results.append(simulation)
-                    if not inputs.training_is_successful(simulation['correct_meaning']['test'], threshold=80):
+                    if not formatted_input.training_is_successful(simulation['correct_meaning']['test'], threshold=80):
                         failed_sim_id.append("[%s]" % sim)  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(sim))  # keep track of simulations that failed
@@ -390,23 +360,25 @@ if __name__ == "__main__":
                 eval_sets.add('training')
             results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
 
-            with open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
+            with lzma.open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
                 pickle.dump(results_mean_and_std, pckl)
 
             plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                           epochs=args.epochs, num_training=inputs.num_train, num_test=inputs.num_test)
+                           epochs=args.epochs, num_training=formatted_input.num_training,
+                           num_test=formatted_input.num_test)
             plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
-                              test_sentences_with_pronoun=inputs.test_sentences_with_pronoun,
-                              auxiliary_experiment=args.auxiliary_experiment,
-                              evaluated_datasets=eval_sets)
+                              test_sentences_with_pronoun=formatted_input.test_sentences_with_pronoun,
+                              auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
             if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                 with open("%s/results.log" % results_dir, 'w') as f:
                     f.write("Code-switched percentage (test set): %s" %
-                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], inputs.num_test))
+                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],
+                                               formatted_input.num_test))
 
     with open("%s/results.log" % results_dir, 'w') as f:
         f.write("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n"
-                "%s%s" % (inputs.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err, args.sim,
+                "%s%s" % (formatted_input.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err,
+                          args.sim,
                           "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations
                           else "", "\nIndeces of (almost) failed simulations: %s"
                                    % ", ".join(failed_sim_id) if failed_sim_id else ""))

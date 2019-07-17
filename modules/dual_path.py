@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from modules import pickle, defaultdict, logging, SimpleRecurrentNetwork, torch
+from modules import lzma, pickle, defaultdict, logging, SimpleRecurrentNetwork, torch
 
 
 class DualPath:
@@ -48,11 +48,12 @@ class DualPath:
         self.test_logger = None
         self.set_level_logger = None
         self.only_evaluate = only_evaluate
+        self.cpu = torch.device('cpu')  # randperm doesn't support GPU
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
         num_epochs_decreasing_step = 10
-        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_train *
+        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_training *
                                                                       num_epochs_decreasing_step)
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
@@ -86,6 +87,7 @@ class DualPath:
             header += ", produced_pos, target_pos, correct_tense, correct_definiteness, message"
         else:
             header = "epoch, set_name, correct_meaning, correct_pos, total_sentences"
+        header += ", entropy"
         logger.info(header)
         return logger
 
@@ -151,14 +153,18 @@ class DualPath:
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   results_dir=self.inputs.directory, simulation_num=self.simulation_num)
 
-    def feed_line(self, line, weights_role_concept, epoch=None, backpropagate=False, activate_target_language=False):
+    def feed_line(self, target_sentence_idx, target_lang_act, lang, weights_role_concept, weights_concept_role,
+                  event_semantics, epoch=None, backpropagate=False, activate_target_lang=False):
         produced_sent_ids = []
+        sentence_entropy = []
         append_to_produced = produced_sent_ids.append
-        # updated_role_concept=self.inputs.get_weights_role_concept(line.message)
-        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept, info=line,
-                                           activate_language=(activate_target_language or backpropagate))
+        append_to_entropy = sentence_entropy.append
+        self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
+                                           weights_concept_role=weights_concept_role,
+                                           event_semantics=event_semantics, target_lang_act=target_lang_act,
+                                           activate_language=(activate_target_lang or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
-        for trg_idx in line.target_sentence_idx + [None] * (5 if not backpropagate else 0):
+        for trg_idx in target_sentence_idx + [None] * (5 if not backpropagate else 0):
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=prod_idx is None)
             if backpropagate:
@@ -168,20 +174,21 @@ class DualPath:
                 append_to_produced(self.srn.get_max_output_activation())
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
-                if activate_target_language and prod_idx is None and self.activate_both_lang:
+                if activate_target_lang and prod_idx is None and self.activate_both_lang:
                     # TODO: play with activations, e.g. activate the target language slightly more
                     # ones or: [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
-                    self.srn.update_layer_activation("target_lang", activation=torch.ones(2))
-                prod_idx = self.srn.get_max_output_activation()
+                    self.srn.set_layer_activation("target_lang", activation=torch.ones(2))
+                prod_idx, entropy_idx = self.srn.get_max_output_activation_and_entropy()
                 append_to_produced(prod_idx)
+                append_to_entropy(entropy_idx)
                 if prod_idx == self.inputs.period_idx:  # end sentence if period produced
                     break
 
             if self.allow_cognate_boost and self.activate_both_lang and prod_idx in self.inputs.cognate_idx:
-                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(line.lang))  # cognate boost
+                self.srn.boost_non_target_lang(target_lang_idx=self.inputs.languages.index(lang))  # cognate boost
 
         if not backpropagate:
-            return produced_sent_ids
+            return produced_sent_ids, sentence_entropy
 
     def start_network(self, evaluate_test_set, evaluate_training_set, start_from_epoch=0):
         """
@@ -198,19 +205,22 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         :param start_from_epoch: training can start from a later epoch
         """
-        cpu = torch.device('cpu')  # randperm doesn't support GPU
         if not self.only_evaluate:
             epoch = start_from_epoch
-            # weights_role_concept = self.inputs.weights_role_concept['training']
+            weights_role_concept = self.inputs.weights_role_concept['training']
+            weights_concept_role = self.inputs.weights_concept_role['training']
+            event_semantics = self.inputs.event_sem_activations['training']
+            target_lang_act = self.inputs.target_lang_act['training']
+            num_training = self.inputs.num_training
             while epoch < self.epochs:  # start training for x epochs; shuffle before each iteration
-                for train_line_idx in torch.randperm(self.inputs.num_train, device=cpu).tolist():
-                    train_line = self.inputs.trainlines_df.iloc[train_line_idx]
-                    # weights_role_concept[train_line.Index] == self.inputs.get_weights_role_concept(train_line.message)
-                    self.feed_line(train_line, self.inputs.get_weights_role_concept(train_line.message), epoch,
-                                   backpropagate=True, activate_target_language=True)
+                for line_idx in torch.randperm(num_training, device=self.cpu).tolist():
+                    line = self.inputs.trainlines_df.iloc[line_idx]
+                    self.feed_line(line.target_sentence_idx, target_lang_act[line_idx], line.lang,
+                                   weights_role_concept[line_idx], weights_concept_role[line_idx],
+                                   event_semantics[line_idx], epoch=epoch, backpropagate=True,
+                                   activate_target_lang=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
-                #print(self.inputs.directory, epoch)
                 self.srn.save_weights(results_dir=self.inputs.directory, epoch=epoch)
                 epoch += 1  # increase number of epochs, begin new iteration
 
@@ -259,7 +269,7 @@ class DualPath:
             results['pronoun_errors'] = {set_name: [] for set_name in set_names}
 
         if top_down_language_activation:
-            self.srn.update_layer_activation("target_lang", activation=torch.ones(2))
+            self.srn.set_layer_activation("target_lang", activation=torch.ones(2))
 
         for set_name in set_names:
             if set_name == 'test':
@@ -267,12 +277,15 @@ class DualPath:
                 num_sentences = self.inputs.num_test
             else:
                 set_lines = self.inputs.trainlines_df
-                num_sentences = self.inputs.num_train
+                num_sentences = self.inputs.num_training
+            weights_role_concept = self.inputs.weights_role_concept[set_name]
+            weights_concept_role = self.inputs.weights_concept_role[set_name]
+            event_semantics = self.inputs.event_sem_activations[set_name]
+            target_lang_act = self.inputs.target_lang_act[set_name]
 
             for i in set_lines.event_sem_message.unique():
                 results[i] = {set_name: [] for set_name in set_names}
                 results["%s_cs" % i] = {set_name: [] for set_name in set_names}
-            # weights_role_concept = self.inputs.weights_role_concept[set_name]
             logger = self.test_logger if 'test' in set_name else self.training_logger
             epoch = 0
             while epoch < self.epochs:  # start training for x epochs
@@ -280,17 +293,19 @@ class DualPath:
                 counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
                                       set_weights_epoch=epoch)
-                for line in set_lines.itertuples():
-                    # line = set_lines.iloc[line_idx]   # FIXME
-                    produced_idx = self.feed_line(line, self.inputs.get_weights_role_concept(line.message),
-                                                  activate_target_language=not top_down_language_activation)
+                for line_idx in torch.randperm(num_sentences, device=self.cpu).tolist():
+                    line = set_lines.iloc[line_idx]
+                    produced_idx, entropy_idx = self.feed_line(line.target_sentence_idx, target_lang_act[line_idx],
+                                                               line.lang, weights_role_concept[line_idx],
+                                                               weights_concept_role[line_idx],
+                                                               event_semantics[line_idx],
+                                                               activate_target_lang=not top_down_language_activation)
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
 
                     target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
 
-                    debug_sentence = False  # debug specific sentence
-                    if debug_sentence:
+                    if False:  # debug_sentence: # debug specific sentence
                         logger.warning('Debugging sentence pair')
                         produced_sentence = 'la anfitriona tiene pateado el bolígrafo .'
                         target_sentence = 'la anfitriona ha pateado el bolígrafo .'
@@ -333,8 +348,7 @@ class DualPath:
                                 counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True
                                 counter['correct_code_switches'] += 1
-                                cs_type_with_lang = "%s-%s" % (target_lang, cs_type)
-                                counter['type_code_switches'][cs_type_with_lang] += 1
+                                counter['type_code_switches']["%s-%s" % (target_lang, cs_type)] += 1
                                 if self.cognate_experiment:  # check for cognates vs FFs vs regular (no lang)
                                     if ',COG' in line.message:
                                         cs_type_with_cognate_status = "%s-cog" % cs_type
@@ -406,6 +420,7 @@ class DualPath:
                             log_info += (has_pronoun_error, has_pronoun_error_flex)
                         log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
                                      not has_wrong_det, '"%s"' % line.message,)
+                        log_info += (' '.join(entropy_idx),)
                         logger.info(",".join(str(x) for x in log_info))
                 self.set_level_logger.info(",".join(str(x) for x in (epoch, set_name, counter['correct_meaning'],
                                                                      counter['correct_pos'], num_sentences)))
@@ -416,7 +431,7 @@ class DualPath:
             results['type_code_switches'][set_name] = self.aggregate_dict(self.epochs,
                                                                           results['type_code_switches'][set_name])
         # write (single) simulation results to a pickled file
-        with open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
+        with lzma.open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
             pickle.dump(results, pckl)
 
     @staticmethod

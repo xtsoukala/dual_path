@@ -1,4 +1,5 @@
 import torch
+import lzma
 import pickle
 import numpy as np
 import pandas as pd
@@ -17,6 +18,3 @@ if torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     torch.multiprocessing.set_start_method('spawn', force=True)
 mp = torch.multiprocessing
-
-
-

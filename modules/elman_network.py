@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from copy import deepcopy
 from collections import defaultdict
-from modules import os, torch, sys
+from scipy.stats import entropy
+from modules import os, torch, sys, pickle, lzma
 from modules.formatter import true_divide
 
 
 class SimpleRecurrentNetwork:
     def __init__(self, learn_rate, momentum, rdir, separate_hidden_layers=False, context_init_value=0.5,
-                 debug_messages=True, include_role_copy=False,
-                 include_input_copy=False):
+                 debug_messages=True, include_role_copy=False, include_input_copy=False):
         self.layers = []
         self.layer_idx = defaultdict(int)
         self.backpropagated_layers = []
@@ -25,7 +25,8 @@ class SimpleRecurrentNetwork:
         self.lesion_syntax = False
         self.lesion_semantics = False
         self.syntactic_layers = ['compress', 'pred_compress']
-        self.semantic_layers = ['pred_concept', 'role'] #['role', 'pred_concept', 'pred_identifiability', 'eventsem']#, 'target_lang']
+        self.semantic_layers = ['pred_concept', 'role']  # ['role', 'pred_concept', 'pred_identifiability',
+        # 'eventsem']#, 'target_lang']
         self.initially_deactive_layers = ['compress', 'concept', 'identifiability', 'role']
         self.current_layer = None
         self.dir = rdir
@@ -44,7 +45,7 @@ class SimpleRecurrentNetwork:
     def add_layer(self, name, size, has_bias=False, activation_function="tanh", convert_input=False, recurrent=False):
         self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
                                        is_recurrent=recurrent, activation_function=activation_function,
-                                       context_init_value=self.context_init_value))
+                                       context_value=self.context_init_value))
         self.layer_idx[name] = len(self.layers) - 1
 
     def connect_layers(self, first_layer_name, second_layer_name):
@@ -55,36 +56,39 @@ class SimpleRecurrentNetwork:
 
     def load_weights(self, results_dir, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
-            weights_fname = os.path.join(set_weights_folder, "weights", "w_%s" % set_weights_epoch)
-            self.layers = torch.load(weights_fname)
+            weights_fname = os.path.join(set_weights_folder, "weights", "w_%s.lzma" % set_weights_epoch)
+            with lzma.open(weights_fname, 'rb') as f:
+                self.layers = pickle.load(f)
         else:
-            if not set_weights_folder:
+            if not set_weights_folder and simulation_num:
                 self._create_dir_if_not_exists(results_dir)
                 torch.manual_seed(simulation_num if not None else 18)  # set number of simulation as the seed
 
+            sd = 0.05  # or calculate according to input size (self.input_sd(layer.in_size) and move to the loop
+            m = self.normal_distribution(0, sd)
             for layer in self.layers:
                 if not layer.in_size:
                     continue
-                layer.sd = 0.05  # or calculate according to input size: self.input_sd(layer.in_size)
                 # Using random weights with μ = 0 and low variance is CRUCIAL.
                 # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
-                m = self.normal_distribution(0, layer.sd)
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
-            torch.save(self.layers, "%s/weights/w_%s" % (results_dir, set_weights_epoch))
+
+            if simulation_num:
+                self.save_weights(results_dir, set_weights_epoch)
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
         self._create_dir_if_not_exists(results_dir)
-        """for layer in self.backpropagated_layers:
-            np.savez_compressed("%s/weights/weights_%s" % (results_dir, epoch), layer.in_weights)"""
-        torch.save(self.layers, "%s/weights/w_%s" % (results_dir, epoch))
+        with lzma.open("%s/weights/w_%s.lzma" % (results_dir, epoch), 'wb') as pckl:
+            pickle.dump(self.layers, pckl)
 
-    def set_message_reset_context(self, updated_role_concept, info, activate_language):
-        weights_concept_role = torch.t(updated_role_concept)
+    def set_message_reset_context(self, updated_role_concept, weights_concept_role, event_semantics, target_lang_act,
+                                  activate_language):
         role_layer = self.get_layer("role")
         for x in range(role_layer.in_size):  # update this way so as to keep the bias weights intact
             role_layer.in_weights[x] = weights_concept_role[x]
+        # role_layer.in_weights[0:role_layer.in_size] = weights_concept_role  FIXME
 
         # pred_concept is split into pred_identifiability and pred_concept (they can have different fixed weights)
         pred_identif = self.get_layer("pred_identifiability")
@@ -95,13 +99,9 @@ class SimpleRecurrentNetwork:
             for s in range(pred_concept.size):
                 pred_concept.in_weights[x][s] = updated_role_concept[x][pred_identif.size + s]
 
-        event_sem = self.get_layer("eventsem")
-        if event_sem.convert_input:
-            event_sem.activation = convert_range(info.event_sem_activations)
-        else:
-            event_sem.activation = torch.tensor(info.event_sem_activations)  # info.event_sem_activations  # FIXME
+        self.set_layer_activation("eventsem", event_semantics)
         if activate_language:
-            self.update_layer_activation("target_lang", activation=torch.tensor(info.target_lang_act))  # FIXME
+            self.set_layer_activation("target_lang", activation=target_lang_act)
         self.reset_context_delta_and_crole()
 
     def boost_non_target_lang(self, target_lang_idx):
@@ -114,41 +114,47 @@ class SimpleRecurrentNetwork:
 
     def reset_context_delta_and_crole(self):
         if self.separate_hidden_layers:
-            recurrent_layer = self.get_layer("hidden_semantic")
-            recurrent_layer.context_activation = torch.tensor([self.context_init_value] * recurrent_layer.size)
-            recurrent_layer = self.get_layer("hidden_syntactic")
-            recurrent_layer.context_activation = torch.tensor([self.context_init_value] * recurrent_layer.size)
+            self.set_context_activation("hidden_semantic", reset=True)
+            self.set_context_activation("hidden_syntactic", reset=True)
         else:
-            recurrent_layer = self.get_layer("hidden")
-            recurrent_layer.context_activation = torch.tensor([self.context_init_value] * recurrent_layer.size)
+            self.set_context_activation("hidden", reset=True)
 
         for layer in self.backpropagated_layers:  # Also reset the previous delta values
             layer.previous_delta = torch.empty([])
 
         if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
-            self.update_layer_activation("role_copy", activation=None)
+            self.initialize_layer_activation("role_copy")
         if self.include_input_copy:
-            self.update_layer_activation("input_copy", activation=None)
+            self.initialize_layer_activation("input_copy")
 
     def set_inputs(self, input_idx, target_idx=None):
-        input_layer = self.get_layer("input")
-        input_layer.activation = torch.zeros(input_layer.size)
-        if input_idx:  # at the beginning of sentence, input_idx is None
-            input_layer.activation[input_idx] = 1
-        if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
-            input_layer.activation = convert_range(input_layer.activation)
-
+        self.initialize_layer_activation("input", activate_id=[input_idx, 1] if input_idx else None)
+        """if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
+            input_layer.activation = convert_range(input_layer.activation)"""
         if target_idx is not None:  # no need to set target when testing
-            output_layer = self.get_layer("output")
-            output_layer.target_activation = torch.zeros(output_layer.size)
-            output_layer.target_activation[target_idx] = 1
+            self.initialize_target_activation("output", activate_idx=target_idx, value=1)
 
-    def update_layer_activation(self, layer_name, activation):
+    def initialize_layer_activation(self, layer_name, activate_id=None):
         layer = self.get_layer(layer_name)
-        if activation is None:  # set to zero
-            layer.activation = torch.zeros(layer.size)
-        else:
-            layer.activation = activation
+        layer.activation = torch.zeros(layer.size)
+        if activate_id:
+            idx, act = activate_id
+            layer.activation[idx] = act
+
+    def initialize_target_activation(self, layer_name, activate_idx, value):
+        layer = self.get_layer(layer_name)
+        layer.target_activation = torch.zeros(layer.size)
+        layer.target_activation[activate_idx] = value
+
+    def get_feedforward_layers(self):
+        """
+        Returns only the layers that have incoming activations (and can therefore backpropagate the error)
+        Skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
+        """
+        return [layer for layer in self.layers if layer.in_layers]
+
+    def get_backpropagation_layers(self):
+        return [layer for layer in reversed(self.layers) if layer.in_layers]
 
     def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
@@ -161,14 +167,14 @@ class SimpleRecurrentNetwork:
                 if (start_of_sentence and self.lesion_syntax and incoming_layer.name in self.syntactic_layers or
                         self.lesion_semantics and incoming_layer.name in self.semantic_layers):
                     lesion_step = 1  # 11% for syntax, 5% for semantics
-                    layer.in_weights[layer.in_activation.size:layer.in_activation.size+incoming_layer.size] = 0
+                    layer.in_weights[layer.in_activation.size:layer.in_activation.size + incoming_layer.size] = 0
 
                 layer.in_activation = torch.cat((layer.in_activation, incoming_layer.activation))
             if layer.is_recurrent:  # hidden layer only (include context activation)
                 layer.in_activation = torch.cat((layer.in_activation, layer.context_activation))  # , 0)
             if layer.has_bias:  # add bias
-                layer.in_activation = torch.cat(
-                    (layer.in_activation, torch.tensor(1)))  # , 0) #np. append(layer.in_activation, 1)
+                layer.in_activation = torch.cat((layer.in_activation, torch.tensor(1)))
+                # , 0) #np. append(layer.in_activation, 1)
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = torch.zeros(layer.size)  # set role_copy to zero
@@ -176,27 +182,22 @@ class SimpleRecurrentNetwork:
             dot_product = torch.matmul(layer.in_activation, layer.in_weights)
             # Apply activation function to input • weights
             if layer.activation_function == "softmax":
-                layer.activation = torch.nn.functional.softmax(dot_product, dim=0) #softmax(dot_product)
+                layer.activation = torch.nn.functional.softmax(dot_product, dim=0)
             elif layer.activation_function == "tanh":
                 layer.activation = dot_product.tanh()
             if self.debug_messages:
                 print("Layer: %s. Activation %s" % (layer.name, layer.activation))
         # Copy output of the hidden to "context" (activation of t-1)
         if self.separate_hidden_layers:
-            hidden_layer = self.get_layer("hidden_semantic")
-            hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
-            hidden_layer = self.get_layer("hidden_syntactic")
-            hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
+            self.set_context_activation("hidden_semantic")
+            self.set_context_activation("hidden_syntactic")
         else:
-            hidden_layer = self.get_layer("hidden")
-            hidden_layer.context_activation = deepcopy(hidden_layer.activation)  # deepcopy otherwise it keeps reference
+            self.set_context_activation("hidden")
 
         if self.include_input_copy:
-            input_layer = self.get_layer("input")
-            self.update_layer_activation("input_copy", activation=deepcopy(input_layer.activation))
+            self.set_layer_activation("input_copy", activation=deepcopy(self.get_layer_activation("input")))
         if self.include_role_copy:
-            role_layer = self.get_layer("role")
-            self.update_layer_activation("role_copy", activation=deepcopy(role_layer.activation))
+            self.set_layer_activation("role_copy", activation=deepcopy(self.get_layer_activation("role")))
 
     @staticmethod
     def convert_to_2d(tensor, transpose=False):
@@ -218,9 +219,8 @@ class SimpleRecurrentNetwork:
 
     def _compute_output_error(self, epoch):
         # Calculate error[Eo](target - output)
-        output_layer = self.get_layer("output")
-        self._calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
-        output_layer.gradient = output_layer.target_activation - output_layer.activation  # no derivative here
+        # calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
+        self.set_output_gradient()
 
     def _calculate_mean_square_and_divergence_error(self, epoch, target_activation, output_activation):
         # perform element-wise average along the array (returns single value)
@@ -238,6 +238,7 @@ class SimpleRecurrentNetwork:
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
             # error_out = self.current_layer.error_out.sum(0) FIXME
+            print(self.current_layer.error_out, type(self.current_layer.error_out))
             error_out = self.current_layer.error_out[0]
             for i in range(1, len(self.current_layer.error_out)):
                 error_out = error_out.add(self.current_layer.error_out[i])
@@ -255,7 +256,6 @@ class SimpleRecurrentNetwork:
                                                 self.convert_to_2d(self.current_layer.gradient))
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
         len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
-        #print(len_delta)
         if len_delta > 1:
             self.current_layer.delta = true_divide(self.current_layer.delta, len_delta)
 
@@ -300,21 +300,33 @@ class SimpleRecurrentNetwork:
     def get_layer(self, layer_name):
         return self.layers[self.layer_idx[layer_name]]
 
-    def get_feedforward_layers(self):
-        """
-        Returns only the layers that have incoming activations (and can therefore backpropagate the error)
-        Skip input, role-copy, target-lang & eventsem as their activation is given: no incom. layers
-        """
-        return [layer for layer in self.layers if layer.in_layers]
-
-    def get_backpropagation_layers(self):
-        return [layer for layer in reversed(self.layers) if layer.in_layers]
-
-    def get_max_output_activation(self):
-        return int(self.get_layer_activation("output").argmax())
-
     def get_layer_activation(self, layer_name):
         return self.layers[self.layer_idx[layer_name]].activation
+
+    def set_layer_activation(self, layer_name, activation):
+        self.layers[self.layer_idx[layer_name]].activation = activation
+
+    def set_context_activation(self, layer_name, reset=False):
+        layer = self.layers[self.layer_idx[layer_name]]
+        if reset:
+            layer.context_activation = torch.tensor([self.context_init_value] * layer.size)
+        else:
+            layer.context_activation = deepcopy(layer.activation)
+
+    def get_max_output_activation(self):
+        return int(self.layers[-1].activation.argmax())
+
+    def get_max_output_activation_and_entropy(self):
+        output_activation = self.layers[-1].activation
+        return int(output_activation.argmax()), self.calculate_tensor_entropy(output_activation)
+
+    def set_output_gradient(self):
+        output = self.layers[-1]
+        output.gradient = output.target_activation - output.activation
+
+    @staticmethod
+    def calculate_tensor_entropy(output_tensor):
+        return str(entropy(output_tensor, base=None))
 
     @staticmethod
     def input_sd(number_of_inputs):
@@ -325,8 +337,7 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, activation_function, convert_input,
-                 context_init_value, is_recurrent=False):
+    def __init__(self, name, size, has_bias, activation_function, convert_input, context_value, is_recurrent=False):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size
@@ -339,8 +350,8 @@ class NeuronLayer:
         self.convert_input = convert_input
         self.size = size
         self.sd = 0  # it is used to initialize weights
-        self.activation = torch.empty(size,
-                                      dtype=torch.float64)  # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        # resetting to zeros doesn't seem to bring better results. Maybe empty?
+        self.activation = torch.empty(size, dtype=torch.float64)
         self.target_activation = torch.zeros(size, dtype=torch.float64)
         self.error_out = []
         self.total_error = []
@@ -355,12 +366,12 @@ class NeuronLayer:
         # the following two properties are only for the hidden (recurrent) layer
         self.is_recurrent = is_recurrent
         if is_recurrent:
-            self.make_recurrent(context_init_value)
+            self.make_recurrent(context_value)
 
-    def make_recurrent(self, context_init_value):
+    def make_recurrent(self, context_value):
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
-        self.context_activation = torch.tensor([context_init_value] * self.size)
+        self.context_activation = torch.tensor([context_value] * self.size)
 
 
 def convert_range(matrix, min_val=-1, max_val=1):
@@ -378,7 +389,7 @@ def tanh_derivative(x, input_activation=False):
     the derivative is 1-tanh(x)**2
     """
     if input_activation:
-        return 1.0 - tanh_activation(x).pow(2)
+        return 1.0 - x.tanh().pow(2)
     else:
         return 1.0 - x.pow(2)
 

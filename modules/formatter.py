@@ -9,9 +9,9 @@ from modules import defaultdict, Counter, np, pd, pickle, os, torch
 
 
 class InputFormatter:
-    def __init__(self, directory, fixed_weights, fixed_weights_identif, language, trainingset, testset, overt_pronouns,
-                 use_semantic_gender, prodrop, use_word_embeddings, monolingual_only, replace_haber_tener,
-                 test_haber_frequency, convert_input):
+    def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
+                 overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, monolingual_only,
+                 replace_haber_tener, test_haber_frequency, convert_input, num_training):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -24,14 +24,7 @@ class InputFormatter:
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.convert_input = convert_input
         self.replace_haber_tener = replace_haber_tener
-        if replace_haber_tener and convert_input:  # call sed to replace training and test files with "tener"
-            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % directory)
-            self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
-                                (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
         self.test_haber_frequency = test_haber_frequency
-        if test_haber_frequency and convert_input:
-            self.make_haber_and_tener_synonyms(directory)
-
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -69,14 +62,15 @@ class InputFormatter:
         self.roles_size = len(self.roles)
         self.languages_size = len(self.languages)
         self.weights_role_concept = {'training': [], 'test': []}
-        self.training_set = trainingset
-        self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()
-        self.num_train = len(self.trainlines_df)
-        self.allowed_structures = self.read_allowed_pos()
-        self.testset = testset
-        self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
-        self.num_test = len(self.testlines_df)
-        self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+        self.weights_concept_role = {'training': [], 'test': []}
+        self.event_sem_activations = {'training': [], 'test': []}
+        self.target_lang_act = {'training': [], 'test': []}
+        self.training_set = training_set_name
+        self.testset = test_set_name
+        self.num_training = num_training
+
+        self.trainlines_df, self.allowed_structures, self.num_test = None, None, None
+        self.testlines_df, self.test_sentences_with_pronoun = None, None
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
 
     def get_l1_and_l2(self, lang_code):
@@ -94,15 +88,26 @@ class InputFormatter:
 
     def update_sets(self, new_directory):
         self.directory = new_directory
-        if self.replace_haber_tener and self.convert_input:  # call sed to replace training and test files with "tener"
-            os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
-        elif self.test_haber_frequency and self.convert_input:
-            self.make_haber_and_tener_synonyms(new_directory)
-        self.trainlines_df, self.weights_role_concept['training'] = self.read_set_to_df()  # re-read files
-        self.num_train = len(self.trainlines_df)
-        self.testlines_df, self.weights_role_concept['test'] = self.read_set_to_df(test=True)
+
+        if self.convert_input:
+            if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
+                os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
+                self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
+                                    (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
+            elif self.test_haber_frequency:
+                self.make_haber_and_tener_synonyms(new_directory)
+                
+        (self.trainlines_df, self.weights_role_concept['training'], self.event_sem_activations['training'],
+         self.target_lang_act['training']) = self.read_set_to_df()
+        self.weights_concept_role['training'] = [torch.t(x) for x in self.weights_role_concept['training']]
+        self.num_training = len(self.trainlines_df)
+        (self.testlines_df, self.weights_role_concept['test'], self.event_sem_activations['test'],
+         self.target_lang_act['test']) = self.read_set_to_df(test=True)
+        self.weights_concept_role['test'] = [torch.t(x) for x in self.weights_role_concept['test']]
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
+        if not self.allowed_structures:
+            self.allowed_structures = self.read_allowed_pos()
 
     @staticmethod
     def make_haber_and_tener_synonyms(directory):
@@ -408,9 +413,9 @@ class InputFormatter:
 
         df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a))
         df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
-        (df['event_sem_activations'], df['target_lang_act'], df['lang'], weights_role_concept,
+        (event_sem_activations, target_lang_act, df['lang'], weights_role_concept,
          df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
-        return df, weights_role_concept
+        return df, weights_role_concept, event_sem_activations, target_lang_act
 
     def read_allowed_pos(self):
         """ returns all (distinct) allowed POS structures in the training file (list of lists) """
@@ -489,13 +494,11 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = np.zeros(
-            self.event_sem_size)  # [0] * self.event_sem_size #torch.zeros(self.event_sem_size) #np.zeros(self.event_sem_size)  # or: [-1] * self.event_sem_size
+        event_sem_activations = torch.zeros(self.event_sem_size)
         event_sem_message = ''
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
         weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = [
-                                      0.] * self.languages_size  # torch.zeros(self.languages_size) #np.zeros(self.languages_size)
+        target_lang_activations = torch.zeros(self.languages_size)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -542,43 +545,6 @@ class InputFormatter:
                                 import sys
                                 sys.exit("No concept found: %s (%s)" % (concept, message))
         return event_sem_activations, target_lang_activations, target_language, weights_role_concept, event_sem_message
-
-    def get_weights_role_concept(self, message):
-        """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
-                            gives information about the event-semantics (E)
-        """
-        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size), device=torch.device('cpu'))
-        for info in message.split(';'):
-            role, what = info.split("=")
-            if role != "E":  # retrieve activations for the event-sem layer
-                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
-                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
-                for concept in what.split(","):
-                    if concept in self.identifiability:
-                        weights_role_concept[self.roles.index(role)][
-                            self.identifiability.index(concept)] = self.fixed_identif
-                    elif concept not in ['COG', 'FF']:
-                        if self.use_word_embeddings:
-                            activation_vector = self.concepts['unknown']
-                            # FIXME
-                            lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
-                            if lex in self.concepts:
-                                activation_vector = self.concepts[lex]
-                            else:
-                                print("UNK: %s(%s)" % (lex, concept))
-
-                            for i, w2v_activation in enumerate(activation_vector):
-                                weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
-                        else:
-                            if concept in self.concepts:
-                                idx_concept = self.identif_size + self.concepts.index(concept)
-                                weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
-                            else:
-                                import sys
-                                sys.exit("No concept found: %s (%s)" % (concept, message))
-        return weights_role_concept
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
@@ -665,7 +631,7 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
                     if key in simulation['type_code_switches'][set_name]:
                         results_sum[key][set_name].append(simulation['type_code_switches'][set_name][key][:epochs])
                     else:  # fill with 0
-                        results_sum[key][set_name].append([0] * epochs)#torch.zeros(epochs))
+                        results_sum[key][set_name].append([0] * epochs)
                 else:
                     results_sum[key][set_name].append(simulation[key][set_name][:epochs])
     # now compute MEAN and STANDARD ERROR of all simulations

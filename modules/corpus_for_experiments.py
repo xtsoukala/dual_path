@@ -9,12 +9,12 @@ class ExperimentSets:
     def generate_test_set_for_auxiliary(self, num_test_sentences, percentage_l2):
         pass
 
-    def generate_for_cognate_experiment(self, num_sentences, percentage_l2, include_ff=False, seed=0,
+    def generate_for_cognate_experiment(self, num_training_sentences, percentage_l2, include_ff=False, seed=0,
                                         save_files=True):
-        random.seed(seed)  # change the seed each time we run a new simulation
+        self.sets.random.seed(seed)  # change the seed each time we run a new simulation
         # first select cognate-free sentences
-        original_test_set, original_training_set = self.sets.generate_general(num_sentences,
-                                                                              percentage_l2,
+        original_test_set, original_training_set = self.sets.generate_general(num_training=num_training_sentences,
+                                                                              percentage_l2=percentage_l2,
                                                                               cognates_experiment=True,
                                                                               save_files=False)
         # modify test set: replace one sentence per word with a cognate
@@ -28,7 +28,7 @@ class ExperimentSets:
             all_test_sets += false_friend_sets
         if save_files:
             self.sets.save_lexicon_and_structures_to_csv()
-        random.shuffle(all_test_sets)
+        self.sets.random.shuffle(all_test_sets)
         with codecs.open('%s/%s' % (self.sets.results_dir, "test.in"), 'w', "utf-8") as f:
             for sentence, message in all_test_sets:
                 f.write(u'%s## %s\n' % (sentence, message))
@@ -48,7 +48,7 @@ class ExperimentSets:
             if replacement_idx:
                 role_idx_to_replace = all_roles[replacement_idx[idx]]
             else:
-                role_idx_to_replace = random.choice(range(len(all_roles) - 2))  # avoid switches at last point
+                role_idx_to_replace = self.sets.random.choice(range(len(all_roles) - 2))  # avoid switches at last point
                 new_replacement_idx.append(role_idx_to_replace)
             concept_to_replace = self.extract_concept_from_role(all_roles[role_idx_to_replace])
             word_to_replace, pos_w, syntactic_gender_w, semantic_gender_w, verb_type = \
