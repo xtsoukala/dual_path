@@ -14,7 +14,6 @@ class SetsGenerator:
                  use_full_verb_form, cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv,
                  aux_experiment, input_dir=None, sim_results_dir=None, seed=0, default_L2='en', include_ff=False):
         """
-        :param results_dir:
         :param use_simple_semantics:
         :param allow_free_structure_production:
         :param use_full_verb_form:

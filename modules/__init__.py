@@ -16,7 +16,6 @@ import pathos
 if torch.cuda.is_available():
     print('CUDA available')
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    #torch.multiprocessing.set_start_method('spawn', force=True)
 mp = pathos.helpers.mp
 mp.set_start_method('spawn', force=True)
 

@@ -237,11 +237,7 @@ class SimpleRecurrentNetwork:
     def _compute_current_layer_gradient(self):
         if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
-            # error_out = self.current_layer.error_out.sum(0) FIXME
-            print(self.current_layer.error_out, type(self.current_layer.error_out))
-            error_out = self.current_layer.error_out[0]
-            for i in range(1, len(self.current_layer.error_out)):
-                error_out = error_out.add(self.current_layer.error_out[i])
+            error_out = torch.stack(self.current_layer.error_out, dim=0).sum(dim=0)
             self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate softmax derivative (Do) and then calculate gradient δo = Eo • Do  (or Do * Eo)
             if self.current_layer.activation_function == "softmax":
