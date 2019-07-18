@@ -13,9 +13,13 @@ from modules.dual_path import DualPath
 from modules.plotter import Plotter
 import pathos
 
-if torch.cuda.is_available():
+
+print(torch.get_default_dtype(), 'default')
+
+mp = pathos.helpers.mp
+if torch.cuda.is_available() and torch.get_default_dtype() != 'torch.cuda.FloatTensor':
     print('CUDA available')
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-mp = pathos.helpers.mp
-mp.set_start_method('spawn', force=True)
+    # print(torch.get_default_dtype(), 'default')
+    mp.set_start_method('spawn', force=True)
 

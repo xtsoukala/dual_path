@@ -319,6 +319,8 @@ if __name__ == "__main__":
         process.start()
         processes.append(process)
 
+        del formatted_input
+
     for p in processes:
         p.join()
 
