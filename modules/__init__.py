@@ -11,10 +11,12 @@ from modules.elman_network import SimpleRecurrentNetwork
 from modules.formatter import InputFormatter, compute_mean_and_std, extract_cs_keys
 from modules.dual_path import DualPath
 from modules.plotter import Plotter
-
+import pathos
 
 if torch.cuda.is_available():
     print('CUDA available')
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    torch.multiprocessing.set_start_method('spawn', force=True)
-mp = torch.multiprocessing
+    #torch.multiprocessing.set_start_method('spawn', force=True)
+mp = pathos.helpers.mp
+mp.set_start_method('spawn', force=True)
+
