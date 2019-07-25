@@ -99,7 +99,7 @@ class DualPath:
         self.srn.add_layer("role", self.inputs.roles_size)  # tried softmax with fw == 1, it didn't work.
         self.srn.add_layer("compress", self.compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
-        self.srn.add_layer("target_lang", len(self.inputs.languages))
+        self.srn.add_layer("target_lang", self.inputs.num_languages)
         if self.separate_hidden_layers:
             self.srn.add_layer("hidden_semantic", int(self.hidden_size * 2 / 3), recurrent=True)
             self.srn.add_layer("hidden_syntactic", int(self.hidden_size / 3), recurrent=True)
@@ -154,7 +154,7 @@ class DualPath:
                                   results_dir=self.inputs.directory, simulation_num=self.simulation_num)
 
     def feed_line(self, target_sentence_idx, target_lang_act, lang, weights_role_concept, weights_concept_role,
-                  event_semantics, epoch=None, backpropagate=False, activate_target_lang=False):
+                  event_semantics, backpropagate=False, activate_target_lang=False):
         produced_sent_ids = []
         sentence_entropy = []
         append_to_produced = produced_sent_ids.append
@@ -169,9 +169,7 @@ class DualPath:
             self.srn.feedforward(start_of_sentence=prod_idx is None)
             if backpropagate:
                 prod_idx = trg_idx  # training with target word, NOT produced one
-                self.srn.backpropagate(epoch)
-                # FIXME: REMOVE
-                append_to_produced(self.srn.get_max_output_activation())
+                self.srn.backpropagate()
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if activate_target_lang and prod_idx is None and self.activate_both_lang:
@@ -211,17 +209,18 @@ class DualPath:
             weights_concept_role = self.inputs.weights_concept_role['training']
             event_semantics = self.inputs.event_sem_activations['training']
             target_lang_act = self.inputs.target_lang_act['training']
-            num_training = self.inputs.num_training
+            num_sentences = self.inputs.num_training
+            set_lines = self.inputs.trainlines_df
+            directory = self.inputs.directory
             while epoch < self.epochs:  # start training for x epochs; shuffle before each iteration
-                for line_idx in torch.randperm(num_training, device=self.cpu).tolist():
-                    line = self.inputs.trainlines_df.iloc[line_idx]
+                for line_idx in torch.randperm(num_sentences, device=self.cpu).tolist():
+                    line = set_lines.iloc[line_idx]
                     self.feed_line(line.target_sentence_idx, target_lang_act[line_idx], line.lang,
                                    weights_role_concept[line_idx], weights_concept_role[line_idx],
-                                   event_semantics[line_idx], epoch=epoch, backpropagate=True,
-                                   activate_target_lang=True)
+                                   event_semantics[line_idx], backpropagate=True, activate_target_lang=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
-                self.srn.save_weights(results_dir=self.inputs.directory, epoch=epoch)
+                self.srn.save_weights(results_dir=directory, epoch=epoch)
                 epoch += 1  # increase number of epochs, begin new iteration
 
         set_names = set()
@@ -282,6 +281,7 @@ class DualPath:
             weights_concept_role = self.inputs.weights_concept_role[set_name]
             event_semantics = self.inputs.event_sem_activations[set_name]
             target_lang_act = self.inputs.target_lang_act[set_name]
+            directory = self.inputs.directory
 
             for i in set_lines.event_sem_message.unique():
                 results[i] = {set_name: [] for set_name in set_names}
@@ -291,7 +291,7 @@ class DualPath:
             while epoch < self.epochs:  # start training for x epochs
                 counter = defaultdict(int)
                 counter['type_code_switches'] = defaultdict(int)
-                self.srn.load_weights(results_dir=self.inputs.directory, set_weights_folder=self.inputs.directory,
+                self.srn.load_weights(results_dir=directory, set_weights_folder=directory,
                                       set_weights_epoch=epoch)
                 for line_idx in torch.randperm(num_sentences, device=self.cpu).tolist():
                     line = set_lines.iloc[line_idx]
@@ -398,7 +398,7 @@ class DualPath:
                                 correct_meaning += 1
                                 counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message
                                                            else 'is', target_lang)] += 1
-                        if epoch > 0 and self.pronoun_experiment:  # only check the grammatical sentences
+                        if self.pronoun_experiment and epoch > 0:  # only check the grammatical sentences
                             if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
                                 if self.inputs.test_meaning_without_pronouns(produced_idx, line.target_sentence_idx):
                                     counter['pronoun_errors'] += 1
@@ -432,7 +432,7 @@ class DualPath:
                                                                           results['type_code_switches'][set_name])
         # write (single) simulation results to a pickled file
         with lzma.open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
-            pickle.dump(results, pckl)
+            pickle.dump(results, pckl, protocol=-1)
 
     @staticmethod
     def aggregate_dict(epochs, results_type_code_switches):

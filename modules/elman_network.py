@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-from copy import deepcopy
 from collections import defaultdict
 from scipy.stats import entropy
-from modules import os, torch, sys, pickle, lzma
-from modules.formatter import true_divide
+from modules import os, torch, sys, pickle, lzma, deepcopy
 
 
 class SimpleRecurrentNetwork:
@@ -81,7 +79,7 @@ class SimpleRecurrentNetwork:
     def save_weights(self, results_dir, epoch):
         self._create_dir_if_not_exists(results_dir)
         with lzma.open("%s/weights/w_%s.lzma" % (results_dir, epoch), 'wb') as pckl:
-            pickle.dump(self.layers, pckl)
+            pickle.dump(self.layers, pckl, protocol=-1)
 
     def set_message_reset_context(self, updated_role_concept, weights_concept_role, event_semantics, target_lang_act,
                                   activate_language):
@@ -136,14 +134,14 @@ class SimpleRecurrentNetwork:
 
     def initialize_layer_activation(self, layer_name, activate_id=None):
         layer = self.get_layer(layer_name)
-        layer.activation = torch.zeros(layer.size)
+        layer.activation = torch.empty(layer.size)   # zeros?
         if activate_id:
             idx, act = activate_id
             layer.activation[idx] = act
 
     def initialize_target_activation(self, layer_name, activate_idx, value):
         layer = self.get_layer(layer_name)
-        layer.target_activation = torch.zeros(layer.size)
+        layer.target_activation = torch.empty(layer.size)  # zeros?
         layer.target_activation[activate_idx] = value
 
     def get_feedforward_layers(self):
@@ -177,7 +175,7 @@ class SimpleRecurrentNetwork:
                 # , 0) #np. append(layer.in_activation, 1)
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
-                layer.activation = torch.zeros(layer.size)  # set role_copy to zero
+                layer.activation = torch.empty(layer.size)  # set role_copy to zero   # zeros?
                 continue
             dot_product = torch.matmul(layer.in_activation, layer.in_weights)
             # Apply activation function to input • weights
@@ -207,8 +205,8 @@ class SimpleRecurrentNetwork:
             return torch.t(tensor)
         return tensor
 
-    def backpropagate(self, epoch):
-        self._compute_output_error(epoch)
+    def backpropagate(self):
+        self._compute_output_error()
         for self.current_layer in self.backpropagated_layers:  # Propagate error back to the previous layers
             self._compute_current_layer_gradient()
             self._compute_current_delta_weight_matrix()
@@ -217,7 +215,7 @@ class SimpleRecurrentNetwork:
                 self._update_current_weights_and_previous_delta()
             self._backpropagate_error_to_incoming_layers()
 
-    def _compute_output_error(self, epoch):
+    def _compute_output_error(self):
         # Calculate error[Eo](target - output)
         # calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
         self.set_output_gradient()
@@ -253,7 +251,7 @@ class SimpleRecurrentNetwork:
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
         len_delta = torch.sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
         if len_delta > 1:
-            self.current_layer.delta = true_divide(self.current_layer.delta, len_delta)
+            self.current_layer.delta = torch.div(self.current_layer.delta, len_delta)
 
         self.current_layer.delta *= self.learn_rate
         if self.debug_messages:
@@ -348,7 +346,7 @@ class NeuronLayer:
         self.sd = 0  # it is used to initialize weights
         # resetting to zeros doesn't seem to bring better results. Maybe empty?
         self.activation = torch.empty(size, dtype=torch.float64)
-        self.target_activation = torch.zeros(size, dtype=torch.float64)
+        self.target_activation = torch.empty(size, dtype=torch.float64)    # zeros?
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function

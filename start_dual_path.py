@@ -3,25 +3,20 @@ import shutil
 import json
 import argparse
 from datetime import datetime
-from modules import os, lzma, pickle, sys, mp, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter
+import pathos
+from modules import os, lzma, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter, torch
+
+mp = pathos.helpers.mp
 
 
-def copy_dir(src, dst, symlinks=False, ignore=None):
-    if not os.path.exists(dst):
-        os.makedirs(dst)
-    for item in os.listdir(src):
-        s = os.path.join(src, item)
-        d = os.path.join(dst, item)
-        if os.path.isdir(s):
-            shutil.copytree(s, d, symlinks, ignore)
-        else:
-            shutil.copy2(s, d)
+if torch.cuda.is_available():
+    mp.set_start_method('spawn', force=True)
+mp.set_start_method('forkserver', force=True)
 
-
-def copy_files_endswith(src, dest, ends_with=".in"):
+def copy_files(src, dest, ends_with=None):
     os.makedirs(dest)
     for filename in os.listdir(src):
-        if filename.endswith(ends_with):
+        if not ends_with or (ends_with and filename.endswith(ends_with)):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
@@ -58,6 +53,10 @@ def check_given_input_path(input_path):
             sys.exit('No input folder found in the path (%s)' % input_path)
     logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % input_path)
     return input_path
+
+
+def training_is_successful(x, threshold, num_test):
+    return torch.div(x[-1] * 100, num_test) >= threshold
 
 
 if __name__ == "__main__":
@@ -233,10 +232,11 @@ if __name__ == "__main__":
     num_training = args.generate_training_num
     if args.input:  # generate a new set (unless "input" was also set)
         given_input_path = check_given_input_path(args.input)
-        copy_dir(given_input_path, input_dir)
+        copy_files(given_input_path, input_dir)
         existing_input_path = given_input_path.replace("/input", "")  # remove "/input", the sets are in the sub folders
         for sim in simulation_range:
-            copy_files_endswith(src=os.path.join(existing_input_path, str(sim)), dest="%s/%s" % (results_dir, sim))
+            copy_files(src=os.path.join(existing_input_path, str(sim)),
+                                dest="%s/%s" % (results_dir, sim), ends_with=".in")
         num_training = sum(1 for line in open("%s/%s/%s" % (results_dir, sim, args.trainingset)))
     else:
         from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
@@ -282,6 +282,7 @@ if __name__ == "__main__":
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
                                      test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
+    assert num_training == formatted_input.num_training
 
     processes = []
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
@@ -302,9 +303,9 @@ if __name__ == "__main__":
             dualp.set_weights_folder = formatted_input.directory if args.set_weights else None
             src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
             if args.only_eval or args.continue_training:  # copy all weights
-                copy_dir(src_folder, destination_folder)
+                copy_files(src_folder, destination_folder)
             else:  # only copy the starting epoch (such as epoch 0)
-                copy_files_endswith(src=src_folder, dest=destination_folder,
+                copy_files(src=src_folder, dest=destination_folder,
                                     ends_with="_%s" % args.set_weights_epoch)
                 if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
                     os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch,
@@ -319,7 +320,10 @@ if __name__ == "__main__":
         process.start()
         processes.append(process)
 
-        del formatted_input
+    num_test = formatted_input.num_test
+    test_sentences_with_pronoun = formatted_input.test_sentences_with_pronoun
+    lexicon_size = formatted_input.lexicon_size
+    del formatted_input
 
     for p in processes:
         p.join()
@@ -337,10 +341,9 @@ if __name__ == "__main__":
                 with lzma.open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
                     simulation = pickle.load(f)
 
-                if formatted_input.training_is_successful(simulation['correct_meaning']['test'],
-                                                          threshold=args.threshold):
+                if training_is_successful(simulation['correct_meaning']['test'], args.threshold, num_test=num_test):
                     valid_results.append(simulation)
-                    if not formatted_input.training_is_successful(simulation['correct_meaning']['test'], threshold=80):
+                    if not training_is_successful(simulation['correct_meaning']['test'], 80, num_test=num_test):
                         failed_sim_id.append("[%s]" % sim)  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(sim))  # keep track of simulations that failed
@@ -363,24 +366,22 @@ if __name__ == "__main__":
             results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
 
             with lzma.open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
-                pickle.dump(results_mean_and_std, pckl)
+                pickle.dump(results_mean_and_std, pckl, protocol=-1)
 
             plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                           epochs=args.epochs, num_training=formatted_input.num_training,
-                           num_test=formatted_input.num_test)
+                           epochs=args.epochs, num_training=num_training,
+                           num_test=num_test)
             plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
-                              test_sentences_with_pronoun=formatted_input.test_sentences_with_pronoun,
+                              test_sentences_with_pronoun=test_sentences_with_pronoun,
                               auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
             if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
                 with open("%s/results.log" % results_dir, 'w') as f:
                     f.write("Code-switched percentage (test set): %s" %
-                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'],
-                                               formatted_input.num_test))
+                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test))
 
     with open("%s/results.log" % results_dir, 'w') as f:
         f.write("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n"
-                "%s%s" % (formatted_input.lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err,
-                          args.sim,
+                "%s%s" % (lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err, args.sim,
                           "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations
                           else "", "\nIndeces of (almost) failed simulations: %s"
                                    % ", ".join(failed_sim_id) if failed_sim_id else ""))

@@ -5,7 +5,8 @@ import math
 import operator
 import subprocess
 from itertools import zip_longest as zp
-from modules import defaultdict, Counter, np, pd, pickle, os, torch
+from modules import defaultdict, Counter, np, pd, pickle, os, torch, deepcopy, copy
+import ujson
 
 
 class InputFormatter:
@@ -54,13 +55,16 @@ class InputFormatter:
         self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang='en')
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == 'Y'", lang='en')
         self.shared_idx = [self.period_idx] + self.cognate_idx + self.false_friend_idx
-        self.event_sem_size = len(self.event_semantics)
         self.lexicon_size = len(self.lexicon)
-        self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
         self.identif_size = len(self.identifiability)
-        self.identif_and_concept_size = self.concept_size + self.identif_size
+        self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
+        self.event_sem_size = len(self.event_semantics)
         self.roles_size = len(self.roles)
-        self.languages_size = len(self.languages)
+        self.num_languages = len(self.languages)
+        self.initialized_weights_role_concept = torch.zeros(self.roles_size, (self.concept_size + self.identif_size))
+        self.initialized_event_sem =
+        f = ujson.dumps(torch.zeros(self.event_sem_size), double_precision=15)
+        self.initialized_target_lang_activation = torch.zeros(self.num_languages)
         self.weights_role_concept = {'training': [], 'test': []}
         self.weights_concept_role = {'training': [], 'test': []}
         self.event_sem_activations = {'training': [], 'test': []}
@@ -411,10 +415,10 @@ class InputFormatter:
         if not self.use_semantic_gender:
             df.message = df.message.str.replace(',(M|F);', ';', regex=True)
 
-        df['target_sentence_idx'] = df.target_sentence.map(lambda a: self.sentence_indeces(a))
-        df['target_pos'] = df.target_sentence_idx.map(lambda a: self.sentence_pos(a))
+        df['target_sentence_idx'] = df.target_sentence.apply(self.sentence_indeces)
+        df['target_pos'] = df.target_sentence_idx.apply(self.sentence_pos)
         (event_sem_activations, target_lang_act, df['lang'], weights_role_concept,
-         df['event_sem_message']) = zp(*df.message.map(lambda a: self.get_message_info(a)))
+         df['event_sem_message']) = zp(*df.message.apply(self.get_message_info))
         return df, weights_role_concept, event_sem_activations, target_lang_act
 
     def read_allowed_pos(self):
@@ -494,11 +498,12 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = torch.zeros(self.event_sem_size)
-        event_sem_message = ''
+        event_sem_activations = ujson.loads(self.init_event_sem_file, precise_float=True)  # deepcopy(self.initialized_event_sem)
+        print(event_sem_activations)
+        event_sem_message = None
         # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = torch.zeros((self.roles_size, self.identif_and_concept_size))
-        target_lang_activations = torch.zeros(self.languages_size)
+        weights_role_concept = deepcopy(self.initialized_weights_role_concept)
+        target_lang_activations = deepcopy(self.initialized_target_lang_activation)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -549,9 +554,6 @@ class InputFormatter:
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
         pass
-
-    def training_is_successful(self, x, threshold):
-        return true_divide(x[-1] * 100, self.num_test) >= threshold
 
     def df_query_to_idx(self, query, lang=None):
         if lang:

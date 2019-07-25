@@ -1,9 +1,6 @@
 from modules import torch, np, extract_cs_keys
 import seaborn as sns
 import matplotlib.pyplot as plt
-from modules.formatter import true_divide
-
-
 # import matplotlib
 # matplotlib.use('Agg')  # needed for the server only
 
@@ -487,7 +484,7 @@ class Plotter:
         if isinstance(x, np.ndarray):
             perc = np.true_divide(x * 100, total, where=total!=0)
         elif isinstance(x, torch.Tensor):
-            perc = true_divide(x * 100, total).numpy()
+            perc = torch.div(x * 100, total).numpy()
         else:
             perc = x * 100 / total
         return perc
