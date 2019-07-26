@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
 from scipy.stats import entropy
-from modules import os, torch, sys, pickle, lzma
+from src import os, torch, sys, pickle, lzma
 
 
 class SimpleRecurrentNetwork:

@@ -1,8 +1,8 @@
 import pickle
 import os
 import subprocess
-from modules.plotter import Plotter
-from modules.formatter import compute_mean_and_std
+from src.plotter import Plotter
+from src.formatter import compute_mean_and_std
 import numpy as np
 import pandas as pd
 

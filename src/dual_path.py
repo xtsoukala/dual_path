@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from modules import lzma, pickle, defaultdict, logging, SimpleRecurrentNetwork, torch
+from src import lzma, pickle, defaultdict, logging, SimpleRecurrentNetwork, torch
 
 
 class DualPath:

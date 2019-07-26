@@ -2,7 +2,7 @@
 import random
 import codecs
 from datetime import datetime
-from modules import pd, os, sys
+from src import pd, os, sys
 import re
 import time
 
@@ -360,7 +360,7 @@ class SetsGenerator:
 
     def get_structures(self, structures_csv, sep=","):
         if not os.path.isfile(structures_csv):
-            structures_csv = "modules/%s" % structures_csv
+            structures_csv = "src/%s" % structures_csv
         df = pd.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
         query = "inactive != 'Y'"
         structures = df.query(query)
@@ -404,7 +404,7 @@ class SetsGenerator:
 
     def get_clean_lexicon(self, lexicon_csv, false_friends, cognates, use_simple_semantics):
         if not os.path.isfile(lexicon_csv):
-            lexicon_csv = "modules/%s" % lexicon_csv
+            lexicon_csv = "src/%s" % lexicon_csv
         df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
         query = "inactive != 'Y'"  # remove inactive words
         if not false_friends:
@@ -507,7 +507,7 @@ if __name__ == "__main__":
     sets = SetsGenerator(sim_results_dir="../generated/%s" % datetime.now().strftime("%Y-%m-%dt%H.%M"),
                          cognate_percentage=0, use_full_verb_form=True, monolingual_only=False,
                          use_simple_semantics=True, allow_free_structure_production=False, lang='en',
-                         lexicon_csv='../corpus/lexicon_aux_limited.csv', structures_csv='../corpus/structures.csv')
+                         lexicon_csv='../data/lexicon_aux_limited.csv', structures_csv='../data/structures.csv')
     # sets.generate_general(num_sentences=2500, percentage_l2=0.5)
     test, training = sets.generate_general(num_training=3000, percentage_l2=0.5)
     if len(sets.lang) > 2:

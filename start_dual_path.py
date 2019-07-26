@@ -4,7 +4,7 @@ import json
 import argparse
 import pathos
 from datetime import datetime
-from modules import os, lzma, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter, torch
+from src import os, lzma, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter, torch
 
 mp = pathos.helpers.mp
 if torch.cuda.is_available():
@@ -237,13 +237,13 @@ if __name__ == "__main__":
                                 dest="%s/%s" % (results_dir, sim), ends_with=".in")
         num_training = sum(1 for line in open("%s/%s/%s" % (results_dir, sim, args.trainingset)))
     else:
-        from modules.corpus_for_experiments import ExperimentSets, SetsGenerator
+        from src.corpus_for_experiments import ExperimentSets, SetsGenerator
 
         experiment_dir = "code-switching/" if args.activate_both_lang else ""
         if not args.lexicon:
-            args.lexicon = 'corpus/%slexicon.csv' % experiment_dir
+            args.lexicon = 'data/%slexicon.csv' % experiment_dir
         if not args.structures:
-            args.structures = 'corpus/%sstructures.csv' % experiment_dir
+            args.structures = 'data/%sstructures.csv' % experiment_dir
         logging.warning("Using %s (lexicon) and %s (structures)" % (args.lexicon, args.structures))
         input_sets = ExperimentSets(
             sets_gen=SetsGenerator(input_dir=input_dir, use_full_verb_form=args.full_verb, lang=args.lang,

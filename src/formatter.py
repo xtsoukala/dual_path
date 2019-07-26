@@ -5,7 +5,7 @@ import math
 import operator
 import subprocess
 from itertools import zip_longest as zp
-from modules import defaultdict, Counter, np, pd, os, torch
+from src import defaultdict, Counter, np, pd, os, torch
 
 
 class InputFormatter:

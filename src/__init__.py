@@ -7,10 +7,10 @@ import os
 import sys
 import logging
 from collections import defaultdict, Counter
-from modules.elman_network import SimpleRecurrentNetwork
-from modules.formatter import InputFormatter, compute_mean_and_std, extract_cs_keys
-from modules.dual_path import DualPath
-from modules.plotter import Plotter
+from src.elman_network import SimpleRecurrentNetwork
+from src.formatter import InputFormatter, compute_mean_and_std, extract_cs_keys
+from src.dual_path import DualPath
+from src.plotter import Plotter
 
 
 if torch.cuda.is_available():
