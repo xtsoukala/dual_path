@@ -1,6 +1,6 @@
 # Bilingual Dual-path model
 
-![Bilingual dual-path model architecture](bilingual-dual-path.png)
+![Bilingual dual-path model architecture](img/bilingual-dual-path.png)
 
 Dual-path is a computational model of (monolingual) sentence production by [Chang, 2002](https://sites.google.com/site/sentenceproductionmodel/Home/chang-2002). Tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
 
