@@ -153,6 +153,9 @@ class DualPath:
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   results_dir=self.inputs.directory, simulation_num=self.simulation_num)
 
+    def shuffle_lines(self, num_sentences):
+        return torch.randperm(num_sentences, device=self.cpu).tolist()
+
     def feed_line(self, target_sentence_idx, target_lang_act, lang, weights_role_concept, weights_concept_role,
                   event_semantics, backpropagate=False, activate_target_lang=False):
         produced_sent_ids = []
@@ -160,11 +163,11 @@ class DualPath:
         append_to_produced = produced_sent_ids.append
         append_to_entropy = sentence_entropy.append
         self.srn.set_message_reset_context(updated_role_concept=weights_role_concept,
-                                           weights_concept_role=weights_concept_role,
-                                           event_semantics=event_semantics, target_lang_act=target_lang_act,
+                                           weights_concept_role=weights_concept_role, event_semantics=event_semantics,
+                                           target_lang_act=target_lang_act,
                                            activate_language=(activate_target_lang or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
-        for trg_idx in target_sentence_idx + [None] * (5 if not backpropagate else 0):
+        for trg_idx in target_sentence_idx:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=prod_idx is None)
             if backpropagate:
@@ -213,9 +216,9 @@ class DualPath:
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
             while epoch < self.epochs:  # start training for x epochs; shuffle before each iteration
-                for line_idx in torch.randperm(num_sentences, device=self.cpu).tolist():
+                for line_idx in self.shuffle_lines(num_sentences):
                     line = set_lines.iloc[line_idx]
-                    self.feed_line(line.target_sentence_idx, target_lang_act[line_idx], line.lang,
+                    self.feed_line(line.target_sentence_idx + [None] * 5, target_lang_act[line_idx], line.lang,
                                    weights_role_concept[line_idx], weights_concept_role[line_idx],
                                    event_semantics[line_idx], backpropagate=True, activate_target_lang=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
@@ -293,7 +296,7 @@ class DualPath:
                 counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(results_dir=directory, set_weights_folder=directory,
                                       set_weights_epoch=epoch)
-                for line_idx in torch.randperm(num_sentences, device=self.cpu).tolist():
+                for line_idx in self.shuffle_lines(num_sentences):
                     line = set_lines.iloc[line_idx]
                     produced_idx, entropy_idx = self.feed_line(line.target_sentence_idx, target_lang_act[line_idx],
                                                                line.lang, weights_role_concept[line_idx],

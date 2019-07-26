@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
 from scipy.stats import entropy
-from modules import os, torch, sys, pickle, lzma, deepcopy
+from modules import os, torch, sys, pickle, lzma
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, rdir, separate_hidden_layers=False, context_init_value=0.5,
+    def __init__(self, learn_rate, momentum, rdir, separate_hidden_layers=False,
                  debug_messages=True, include_role_copy=False, include_input_copy=False):
         self.layers = []
         self.layer_idx = defaultdict(int)
         self.backpropagated_layers = []
         self.feedforward_layers = []
-        self.context_init_value = context_init_value  # Initial activations of context layer
         self.learn_rate = learn_rate  # learning rate (speed of learning)
         self.momentum = momentum
+        self.context_value = 0.5
         self.initialization_completed = False  # needs to be set to True for the model to start training
         self.debug_messages = debug_messages
         self.include_role_copy = include_role_copy
@@ -42,8 +42,7 @@ class SimpleRecurrentNetwork:
 
     def add_layer(self, name, size, has_bias=False, activation_function="tanh", convert_input=False, recurrent=False):
         self.layers.append(NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
-                                       is_recurrent=recurrent, activation_function=activation_function,
-                                       context_value=self.context_init_value))
+                                       is_recurrent=recurrent, activation_function=activation_function))
         self.layer_idx[name] = len(self.layers) - 1
 
     def connect_layers(self, first_layer_name, second_layer_name):
@@ -134,14 +133,14 @@ class SimpleRecurrentNetwork:
 
     def initialize_layer_activation(self, layer_name, activate_id=None):
         layer = self.get_layer(layer_name)
-        layer.activation = torch.empty(layer.size)   # zeros?
+        layer.activation = torch.zeros(layer.size)   # zeros?
         if activate_id:
             idx, act = activate_id
             layer.activation[idx] = act
 
     def initialize_target_activation(self, layer_name, activate_idx, value):
         layer = self.get_layer(layer_name)
-        layer.target_activation = torch.empty(layer.size)  # zeros?
+        layer.target_activation = torch.zeros(layer.size)  # zeros?
         layer.target_activation[activate_idx] = value
 
     def get_feedforward_layers(self):
@@ -175,7 +174,7 @@ class SimpleRecurrentNetwork:
                 # , 0) #np. append(layer.in_activation, 1)
 
             if start_of_sentence and layer.name in self.initially_deactive_layers:
-                layer.activation = torch.empty(layer.size)  # set role_copy to zero   # zeros?
+                layer.activation = torch.zeros(layer.size)  # set role_copy to zero   # zeros?
                 continue
             dot_product = torch.matmul(layer.in_activation, layer.in_weights)
             # Apply activation function to input • weights
@@ -193,9 +192,9 @@ class SimpleRecurrentNetwork:
             self.set_context_activation("hidden")
 
         if self.include_input_copy:
-            self.set_layer_activation("input_copy", activation=deepcopy(self.get_layer_activation("input")))
+            self.set_layer_activation("input_copy", activation=self.get_layer_activation("input").clone())
         if self.include_role_copy:
-            self.set_layer_activation("role_copy", activation=deepcopy(self.get_layer_activation("role")))
+            self.set_layer_activation("role_copy", activation=self.get_layer_activation("role").clone())
 
     @staticmethod
     def convert_to_2d(tensor, transpose=False):
@@ -273,8 +272,8 @@ class SimpleRecurrentNetwork:
         if len(self.current_layer.previous_delta.size()) > 1:
             added_weight = self.momentum * self.current_layer.previous_delta
             self.current_layer.in_weights += added_weight
-        # Update previous delta. Deepcopying is important otherwise it keeps reference
-        self.current_layer.previous_delta = deepcopy(self.current_layer.delta)
+        # Update previous delta. Clone otherwise it keeps reference
+        self.current_layer.previous_delta = self.current_layer.delta.clone()
 
     def _backpropagate_error_to_incoming_layers(self):
         # we only need to backpropagate error to layers that have incoming layers (so not recurrent or bias)
@@ -303,9 +302,9 @@ class SimpleRecurrentNetwork:
     def set_context_activation(self, layer_name, reset=False):
         layer = self.layers[self.layer_idx[layer_name]]
         if reset:
-            layer.context_activation = torch.tensor([self.context_init_value] * layer.size)
+            layer.context_activation = layer.context_activation.fill_(self.context_value)
         else:
-            layer.context_activation = deepcopy(layer.activation)
+            layer.context_activation = layer.activation.clone()
 
     def get_max_output_activation(self):
         return int(self.layers[-1].activation.argmax())
@@ -331,7 +330,7 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, activation_function, convert_input, context_value, is_recurrent=False):
+    def __init__(self, name, size, has_bias, activation_function, convert_input, is_recurrent=False):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size
@@ -346,7 +345,7 @@ class NeuronLayer:
         self.sd = 0  # it is used to initialize weights
         # resetting to zeros doesn't seem to bring better results. Maybe empty?
         self.activation = torch.empty(size, dtype=torch.float64)
-        self.target_activation = torch.empty(size, dtype=torch.float64)    # zeros?
+        self.target_activation = torch.zeros(size, dtype=torch.float64)
         self.error_out = []
         self.total_error = []
         self.activation_function = activation_function
@@ -360,12 +359,12 @@ class NeuronLayer:
         # the following two properties are only for the hidden (recurrent) layer
         self.is_recurrent = is_recurrent
         if is_recurrent:
-            self.make_recurrent(context_value)
+            self.make_recurrent()
 
-    def make_recurrent(self, context_value):
+    def make_recurrent(self):
         # if it's a recurrent layer we need to increase the in_size to include the layer itself
         self.in_size += self.size
-        self.context_activation = torch.tensor([context_value] * self.size)
+        self.context_activation = torch.zeros(self.size)
 
 
 def convert_range(matrix, min_val=-1, max_val=1):

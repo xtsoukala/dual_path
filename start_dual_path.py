@@ -2,16 +2,14 @@
 import shutil
 import json
 import argparse
-from datetime import datetime
 import pathos
+from datetime import datetime
 from modules import os, lzma, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter, torch
 
 mp = pathos.helpers.mp
-
-
 if torch.cuda.is_available():
-    mp.set_start_method('spawn', force=True)
-mp.set_start_method('forkserver', force=True)
+    mp.set_start_method('spawn', force=True)   # GPU+multiprocessing require spawn, not fork
+
 
 def copy_files(src, dest, ends_with=None):
     os.makedirs(dest)

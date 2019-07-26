@@ -5,8 +5,7 @@ import math
 import operator
 import subprocess
 from itertools import zip_longest as zp
-from modules import defaultdict, Counter, np, pd, pickle, os, torch, deepcopy, copy
-import ujson
+from modules import defaultdict, Counter, np, pd, os, torch
 
 
 class InputFormatter:
@@ -62,9 +61,6 @@ class InputFormatter:
         self.roles_size = len(self.roles)
         self.num_languages = len(self.languages)
         self.initialized_weights_role_concept = torch.zeros(self.roles_size, (self.concept_size + self.identif_size))
-        self.initialized_event_sem =
-        f = ujson.dumps(torch.zeros(self.event_sem_size), double_precision=15)
-        self.initialized_target_lang_activation = torch.zeros(self.num_languages)
         self.weights_role_concept = {'training': [], 'test': []}
         self.weights_concept_role = {'training': [], 'test': []}
         self.event_sem_activations = {'training': [], 'test': []}
@@ -72,7 +68,6 @@ class InputFormatter:
         self.training_set = training_set_name
         self.testset = test_set_name
         self.num_training = num_training
-
         self.trainlines_df, self.allowed_structures, self.num_test = None, None, None
         self.testlines_df, self.test_sentences_with_pronoun = None, None
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
@@ -125,19 +120,15 @@ class InputFormatter:
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
-        if (self.test_haber_frequency and self.filter_list(out_sentence_idx, self.haber_tener_idx) ==
-                self.filter_list(trg_sentence_idx, self.haber_tener_idx)):  # remove haber/tener and check
+        if (self.test_haber_frequency and filter(lambda i: i not in self.haber_tener_idx, out_sentence_idx) ==
+                filter(lambda i: i not in self.haber_tener_idx, trg_sentence_idx)):  # remove haber/tener and check
                 return True
         # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        out_sentence_idx = self.filter_list(out_sentence_idx, self.to_prepositions_idx)
-        trg_sentence_idx = self.filter_list(trg_sentence_idx, self.to_prepositions_idx)
+        out_sentence_idx = filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx)
+        trg_sentence_idx = filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)
         if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
             return True
         return False
-
-    @staticmethod
-    def filter_list(lst, filtered_items):
-        return [x for x in lst if x not in filtered_items]
 
     def is_sentence_gramatical_or_flex(self, out_sentence_pos, trg_sentence_pos, out_sentence_idx):
         """
@@ -184,28 +175,24 @@ class InputFormatter:
         if ignore_det:
             ignore_idx.extend(self.determiners)
 
-        if self.same_unordered_lists([x for x in out_sentence_idx if x not in ignore_idx],
-                                     [x for x in trg_sentence_idx if x not in ignore_idx]):
-            flexible_order = True
-        elif self.same_unordered_lists(out_sentence_idx[:-1], trg_sentence_idx[:-1]):
-            print(out_sentence_idx, trg_sentence_idx, "LAST WORD")
+        if self.same_unordered_lists(filter(lambda i: i not in ignore_idx, out_sentence_idx),
+                                     filter(lambda i: i not in ignore_idx, trg_sentence_idx)):
             flexible_order = True
         return flexible_order
 
     def test_meaning_without_pronouns(self, out_sentence_idx, trg_sentence_idx):
         # remove subject pronouns and check the rest of the sentence
-        out = [idx for idx in out_sentence_idx if idx not in self.idx_pronoun]
-        trg = [idx for idx in trg_sentence_idx if idx not in self.idx_pronoun]
-        return self.test_for_flexible_order(out, trg)
+        return self.test_for_flexible_order(filter(lambda i: i not in self.idx_pronoun, out_sentence_idx),
+                                            filter(lambda i: i not in self.idx_pronoun, trg_sentence_idx))
 
     def test_without_feature(self, out_sentence_idx, trg_sentence_idx, feature):
         if feature == "tense":
             feature_markers = self.tense_markers
         elif feature == "determiners":
             feature_markers = self.determiners
-        out = [x for x in out_sentence_idx if x not in feature_markers]
-        trg = [x for x in trg_sentence_idx if x not in feature_markers]
-        return self.test_for_flexible_order(out, trg, ignore_det=False)
+        return self.test_for_flexible_order(filter(lambda i: i not in feature_markers, out_sentence_idx),
+                                            filter(lambda i: i not in feature_markers, trg_sentence_idx),
+                                            ignore_det=False)
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
         out_pronouns = [idx for idx in out_sentence_idx if idx in self.idx_pronoun]
@@ -249,9 +236,9 @@ class InputFormatter:
         return cache
 
     def check_for_insertions(self, out_sentence_idx, target_lang):
-        non_shared_idx = [w for w in out_sentence_idx if w not in self.shared_idx]
-        l2_words = sum(1 for i in non_shared_idx if i >= self.code_switched_idx)
-        l1_words = sum(1 for i in non_shared_idx if i < self.code_switched_idx)
+        non_shared_idx = filter(lambda i: i not in self.shared_idx, out_sentence_idx)
+        l2_words = sum(1 for _ in filter(lambda i: i >= self.code_switched_idx, non_shared_idx))
+        l1_words = sum(1 for _ in filter(lambda i: i < self.code_switched_idx, non_shared_idx))
 
         filter_idx = operator.lt if target_lang == self.L2 or l2_words > l1_words else operator.ge
         check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
@@ -261,9 +248,9 @@ class InputFormatter:
             # no language was set at the beginning of the sentence
             return "inter-sentential"
 
-        check_idx_pos = [self.pos_lookup(w) for w in check_idx]
+        check_idx_pos = map(self.pos_lookup, check_idx)
         if len(set(check_idx_pos)) == 1:
-            return check_idx_pos[0]
+            return list(check_idx_pos)[0]
         return False
 
     @staticmethod
@@ -293,10 +280,9 @@ class InputFormatter:
             return "inter-sentential"  # whole sentence in the non-target language
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        check_idx_pos = [self.pos_lookup(w) for w in check_idx]
-        len_pos = len(set(check_idx_pos))
-        if len_pos > 1 and set(check_idx).issubset(out_sentence_idx):
-            cs_type = "alt. (%s)" % check_idx_pos[0]
+        check_idx_pos = map(self.pos_lookup, check_idx)
+        if len(set(check_idx_pos)) > 1 and set(check_idx).issubset(out_sentence_idx):
+            cs_type = "alt. (%s)" % list(check_idx_pos)[0]
         else:
             print("No CS detected for: %s %s" % (out_sentence_idx, self.sentence_from_indeces(out_sentence_idx)))
             import sys;sys.exit()
@@ -442,24 +428,9 @@ class InputFormatter:
         :param fname: file name
         :return: Simply reads a file into a list while stripping newlines
         """
-        if self.file_exists(fname):
-            with open(os.path.join(self.directory, fname)) as f:
-                lines = [line.rstrip('\n') for line in f]
-            return lines
-
-    def _read_pickled_file(self, fname):
-        if self.file_exists(fname, warning=False):
-            with open(os.path.join(self.directory, fname), 'rb') as f:
-                return pickle.load(f)
-        return {}
-
-    def file_exists(self, fname, warning=True):
-        if not os.path.isfile(os.path.join(self.directory, fname)):  # make sure the file exists
-            if warning:
-                import warnings
-                warnings.warn("File '%s' doesn't exist, did you want that?" % os.path.join(self.directory, fname))
-            return False
-        return True
+        with open(os.path.join(self.directory, fname)) as f:
+            lines = [line.rstrip('\n') for line in f]
+        return lines
 
     def pos_lookup(self, word_idx):
         """
@@ -488,8 +459,7 @@ class InputFormatter:
         or the words (in that case, convert_to_idx should be set to True)
         :return: returns a list with the POS tags of a sentence
         """
-        pos = [self.pos_lookup(word_idx) for word_idx in sentence_idx_lst]
-        return self.correct_auxiliary_phrase(pos)
+        return self.correct_auxiliary_phrase(list(map(self.pos_lookup, sentence_idx_lst)))
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -498,12 +468,10 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = ujson.loads(self.init_event_sem_file, precise_float=True)  # deepcopy(self.initialized_event_sem)
-        print(event_sem_activations)
+        event_sem_activations = torch.zeros(self.event_sem_size)
         event_sem_message = None
-        # include the identifiness, i.e. def, indef, pronoun, emph(asis)
-        weights_role_concept = deepcopy(self.initialized_weights_role_concept)
-        target_lang_activations = deepcopy(self.initialized_target_lang_activation)
+        weights_role_concept = self.initialized_weights_role_concept.clone()
+        target_lang_activations = torch.zeros(self.num_languages)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -587,11 +555,7 @@ def get_np_mean_and_std_err(x, squared_num_simulations):
             x = np.array(x)
             return x.mean(axis=0), np.true_divide(x.std(axis=0), squared_num_simulations)
         x = torch.tensor(x).float()
-    return x.mean(0), standard_error(x.std(0), squared_num_simulations)  # mean of lists (per column)
-
-
-def standard_error(std, squared_num_simulations):
-    return true_divide(std, squared_num_simulations)
+    return x.mean(0), torch.div(x.std(0), squared_num_simulations)  # mean of lists (per column), standard error
 
 
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
@@ -603,10 +567,6 @@ def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=
     if strip_language_info:
         res = strip_language_info_and_std_err(res)
     return res
-
-
-def true_divide(x, total):
-    return torch.div(x, total)
 
 
 def compute_mean_and_std(valid_results, epochs, evaluated_sets):
