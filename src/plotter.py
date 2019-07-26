@@ -1,8 +1,6 @@
 from src import torch, np, extract_cs_keys
 import seaborn as sns
-import matplotlib
-matplotlib.use('Agg')
-plt = matplotlib.pyplot
+import matplotlib.pyplot as plt
 
 sns.set(palette="colorblind")
 sns.set_style("whitegrid")  # white
