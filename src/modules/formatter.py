@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-import re
-import itertools
 import math
-import operator
-import subprocess
-from itertools import zip_longest as zp
-from src import defaultdict, Counter, np, pd, os, torch
+from operator import lt, ge, itemgetter
+import shutil
+from itertools import product, zip_longest
+from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess
 
 
 class InputFormatter:
@@ -16,12 +14,17 @@ class InputFormatter:
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
         self.directory = directory  # folder that contains input files and where the results are saved
+        self.root_directory = directory.replace('/input', '/')
         self.identifiability = self._read_file_to_list('identifiability.in')
         self.use_semantic_gender = use_semantic_gender
         if self.use_semantic_gender and 'M' not in self.identifiability:
             self.identifiability += ['M', 'F']
+        self.identif_size = len(self.identifiability)
+        self.identifiability_index = dict(zip(self.identifiability, range(self.identif_size)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.lexicon_size = len(self.lexicon)
+        self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
         self.convert_input = convert_input
         self.replace_haber_tener = replace_haber_tener
         self.test_haber_frequency = test_haber_frequency
@@ -30,9 +33,17 @@ class InputFormatter:
         self.use_word_embeddings = use_word_embeddings
         self.concepts = list(self.lexicon_df.concept.dropna().unique()) if not use_word_embeddings \
             else word2vec.load('word2vec/text8.bin')
+        self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
+        self.concept_index = dict(zip(self.concepts, range(self.concept_size)))
         self.languages = self._read_file_to_list('target_lang.in')
+        self.num_languages = len(self.languages)
+        self.language_index = dict(zip(self.languages, range(self.num_languages)))
         self.roles = self._read_file_to_list('roles.in')
+        self.roles_size = len(self.roles)
+        self.roles_index = dict(zip(self.roles, range(self.roles_size)))
         self.event_semantics = self._read_file_to_list('event_semantics.in')
+        self.event_sem_size = len(self.event_semantics)
+        self.event_sem_index = dict(zip(self.event_semantics, range(self.event_sem_size)))
         self.prodrop = prodrop
         self.emphasis_percentage = overt_pronouns
         self.translation_cache = {}
@@ -44,7 +55,7 @@ class InputFormatter:
         # Using a really low value (e.g. 1) makes it difficult (but possible) for the model to learn the associations
         self.fixed_weights = fixed_weights
         self.fixed_identif = fixed_weights_identif
-        self.period_idx = self.get_lexicon_index('.')
+        self.period_idx = self.lexicon_index['.']
         self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
         self.haber_tener_idx = self.df_query_to_idx("morpheme_es == 'tiene' or morpheme_es == 'ha'", lang='es')
@@ -53,16 +64,13 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang='en')
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == 'Y'", lang='en')
-        self.shared_idx = [self.period_idx] + self.cognate_idx + self.false_friend_idx
-        self.lexicon_size = len(self.lexicon)
-        self.identif_size = len(self.identifiability)
-        self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
-        self.event_sem_size = len(self.event_semantics)
-        self.roles_size = len(self.roles)
-        self.num_languages = len(self.languages)
-        self.initialized_weights_role_concept = torch.zeros(self.roles_size, (self.concept_size + self.identif_size))
+        self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
+        self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
+        self.initialized_weights_role_identif = zeros(self.roles_size, self.identif_size)
         self.weights_role_concept = {'training': [], 'test': []}
+        self.weights_role_identif = {'training': [], 'test': []}
         self.weights_concept_role = {'training': [], 'test': []}
+        self.weights_identif_role = {'training': [], 'test': []}
         self.event_sem_activations = {'training': [], 'test': []}
         self.target_lang_act = {'training': [], 'test': []}
         self.training_set = training_set_name
@@ -82,7 +90,7 @@ class InputFormatter:
                 L2 = None
             else:
                 L2 = [x for x in ['en', 'es'] if x != L1][0]
-                print("Will include L2 (%s) lexicon" % L2)
+                print(f"Will include L2 ({L2}) lexicon")
         return L1, L2
 
     def update_sets(self, new_directory):
@@ -90,19 +98,21 @@ class InputFormatter:
 
         if self.convert_input:
             if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
-                os.system("sed -i -e 's/ ha / tiene /g' %s/t*.in" % new_directory)
+                os.system(f"sed -i -e 's/ ha / tiene /g' {new_directory}/t*.in")
                 self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
                                     (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
             elif self.test_haber_frequency:
                 self.make_haber_and_tener_synonyms(new_directory)
-                
-        (self.trainlines_df, self.weights_role_concept['training'], self.event_sem_activations['training'],
-         self.target_lang_act['training']) = self.read_set_to_df()
-        self.weights_concept_role['training'] = [torch.t(x) for x in self.weights_role_concept['training']]
+
+        (self.trainlines_df, self.weights_role_concept['training'], self.weights_role_identif['training'],
+         self.event_sem_activations['training'], self.target_lang_act['training']) = self.read_set_to_df()
+        self.weights_concept_role['training'] = [x.t() for x in self.weights_role_concept['training']]
+        self.weights_identif_role['training'] = [x.t() for x in self.weights_role_identif['training']]
         self.num_training = len(self.trainlines_df)
-        (self.testlines_df, self.weights_role_concept['test'], self.event_sem_activations['test'],
-         self.target_lang_act['test']) = self.read_set_to_df(test=True)
-        self.weights_concept_role['test'] = [torch.t(x) for x in self.weights_role_concept['test']]
+        (self.testlines_df, self.weights_role_concept['test'], self.weights_role_identif['test'],
+         self.event_sem_activations['test'], self.target_lang_act['test']) = self.read_set_to_df(test=True)
+        self.weights_concept_role['test'] = [x.t() for x in self.weights_role_concept['test']]
+        self.weights_identif_role['test'] = [x.t() for x in self.weights_role_identif['test']]
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         if not self.allowed_structures:
@@ -110,9 +120,9 @@ class InputFormatter:
 
     @staticmethod
     def make_haber_and_tener_synonyms(directory):
-        fname = "%s/training.in" % directory
-        os.system("sed -i -e 's/ ha / tiene /g' %s" % fname)
-        num = int(subprocess.check_output("cat %s | grep -w tiene | wc -l" % fname, shell=True))
+        fname = f"{directory}/training.in"
+        os.system(f"sed -i -e 's/ ha / tiene /g' {fname}")
+        num = int(subprocess.check_output(f"cat {fname} | grep -w tiene | wc -l", shell=True))
         num = num / 2  # only convert half of the instances
         os.system("awk '{for(i=1;i<=NF;i++){if(x<%s&&$i==\"tiene\"){x++;sub(\"tiene\",\"ha\",$i)}}}1' %s > "
                   "tmp && mv tmp %s" % (num, fname, fname))
@@ -124,9 +134,8 @@ class InputFormatter:
                 filter(lambda i: i not in self.haber_tener_idx, trg_sentence_idx)):  # remove haber/tener and check
                 return True
         # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        out_sentence_idx = filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx)
-        trg_sentence_idx = filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)
-        if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
+        if self.same_unordered_lists(filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx),
+                                     filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)):
             return True
         return False
 
@@ -195,9 +204,8 @@ class InputFormatter:
                                             ignore_det=False)
 
     def has_pronoun_error(self, out_sentence_idx, trg_sentence_idx):
-        out_pronouns = [idx for idx in out_sentence_idx if idx in self.idx_pronoun]
-        trg_pronouns = [idx for idx in trg_sentence_idx if idx in self.idx_pronoun]
-        if out_pronouns != trg_pronouns:
+        if filter(lambda i: i in self.idx_pronoun, out_sentence_idx) != \
+                filter(lambda i: i in self.idx_pronoun, trg_sentence_idx):
             return True
         return False
 
@@ -240,7 +248,7 @@ class InputFormatter:
         l2_words = sum(1 for _ in filter(lambda i: i >= self.code_switched_idx, non_shared_idx))
         l1_words = sum(1 for _ in filter(lambda i: i < self.code_switched_idx, non_shared_idx))
 
-        filter_idx = operator.lt if target_lang == self.L2 or l2_words > l1_words else operator.ge
+        filter_idx = lt if target_lang == self.L2 or l2_words > l1_words else ge
         check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
 
         if target_lang and not check_idx:
@@ -257,34 +265,33 @@ class InputFormatter:
     def query_cache(out_idx, cache):
         if out_idx in cache:
             return cache[out_idx]
-        return []
+        return None
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang):
         out_idx = repr(out_sentence_idx)
         cache = self.query_cache(out_idx, self.translation_cache)
         if not cache:
             trans = [self.find_equivalent_translation_idx(idx, trg_lang) for i, idx in enumerate(out_sentence_idx)]
-            cache = [list(x for x in tup) for tup in list(itertools.product(*trans))]
+            cache = [list(x for x in tup) for tup in list(product(*trans))]
             self.translation_cache[out_idx] = cache
         return cache
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
-
-        check_idx = [w for w in out_sentence_idx if (w not in trg_sentence_idx and w not in self.shared_idx)]
+        check_idx = filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx), out_sentence_idx)
         if len(check_idx) == 0:
             return False  # it was either a cognate or a false friend
 
-        if len(check_idx) == len([w for w in out_sentence_idx if w not in self.shared_idx]):
+        if len(check_idx) == len(filter(lambda i: i not in self.shared_idx, out_sentence_idx)):
             return "inter-sentential"  # whole sentence in the non-target language
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         check_idx_pos = map(self.pos_lookup, check_idx)
         if len(set(check_idx_pos)) > 1 and set(check_idx).issubset(out_sentence_idx):
-            cs_type = "alt. (%s)" % list(check_idx_pos)[0]
+            cs_type = f"alt. ({list(check_idx_pos)[0]})"
         else:
-            print("No CS detected for: %s %s" % (out_sentence_idx, self.sentence_from_indeces(out_sentence_idx)))
+            print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indeces(out_sentence_idx)}")
             import sys;sys.exit()
         return cs_type
 
@@ -292,7 +299,7 @@ class InputFormatter:
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
         # skip indeces that are common in all lang
-        clean_sentence = [x for x in sentence_indeces if x not in self.shared_idx]
+        clean_sentence = list(filter(lambda i: i not in self.shared_idx, sentence_indeces))
         if not clean_sentence:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
@@ -350,36 +357,26 @@ class InputFormatter:
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
         info = defaultdict(list)
-        lex_append = info['lex'].append
-        pos_append = info['pos'].append
         for lang in [self.L1, self.L2]:
             if lang:
-                column = self.lexicon_df[['morpheme_%s' % lang, 'pos',
-                                          'concept', 'type']].dropna(subset=['morpheme_%s' % lang])
+                column = self.lexicon_df[[f'morpheme_{lang}', 'pos',
+                                          'concept', 'type']].dropna(subset=[f'morpheme_{lang}'])
                 pos_list = list(column['pos'])
-                for i, item in enumerate(list(column['morpheme_%s' % lang])):
+                for i, item in enumerate(list(column[f'morpheme_{lang}'])):
                     if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
-                        lex_append(item)
-                        pos_append(pos_list[i])
+                        info['lex'].append(item)
+                        info['pos'].append(pos_list[i])
             info['code_switched_idx'].append(len(info['lex']))
         with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
-            f.writelines("%s\n" % w for w in info['lex'])
+            f.writelines('\n'.join(info['lex']))
         return info['lex'], info['pos'], info['code_switched_idx'][0]
-
-    def get_lexicon_index(self, word):
-        """
-        :param word: unique word in string format
-        :return: returns index of the word in the list. In case of non unique words, it only returns the first idx
-        """
-        return self.lexicon.index(word)
 
     def concept_to_morphemes(self, lex_idx, target_lang):
         idx = repr((lex_idx, target_lang))
         cache = self.query_cache(idx, self.concept_to_morpheme_cache)
         if not cache:
             current_lang = self.L1 if target_lang == self.L2 else self.L2
-            cache = self.df_query_to_idx("morpheme_%s == '%s'" % (current_lang, self.lexicon[lex_idx]),
-                                         lang=target_lang)
+            cache = self.df_query_to_idx(f"morpheme_{current_lang} == '{self.lexicon[lex_idx]}'", lang=target_lang)
             self.concept_to_morpheme_cache[idx] = cache
         return cache
 
@@ -403,13 +400,15 @@ class InputFormatter:
 
         df['target_sentence_idx'] = df.target_sentence.apply(self.sentence_indeces)
         df['target_pos'] = df.target_sentence_idx.apply(self.sentence_pos)
-        (event_sem_activations, target_lang_act, df['lang'], weights_role_concept,
-         df['event_sem_message']) = zp(*df.message.apply(self.get_message_info))
-        return df, weights_role_concept, event_sem_activations, target_lang_act
+        (event_sem_activations, target_lang_act, df['lang'], weights_role_concept, weights_role_identif,
+         df['event_sem_message']) = zip_longest(*df.message.apply(self.get_message_info))
+        return df, weights_role_concept, weights_role_identif, event_sem_activations, target_lang_act
 
     def read_allowed_pos(self):
         """ returns all (distinct) allowed POS structures in the training file (list of lists) """
-        return list(map(list, set(map(tuple, self.trainlines_df.target_pos))))
+        allowed = list(map(list, set(map(tuple, self.trainlines_df.target_pos))))
+        allowed.extend([x[:-1] for x in allowed])
+        return allowed
 
     @staticmethod
     def correct_auxiliary_phrase(pos):
@@ -444,14 +443,14 @@ class InputFormatter:
         :param sentence_idx: list with sentence indeces
         :return: converts a list of idx into a sentence (string of words)
         """
-        return " ".join([self.lexicon[idx] for idx in sentence_idx])
+        return " ".join(list(itemgetter(*sentence_idx)(self.lexicon)))
 
     def sentence_indeces(self, sentence):
         """
         :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walks'])
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33]
         """
-        return [self.get_lexicon_index(w) for w in sentence.split()]
+        return list(map(self.lexicon_index.__getitem__, sentence.split()))
 
     def sentence_pos(self, sentence_idx_lst):
         """
@@ -468,10 +467,11 @@ class InputFormatter:
         """
         norm_activation = 1.  # 0.5 ?
         reduced_activation = 0.7  # 0.1-4
-        event_sem_activations = torch.zeros(self.event_sem_size)
+        event_sem_activations = zeros(self.event_sem_size)
         event_sem_message = None
         weights_role_concept = self.initialized_weights_role_concept.clone()
-        target_lang_activations = torch.zeros(self.num_languages)
+        weights_role_identif = self.initialized_weights_role_identif.clone()
+        target_lang_activations = zeros(self.num_languages)
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
@@ -484,20 +484,20 @@ class InputFormatter:
                         continue  # otherwise activation will revert to default
                     elif event in self.languages:
                         target_language = event
-                        target_lang_activations[self.languages.index(event)] = activation
+                        target_lang_activations[self.language_index[event]] = activation
                     elif event == 'enes':
                         target_language = event
                         target_lang_activations = [0.5, 0.5]
                     else:
-                        event_sem_activations[self.event_semantics.index(event)] = activation
+                        event_sem_activations[self.event_sem_index[event]] = activation
                     activation = norm_activation  # reset activation levels to maximum
             else:
                 # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
                 # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
                 for concept in what.split(","):
                     if concept in self.identifiability:
-                        weights_role_concept[self.roles.index(role)][
-                            self.identifiability.index(concept)] = self.fixed_identif
+                        weights_role_identif[self.roles_index[role]][self.identifiability_index[concept]] \
+                            = self.fixed_identif
                     elif concept not in ['COG', 'FF']:
                         if self.use_word_embeddings:
                             activation_vector = self.concepts['unknown']
@@ -506,18 +506,19 @@ class InputFormatter:
                             if lex in self.concepts:
                                 activation_vector = self.concepts[lex]
                             else:
-                                print("UNK: %s(%s)" % (lex, concept))
+                                print(f"UNK: {lex}({concept})")
 
                             for i, w2v_activation in enumerate(activation_vector):
-                                weights_role_concept[self.roles.index(role)][self.identif_size + i] = w2v_activation
+                                weights_role_concept[self.roles_index[role]][i] = w2v_activation
                         else:
                             if concept in self.concepts:
-                                idx_concept = self.identif_size + self.concepts.index(concept)
-                                weights_role_concept[self.roles.index(role)][idx_concept] = self.fixed_weights
+                                weights_role_concept[self.roles_index[role]][self.concept_index[concept]] \
+                                    = self.fixed_weights
                             else:
                                 import sys
-                                sys.exit("No concept found: %s (%s)" % (concept, message))
-        return event_sem_activations, target_lang_activations, target_language, weights_role_concept, event_sem_message
+                                sys.exit(f"No concept found: {concept} ({message})")
+        return event_sem_activations, target_lang_activations, target_language, weights_role_concept, \
+               weights_role_identif, event_sem_message
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """
@@ -525,11 +526,11 @@ class InputFormatter:
 
     def df_query_to_idx(self, query, lang=None):
         if lang:
-            languages = ['morpheme_%s' % lang]
+            languages = [f'morpheme_{lang}']
         else:
             languages = ['morpheme_en', 'morpheme_es']
         q = self.lexicon_df.query(query)[languages].values.ravel()
-        return [self.get_lexicon_index(x) for x in list(q) if is_not_nan(x)]
+        return list(self.lexicon_index[x] for x in list(q) if is_not_nan(x))
 
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indeces (cognates/period)
@@ -547,6 +548,13 @@ def is_not_nan(x):
     if x == x:
         return True
     return False
+
+
+def copy_files(src, dest, ends_with=None):
+    os.makedirs(dest)
+    for filename in os.listdir(src):
+        if not ends_with or (ends_with and filename.endswith(ends_with)):
+            shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
 def get_np_mean_and_std_err(x, squared_num_simulations):
@@ -602,10 +610,14 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
             np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name],
                                                           squared_num_simulations=math.sqrt(len(valid_results)))
             if np_mean is not False:
-                results_sum[key]["%s-std_error" % set_name] = np_std_err
+                results_sum[key][f"{set_name}-std_error"] = np_std_err
                 results_sum[key][set_name] = np_mean
     results_sum['all_cs_types'] = strip_language_info_and_std_err(all_cs_types)
     return results_sum
+
+
+def training_is_successful(x, threshold, num_test):
+    return torch.div(x[-1] * 100, num_test) >= threshold
 
 
 def strip_language_info_and_std_err(keyword_list):

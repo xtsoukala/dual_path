@@ -1,45 +1,33 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import shutil
 import json
 import argparse
-import pathos
-from datetime import datetime
-from src import os, lzma, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter, torch
-
-mp = pathos.helpers.mp
-if torch.cuda.is_available():
-    mp.set_start_method('spawn', force=True)   # GPU+multiprocessing require spawn, not fork
+from joblib import Parallel, delayed
+from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter,
+                     copy_files, datetime, training_is_successful, Pool, Process, cpu_count, set_start_method)
 
 
-def copy_files(src, dest, ends_with=None):
-    os.makedirs(dest)
-    for filename in os.listdir(src):
-        if not ends_with or (ends_with and filename.endswith(ends_with)):
-            shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
-
-
-def create_all_input_files(number_of_simulations, arguments):
-    input_files = []
-    for sim_num in number_of_simulations:  # first create all input files
-        process = mp.Process(target=create_input_for_simulation,
-                             args=arguments+(sim_num,))
-        process.start()
-        input_files.append(process)
-    for p in input_files:
-        p.join()
-
-
-def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, l2_percentage,
+def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
                                 auxiliary_experiment, simulation_number):
-    sets.sets.set_new_results_dir("%s/%s" % (results_directory, simulation_number))
-    sets.sets.seed = simulation_number  # set new seed for language generator
+    sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
+    sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
     else:
-        test_set, training_set = sets.sets.generate_general(num_training=training_num, percentage_l2=l2_percentage)
+        test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
+                                                       percentage_l2=l2_percentage)
         if auxiliary_experiment:
-            sets.sets.aux_experiment = True
-            sets.sets.generate_auxiliary_experiment_sentences(training_set=training_set, percentage_l2=l2_percentage)
+            sets.aux_experiment = True
+            sets.generate_auxiliary_experiment_sentences(training_set=training_set, percentage_l2=l2_percentage)
+
+
+def calculate_testset_size(num_training, percentage_test_set=0.2):
+    """
+    :param num_training: Number of training sentences
+    :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
+    :return: Number of sentences for training and test sets
+    """
+    return int((num_training * 100 / 80) * percentage_test_set)
 
 
 def check_given_input_path(input_path):
@@ -48,71 +36,67 @@ def check_given_input_path(input_path):
         if os.path.exists(corrected_dir):
             input_path = corrected_dir
         else:
-            sys.exit('No input folder found in the path (%s)' % input_path)
-    logging.warning("Predefined input folder (%s), will use that instead of generating a new set" % input_path)
+            sys.exit(f'No input folder found in the path ({input_path})')
+    logging.warning(f"Predefined input folder ({input_path}), will use that instead of generating a new set")
     return input_path
-
-
-def training_is_successful(x, threshold, num_test):
-    return torch.div(x[-1] * 100, num_test) >= threshold
 
 
 if __name__ == "__main__":
     def positive_int(x):
         pos_int = int(x)
         if pos_int <= 0:
-            raise argparse.ArgumentTypeError("%s is invalid: only use positive int value" % x)
+            raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-hidden', help='Number of hidden layer units.', type=positive_int, default=110)  # 110 80
-    parser.add_argument('-compress', help='Number of compress layer units', type=positive_int, default=70)  # 70 40
-    parser.add_argument('-epochs', '-total_epochs', help='Number of training set iterations during (total) training.',
+    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=100)  # 110 80
+    parser.add_argument('--compress', '-c', help='Number of compress layer units', type=positive_int, default=70)  # 70
+    parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=30)
-    parser.add_argument('-l2_epochs', '-l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
-    parser.add_argument('-l2_percentage', '-l2_perc', help='%% of L2 input', type=float, default=0.5)
-    parser.add_argument('-input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
+    parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
+    parser.add_argument('--l2_percentage', '--l2_perc', help='%% of L2 input', type=float, default=0.5)
+    parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
-    parser.add_argument('-lexicon', help='CSV file that contains lexicon and concepts')
-    parser.add_argument('-structures', help='CSV file that contains the structures')
-    parser.add_argument('-trainingset', '-training', help='File name that contains the message-sentence pair for '
-                                                          'training.', default="training.in")
-    parser.add_argument('-testset', '-test', help='Test set file name')
-    parser.add_argument('-resdir', '-r', help='Prefix of results folder name; will be stored under folder "simulations"'
-                                              'and a timestamp will be added')
-    parser.add_argument('-lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                      'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
-    parser.add_argument('-lrate', help='Learning rate', type=float, default=0.10)
-    parser.add_argument('-final_lrate', '-flrate', help='Final learning rate after linear decrease in the first 1 epoch'
-                                                        "(2k sentences). If not set, rate doesn't decrease",
+    parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
+    parser.add_argument('--structures', help='CSV file that contains the structures')
+    parser.add_argument('--trainingset', '--training', help='File name that contains the message-sentence pair for '
+                                                            'training.', default="training.in")
+    parser.add_argument('--testset', '--test', help='Test set file name')
+    parser.add_argument('--resdir', '-r', help='Prefix of results folder name; will be stored under folder '
+                                               '"simulations" and a timestamp will be added')
+    parser.add_argument('--lang', help='In case we want to generate a new set, we need to specify the language (en, es '
+                                       'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
+    parser.add_argument('--lrate', help='Learning rate', type=float, default=0.10)
+    parser.add_argument('--final_lrate', help='Final learning rate after linear decrease in the first 1 epoch. '
+                                              'If not set, rate does not decrease',
                         type=float, default=0.02)
-    parser.add_argument('-momentum', help='Amount of previous weight changes that are taken into account',
+    parser.add_argument('--momentum', help='Amount of previous weight changes that are taken into account',
                         type=float, default=0.9)
-    parser.add_argument('-set_weights', '-sw',
+    parser.add_argument('--set_weights', '--sw', default=None,
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('-set_weights_epoch', '-swe', type=int, default=0,
+    parser.add_argument('--set_weights_epoch', '--swe', type=int, default=0,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('-fw', '-fixed_weights', type=int, default=30,  # 20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=30,  # 20
                         help='Fixed weight value for concept-role connections')
-    parser.add_argument('-fwi', '-fixed_weights_identif', type=int, default=10,
+    parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('-cognate_percentage', help='Amount of sentences with cognates in test/training sets',
+    parser.add_argument('--cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('-generate_training_num', type=int, default=3000, help='Sum of test/training sentences to be '
-                                                                               'generated (only if no input was set)')
-    parser.add_argument('-title', help='Title for the plots')
-    parser.add_argument('-sim', type=positive_int, default=2,
+    parser.add_argument('--generate_training_num', type=int, default=3000, help='Sum of test/training sentences to be '
+                                                                                'generated (only if no input was set)')
+    parser.add_argument('--title', help='Title for the plots')
+    parser.add_argument('--sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
-    parser.add_argument('-sim_from', type=positive_int, help='To train several simulations with range other than '
-                                                             '(0, number_of_simulations) you need to set the '
-                                                             'sim_from and sim_to values')
-    parser.add_argument('-sim_to', type=positive_int, help='See sim_from')
-    parser.add_argument('-pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
-    parser.add_argument('-threshold', type=int, default=0,
+    parser.add_argument('--sim_from', type=positive_int, help='To train several simulations with range other than '
+                                                              '(0, number_of_simulations) you need to set the '
+                                                              'sim_from and sim_to values')
+    parser.add_argument('--sim_to', type=positive_int, help='See sim_from')
+    parser.add_argument('--pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
+    parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
-    parser.add_argument('-config', default=False, help='Read arguments from file')
+    parser.add_argument('--config', default=False, help='Read arguments from file')
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -188,6 +172,7 @@ if __name__ == "__main__":
         with open(args.config, 'r') as f:
             args.__dict__ = json.load(f)
 
+    root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
     cognate_experiment = args.cognate_experiment
     training_num = args.generate_training_num
     l2_percentage = args.l2_percentage
@@ -196,21 +181,21 @@ if __name__ == "__main__":
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
     set_weights_epoch = args.set_weights_epoch
     if args.only_eval and not args.set_weights:
-        sys.exit('No pre-trained weights found. Check the set-weights folder (set_weights: %s)' % args.set_weights)
+        sys.exit(f'No pre-trained weights found. Check the set-weights folder (set_weights: {args.set_weights})')
 
     if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
-        args.input = args.set_weights
+        from copy import deepcopy
+        # it is implied that the input and the weights are under the same simulation folder; copy the path
+        args.input = deepcopy(args.set_weights)
+        print(args.input, args.set_weights)
 
-    if not args.compress:  # compress layer should be approximately 1/3 of the hidden one
+    if not args.compress:  # compress layer should be approximately 2/3 of the hidden one  FIXME 2/3 or 1/3?
         args.compress = int(args.hidden * (2 / 3))
 
-    # if not args.hidden: we could measure the lexicon size and compute the number of layers by dividing by 2
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = "simulations/%s%s/%s_%s_sim%s_h%s_c%s_fw%s_e%s" % ((args.resdir if args.resdir else ""),
-                                                                     datetime.now().strftime("%Y-%m-%d"),
-                                                                     datetime.now().strftime("%H.%M.%S"),
-                                                                     args.lang, args.sim, args.hidden, args.compress,
-                                                                     args.fw, args.epochs)
+    results_dir = f"{root_folder}/simulations/{(args.resdir if args.resdir else '')}" \
+                  f"{datetime.now().strftime('%Y-%m-%d')}/{datetime.now().strftime('%H.%M.%S')}_{args.lang}_" \
+                  f"sim{args.sim}_h{args.hidden}_c{args.compress}_fw{args.fw}_e{args.epochs}"
     os.makedirs(results_dir)
 
     if args.auxiliary_experiment:
@@ -226,52 +211,44 @@ if __name__ == "__main__":
     if not args.testset:
         args.testset = 'test.in'
 
-    input_dir = '%s/input' % results_dir
+    input_dir = f"{results_dir}/input"
     num_training = args.generate_training_num
-    if args.input:  # generate a new set (unless "input" was also set)
+    num_test = calculate_testset_size(num_training)
+    if args.input:  # if "input" was set, copy existing files
         given_input_path = check_given_input_path(args.input)
         copy_files(given_input_path, input_dir)
         existing_input_path = given_input_path.replace("/input", "")  # remove "/input", the sets are in the sub folders
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
-                                dest="%s/%s" % (results_dir, sim), ends_with=".in")
-        num_training = sum(1 for line in open("%s/%s/%s" % (results_dir, sim, args.trainingset)))
-    else:
-        from src.corpus_for_experiments import ExperimentSets, SetsGenerator
+                       dest=f"{results_dir}/{sim}", ends_with=".in")
+        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}"))
+    else:  # generate a new set
+        from modules import SetsGenerator
 
         experiment_dir = "code-switching/" if args.activate_both_lang else ""
         if not args.lexicon:
-            args.lexicon = 'data/%slexicon.csv' % experiment_dir
+            args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
-            args.structures = 'data/%sstructures.csv' % experiment_dir
-        logging.warning("Using %s (lexicon) and %s (structures)" % (args.lexicon, args.structures))
-        input_sets = ExperimentSets(
-            sets_gen=SetsGenerator(input_dir=input_dir, use_full_verb_form=args.full_verb, lang=args.lang,
+            args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
+        logging.warning(f"Using {args.lexicon} (lexicon) and {args.structures} (structures)")
+        # FIXME: SetsGenerator needs to be reconstructed
+        input_sets = SetsGenerator(input_dir=input_dir, use_full_verb_form=args.full_verb, lang=args.lang,
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos,
-                                   aux_experiment=args.auxiliary_experiment),)
-        create_all_input_files(number_of_simulations=simulation_range,
-                               arguments=(results_dir, input_sets, cognate_experiment,
-                                          training_num, l2_percentage, auxiliary_experiment))
+                                   aux_experiment=args.auxiliary_experiment)
+        # If prefer="threads" make sure to deepcopy input sets. -1 means that all CPUs will be used
+        Parallel(n_jobs=-1)(delayed(create_input_for_simulation)
+                            (results_dir, input_sets, cognate_experiment, training_num, num_test,
+                             l2_percentage, auxiliary_experiment, sim) for sim in simulation_range)
         del input_sets  # we no longer need it
 
-    if not args.title:
-        lang_code_to_title = {'en': 'English monolingual model', 'es': 'Spanish monolingual model',
-                              'el': 'Greek monolingual model', 'enes': 'Bilingual en-es model',
-                              'esen': 'Bilingual en-es model'}
-        args.title = lang_code_to_title[args.lang]
-
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
-        logging.warning("Learning rate will NOT be decreased, it is set to %s" % args.final_lrate)
+        logging.warning(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
-    with open('%s/commandline_args.txt' % results_dir, 'w') as f:
+    with open(f'{results_dir}/commandline_args.txt', 'w') as f:
         json.dump(args.__dict__, f, indent=2)
-
-    num_valid_simulations = None
-    simulations_with_pron_err = 0
-    failed_sim_id = []
 
     formatted_input = InputFormatter(directory=input_dir, language=args.lang, use_semantic_gender=args.gender,
                                      overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
@@ -280,74 +257,61 @@ if __name__ == "__main__":
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
                                      test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
-    assert num_training == formatted_input.num_training
 
-    processes = []
-    starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                      cognate_experiment=args.cognate_experiment, momentum=args.momentum,
-                     set_weights_folder=formatted_input.directory if args.set_weights else None,
+                     set_weights_folder=args.set_weights, #formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
-                     separate_hidden_layers=args.separate_hidden_layers)
-    for sim in simulation_range:   # run the simulations
-        formatted_input.update_sets(new_directory="%s/%s" % (results_dir, sim))
+                     continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
+                     evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
+                     starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
 
-        if args.set_weights:
-            destination_folder = '%s/weights' % formatted_input.directory
-            dualp.set_weights_folder = formatted_input.directory if args.set_weights else None
-            src_folder = os.path.join(args.set_weights, "%s/weights" % sim)
-            if args.only_eval or args.continue_training:  # copy all weights
-                copy_files(src_folder, destination_folder)
-            else:  # only copy the starting epoch (such as epoch 0)
-                copy_files(src=src_folder, dest=destination_folder,
-                                    ends_with="_%s" % args.set_weights_epoch)
-                if args.set_weights_epoch != 0:  # rename them all to epoch 0. For Mac OS: brew install rename
-                    os.system("rename s/_%s/_0/ %s/*" % (args.set_weights_epoch,
-                                                         '%s/weights' % formatted_input.directory))
-                    args.set_weights_epoch = 0
-
-        dualp.simulation_num = sim
-        dualp.input_class = formatted_input
-        dualp.set_weights_epoch = set_weights_epoch
-
-        process = mp.Process(target=dualp.start_network, args=(args.eval_test, args.eval_training, starting_epoch))
-        process.start()
-        processes.append(process)
-
-    num_test = formatted_input.num_test
-    test_sentences_with_pronoun = formatted_input.test_sentences_with_pronoun
-    lexicon_size = formatted_input.lexicon_size
     del formatted_input
+    #Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, args.set_weights) for sim in simulation_range)
 
-    for p in processes:
-        p.join()
+    parallel_simulations = []
+    for sim in simulation_range:  # first create all input files
+        parallel_simulations.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
+        parallel_simulations[-1].start()
+        if len(parallel_simulations) == cpu_count():  # if number of simulations is larger than number of cores
+            for p in parallel_simulations:
+                p.join()
+            parallel_simulations = []
 
-    layers_with_softmax_act_function = ""
-    for layer in dualp.srn.backpropagated_layers:
-        if layer.activation_function == 'softmax':
-            layers_with_softmax_act_function += ", %s" % layer.name
+    if parallel_simulations:  # if number of simulations <= number of cores
+        for p in parallel_simulations:
+            p.join()
+
+    dualp.inputs.update_sets(f"{dualp.inputs.root_directory}/{simulation_range[0]}")  # needed to update num_test
+    num_test = dualp.inputs.num_test
+
+    test_sentences_with_pronoun = dualp.inputs.test_sentences_with_pronoun
+    lexicon_size = dualp.inputs.lexicon_size
+    layers_with_softmax = ', '.join([layer.name for layer in dualp.srn.backpropagated_layers
+                                     if layer.activation_function == 'softmax'])
     del dualp
 
     if args.eval_test:  # aggregate and plot results
+        num_valid_simulations = 0
+        simulations_with_pron_err = 0
+        failed_sim_id = []
         valid_results = []
         for sim in simulation_range:  # read results from all simulations
-            if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
-                with lzma.open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
+            if os.path.isfile(f'{results_dir}/{sim}/results.pickled'):
+                with lz4.open(f'{results_dir}/{sim}/results.pickled', 'rb') as f:
                     simulation = pickle.load(f)
-
                 if training_is_successful(simulation['correct_meaning']['test'], args.threshold, num_test=num_test):
                     valid_results.append(simulation)
                     if not training_is_successful(simulation['correct_meaning']['test'], 80, num_test=num_test):
-                        failed_sim_id.append("[%s]" % sim)  # flag it, even if it's included in the final analysis
+                        failed_sim_id.append(f"[{sim}]")  # flag it, even if it's included in the final analysis
                 else:
                     failed_sim_id.append(str(sim))  # keep track of simulations that failed
-
             else:  # this would mean "missing data", we could raise a message
-                logging.warning('Simulation #%s was problematic' % sim)
+                logging.warning(f'Simulation #{sim} was problematic')
 
         num_valid_simulations = len(valid_results)  # some might have been discarded
         if num_valid_simulations:  # take the average of results and plot
@@ -363,23 +327,21 @@ if __name__ == "__main__":
                 eval_sets.add('training')
             results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
 
-            with lzma.open("%s/summary_results.pickled" % results_dir, 'wb') as pckl:
+            with lz4.open(f"{results_dir}/summary_results.pickled", 'wb') as pckl:
                 pickle.dump(results_mean_and_std, pckl, protocol=-1)
 
             plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                           epochs=args.epochs, num_training=num_training,
-                           num_test=num_test)
+                           epochs=args.epochs, num_training=num_training, num_test=num_test)
             plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
                               test_sentences_with_pronoun=test_sentences_with_pronoun,
                               auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
             if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
-                with open("%s/results.log" % results_dir, 'w') as f:
-                    f.write("Code-switched percentage (test set): %s" %
-                            Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test))
+                with open(f"{results_dir}/results.log", 'w') as f:
+                    f.write(f"Code-switched percentage (test set): "
+                            f"{Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test)}")
 
-    with open("%s/results.log" % results_dir, 'w') as f:
-        f.write("Lexicon size:%s\nLayers with softmax activation function: %s\nSimulations with pronoun errors:%s/%s\n"
-                "%s%s" % (lexicon_size, layers_with_softmax_act_function, simulations_with_pron_err, args.sim,
-                          "Successful simulations:%s/%s" % (num_valid_simulations, args.sim) if num_valid_simulations
-                          else "", "\nIndeces of (almost) failed simulations: %s"
-                                   % ", ".join(failed_sim_id) if failed_sim_id else ""))
+    with open(f"{results_dir}/results.log", 'w') as f:
+        f.write(f"Lexicon size:{lexicon_size}\nLayers with softmax activation function: "
+                f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
+                f"{len(simulation_range)}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
+                f"Indeces of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")
