@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 import json
 import argparse
-from joblib import Parallel, delayed
-from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter,
-                     copy_files, datetime, training_is_successful, Pool, Process, cpu_count, set_start_method)
+from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath,
+                     Plotter, copy_files, datetime, training_is_successful, Process, cpu_count)
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
@@ -68,9 +67,8 @@ if __name__ == "__main__":
     parser.add_argument('--lang', help='In case we want to generate a new set, we need to specify the language (en, es '
                                        'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
     parser.add_argument('--lrate', help='Learning rate', type=float, default=0.10)
-    parser.add_argument('--final_lrate', help='Final learning rate after linear decrease in the first 1 epoch. '
-                                              'If not set, rate does not decrease',
-                        type=float, default=0.02)
+    parser.add_argument('--final_lrate', '--flrate', type=float, default=0.02,
+                        help='Final learning rate after linear decrease. If not set, rate does not decrease')
     parser.add_argument('--momentum', help='Amount of previous weight changes that are taken into account',
                         type=float, default=0.9)
     parser.add_argument('--set_weights', '--sw', default=None,
@@ -168,7 +166,7 @@ if __name__ == "__main__":
     parser.set_defaults(separate_hidden_layers=False)
     args = parser.parse_args()
 
-    if args.config:  # read params from file
+    if args.config:  # read params from file; I used the json format instead of pickle to make it readable
         with open(args.config, 'r') as f:
             args.__dict__ = json.load(f)
 
@@ -179,12 +177,14 @@ if __name__ == "__main__":
     auxiliary_experiment = args.auxiliary_experiment
 
     simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
+    num_simulations = len(simulation_range)
     set_weights_epoch = args.set_weights_epoch
     if args.only_eval and not args.set_weights:
         sys.exit(f'No pre-trained weights found. Check the set-weights folder (set_weights: {args.set_weights})')
 
     if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
         from copy import deepcopy
+
         # it is implied that the input and the weights are under the same simulation folder; copy the path
         args.input = deepcopy(args.set_weights)
         print(args.input, args.set_weights)
@@ -211,6 +211,7 @@ if __name__ == "__main__":
     if not args.testset:
         args.testset = 'test.in'
 
+    available_cpu = cpu_count()
     input_dir = f"{results_dir}/input"
     num_training = args.generate_training_num
     num_test = calculate_testset_size(num_training)
@@ -238,9 +239,21 @@ if __name__ == "__main__":
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos,
                                    aux_experiment=args.auxiliary_experiment)
         # If prefer="threads" make sure to deepcopy input sets. -1 means that all CPUs will be used
-        Parallel(n_jobs=-1)(delayed(create_input_for_simulation)
-                            (results_dir, input_sets, cognate_experiment, training_num, num_test,
-                             l2_percentage, auxiliary_experiment, sim) for sim in simulation_range)
+        # I had issues with joblib installation on Ubuntu 16.04.6 LTS
+        # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(results_dir, input_sets, cognate_experiment,
+        # training_num, num_test, l2_percentage, auxiliary_experiment, sim) for sim in simulation_range)
+        parallel_jobs = []
+        for sim in simulation_range:  # first create all input files
+            parallel_jobs.append(Process(target=create_input_for_simulation,
+                                         args=(results_dir, input_sets, cognate_experiment, training_num,
+                                               num_test, l2_percentage, auxiliary_experiment, sim)))
+            parallel_jobs[-1].start()
+            # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
+            if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
+                for p in parallel_jobs:
+                    p.join()
+                parallel_jobs = []
+
         del input_sets  # we no longer need it
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
@@ -262,7 +275,7 @@ if __name__ == "__main__":
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                      cognate_experiment=args.cognate_experiment, momentum=args.momentum,
-                     set_weights_folder=args.set_weights, #formatted_input.directory if args.set_weights else None,
+                     set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
@@ -271,20 +284,16 @@ if __name__ == "__main__":
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
 
     del formatted_input
-    #Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, args.set_weights) for sim in simulation_range)
 
-    parallel_simulations = []
+    parallel_jobs = []
     for sim in simulation_range:  # first create all input files
-        parallel_simulations.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
-        parallel_simulations[-1].start()
-        if len(parallel_simulations) == cpu_count():  # if number of simulations is larger than number of cores
-            for p in parallel_simulations:
+        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
+        parallel_jobs[-1].start()
+        # if number of simulations is larger than number of cores or if it's the last simulation, start multiprocessing
+        if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
+            for p in parallel_jobs:
                 p.join()
-            parallel_simulations = []
-
-    if parallel_simulations:  # if number of simulations <= number of cores
-        for p in parallel_simulations:
-            p.join()
+            parallel_jobs = []
 
     dualp.inputs.update_sets(f"{dualp.inputs.root_directory}/{simulation_range[0]}")  # needed to update num_test
     num_test = dualp.inputs.num_test
@@ -343,5 +352,5 @@ if __name__ == "__main__":
     with open(f"{results_dir}/results.log", 'w') as f:
         f.write(f"Lexicon size:{lexicon_size}\nLayers with softmax activation function: "
                 f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
-                f"{len(simulation_range)}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
+                f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
                 f"Indeces of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")

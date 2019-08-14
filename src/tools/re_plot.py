@@ -2,9 +2,9 @@ from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, trai
 
 main_dir = '../../simulations/'
 results_dir = main_dir + '1-40/'
-results_dir = main_dir + '2019-08-13/aux_sim20_h70_c60_fw30_e15'
-num_sim = 39
-epochs = 15
+results_dir = main_dir + '2019-08-14/02.42.18_esen_sim80_h70_c60_fw30_e30'
+num_sim = 56
+epochs = 20
 simulation_range = range(num_sim)
 performance_threshold = 5
 test_name = 'test_aux.in'

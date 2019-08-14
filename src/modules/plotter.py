@@ -478,10 +478,9 @@ class Plotter:
 
     @staticmethod
     def percentage(x, total):
-        if isinstance(x, np.ndarray):
-            perc = np.true_divide(x * 100, total, where=total!=0)
-        elif isinstance(x, torch.Tensor):
-            perc = torch.div(x * 100, total).numpy()
-        else:
+        if isinstance(x, torch.Tensor):
+            x = np.array(x)
+        with np.errstate(divide='ignore', invalid='ignore'):
             perc = x * 100 / total
+        perc[np.isnan(perc)] = 0
         return perc
