@@ -9,7 +9,7 @@ from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, monolingual_only,
-                 replace_haber_tener, test_haber_frequency, convert_input, num_training):
+                 replace_haber_tener, test_haber_frequency, num_training):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -25,7 +25,6 @@ class InputFormatter:
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
-        self.convert_input = convert_input
         self.replace_haber_tener = replace_haber_tener
         self.test_haber_frequency = test_haber_frequency
         if use_word_embeddings:
@@ -96,13 +95,12 @@ class InputFormatter:
     def update_sets(self, new_directory):
         self.directory = new_directory
 
-        if self.convert_input:
-            if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
-                os.system(f"sed -i -e 's/ ha / tiene /g' {new_directory}/t*.in")
-                self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
-                                    (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
-            elif self.test_haber_frequency:
-                self.make_haber_and_tener_synonyms(new_directory)
+        if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
+            os.system(f"sed -i -e 's/ ha / tiene /g' {new_directory}/t*.in")
+            self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
+                                (self.lexicon_df.tense == 'present'), 'morpheme_es'] = 'tiene'
+        elif self.test_haber_frequency:
+            self.make_haber_and_tener_synonyms(new_directory)
 
         (self.trainlines_df, self.weights_role_concept['training'], self.weights_role_identif['training'],
          self.event_sem_activations['training'], self.target_lang_act['training']) = self.read_set_to_df()
@@ -121,11 +119,12 @@ class InputFormatter:
     @staticmethod
     def make_haber_and_tener_synonyms(directory):
         fname = f"{directory}/training.in"
+        sim = directory.split('/')[-1]
         os.system(f"sed -i -e 's/ ha / tiene /g' {fname}")
         num = int(subprocess.check_output(f"cat {fname} | grep -w tiene | wc -l", shell=True))
-        num = num / 2  # only convert half of the instances
+        num = num // 2  # only convert half of the instances
         os.system("awk '{for(i=1;i<=NF;i++){if(x<%s&&$i==\"tiene\"){x++;sub(\"tiene\",\"ha\",$i)}}}1' %s > "
-                  "tmp && mv tmp %s" % (num, fname, fname))
+                  "tmp%s && mv tmp%s %s" % (num, fname, sim, sim, fname))
 
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
@@ -244,21 +243,19 @@ class InputFormatter:
         return cache
 
     def check_for_insertions(self, out_sentence_idx, target_lang):
-        non_shared_idx = filter(lambda i: i not in self.shared_idx, out_sentence_idx)
-        l2_words = sum(1 for _ in filter(lambda i: i >= self.code_switched_idx, non_shared_idx))
-        l1_words = sum(1 for _ in filter(lambda i: i < self.code_switched_idx, non_shared_idx))
-
+        non_shared_idx = list(filter(lambda i: i not in self.shared_idx, out_sentence_idx))
+        l2_words = sum([1 for i in non_shared_idx if i >= self.code_switched_idx])
+        l1_words = sum([1 for i in non_shared_idx if i < self.code_switched_idx])
         filter_idx = lt if target_lang == self.L2 or l2_words > l1_words else ge
         check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
-
         if target_lang and not check_idx:
             # all words were in the "non-target" language. Doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
             return "inter-sentential"
 
-        check_idx_pos = map(self.pos_lookup, check_idx)
+        check_idx_pos = list(map(self.pos_lookup, check_idx))
         if len(set(check_idx_pos)) == 1:
-            return list(check_idx_pos)[0]
+            return check_idx_pos[0]
         return False
 
     @staticmethod
@@ -279,17 +276,17 @@ class InputFormatter:
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
-        check_idx = filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx), out_sentence_idx)
+        check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx), out_sentence_idx))
         if len(check_idx) == 0:
             return False  # it was either a cognate or a false friend
 
-        if len(check_idx) == len(filter(lambda i: i not in self.shared_idx, out_sentence_idx)):
+        if len(check_idx) == sum(1 for _ in filter(lambda i: i not in self.shared_idx, out_sentence_idx)):
             return "inter-sentential"  # whole sentence in the non-target language
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        check_idx_pos = map(self.pos_lookup, check_idx)
+        check_idx_pos = list(map(self.pos_lookup, check_idx))
         if len(set(check_idx_pos)) > 1 and set(check_idx).issubset(out_sentence_idx):
-            cs_type = f"alt. ({list(check_idx_pos)[0]})"
+            cs_type = f"alt. ({check_idx_pos[0]})"
         else:
             print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indeces(out_sentence_idx)}")
             import sys;sys.exit()
@@ -558,12 +555,16 @@ def copy_files(src, dest, ends_with=None):
 
 
 def get_np_mean_and_std_err(x, squared_num_simulations):
-    if not isinstance(x, torch.Tensor):
+    """if not isinstance(x, torch.Tensor):
         if len(x) > 1:
             x = np.array(x)
             return x.mean(axis=0), np.true_divide(x.std(axis=0), squared_num_simulations)
         x = torch.tensor(x).float()
-    return x.mean(0), torch.div(x.std(0), squared_num_simulations)  # mean of lists (per column), standard error
+    return x.mean(0), torch.div(x.std(0), squared_num_simulations)  # mean of lists (per column), standard error"""
+    if not isinstance(x, np.ndarray):
+        x = np.array(x)
+        squared_num_simulations = np.array(squared_num_simulations)
+    return x.mean(axis=0), x.std(axis=0) / squared_num_simulations
 
 
 def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):

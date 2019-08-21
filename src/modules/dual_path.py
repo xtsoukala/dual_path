@@ -57,9 +57,10 @@ class DualPath:
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
-        num_epochs_decreasing_step = 10
-        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_training *
-                                                                      num_epochs_decreasing_step)
+        num_epochs_decrease = 10  # epochs // 4 if epochs >= 20 else 5
+        self.lrate_decrease_step = (learn_rate - final_learn_rate) / (self.inputs.num_training * num_epochs_decrease)
+        # num_epochs_decrease = epochs // 4 if epochs >= 20 else 5
+        # self.lrate_decrease_step = (learn_rate - final_learn_rate) / num_epochs_decrease
         # Epochs indicate the numbers of iteration of the training set during training. 1000 sentences approximate
         # 1 year in Chang & Janciauskas. In Chang, Dell & Bock the total number of sentences experienced is 60000
         self.epochs = epochs
@@ -79,10 +80,10 @@ class DualPath:
         self.initialize_srn()
 
     def init_logger(self, name):
-        logger = logging.getLogger("%s_%s" % (name, self.simulation_num))
+        logger = logging.getLogger(f"{name}_{self.simulation_num}")
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # no stdout to console
-        logger.addHandler(logging.FileHandler("%s/%s.csv" % (self.inputs.directory, name)))
+        logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
         if name in ['test', 'training']:
             header = ("epoch, produced_sentence, target_sentence, is_grammatical, meaning, "
                       "is_code_switched, switched_type")
@@ -177,15 +178,10 @@ class DualPath:
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
         for trg_idx in target_sentence_idx:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
-            #times = time.time()
             self.srn.feedforward(start_of_sentence=prod_idx is None)
-            #print('feedfrw:', time.time() - times)    #0.000406980514526367
-
             if backpropagate:
                 prod_idx = trg_idx  # training with target word, NOT produced one
-                #times = time.time()
                 self.srn.backpropagate()
-                #print('backpro:', time.time() - times)
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
                 if activate_target_lang and prod_idx is None and self.activate_both_lang:
@@ -206,7 +202,7 @@ class DualPath:
 
     def start_network(self, simulation_num, set_existing_weights):
         """
-        :param simulation_num: unique number (integer) of simulation (it sets the seed)
+        :param simulation_num: unique number (integer) of simulation
         Training: for each word of input sentence:
             - compute predicted response
             - determine error, (back)propagate and update weights
@@ -242,7 +238,7 @@ class DualPath:
             epoch_range = range(self.starting_epoch, self.epochs)
             for epoch in epoch_range:
                 threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
-                #times = time.time()
+                # times = time.time()
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
                     line_idx = line.Index
                     self.feed_line(line.target_sentence_idx + buffer_to_produce, target_lang_act[line_idx], line.lang,
@@ -252,7 +248,9 @@ class DualPath:
                                    event_semantics[line_idx], backpropagate=True, activate_target_lang=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
-                #print('loop', time.time() - times)
+                    elif self.srn.learn_rate != self.final_lrate:
+                        self.srn.learn_rate = self.final_lrate
+                # print('loop', time.time() - times, self.srn.learn_rate)
             threading.Thread(target=self.srn.save_weights, args=(directory, epoch_range[-1]), daemon=True).start()
 
         set_names = set()
@@ -344,8 +342,8 @@ class DualPath:
 
                     if False:  # debug_sentence: # debug specific sentence
                         logger.warning('Debugging sentence pair')
-                        produced_sentence = 'a busy uncle is tirando a_ un abuelo el juguete'
-                        target_sentence = 'a busy uncle is throwing a grandfather the toy .'
+                        produced_sentence = 'a happy host has carried the bolígrafo .'
+                        target_sentence = 'a happy host has carried the pen .'
                         target_lang = 'en'
                         produced_idx = self.inputs.sentence_indeces(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
@@ -361,7 +359,6 @@ class DualPath:
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
                                                                                                 target_pos,
                                                                                                 produced_idx)
-                    #print(is_grammatical, flexible_order)
                     code_switched = self.inputs.is_code_switched(produced_idx, target_lang_idx=target_sentence_idx[0])
                     if code_switched:
                         counter['all_code_switches'] += 1
@@ -445,8 +442,8 @@ class DualPath:
                                     has_pronoun_error_flex = True
                     if epoch > 0:
                         # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
-                        meaning = "%s%s" % ("flex-" if has_wrong_det or has_wrong_tense else "", correct_meaning)
-                        pos = "%s%s" % ("flex-" if flexible_order else "", has_correct_pos or flexible_order)
+                        meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
+                        pos = f'{"flex-" if flexible_order else ""}{has_correct_pos or flexible_order}'
                         log_info = (epoch, produced_sentence, line.target_sentence,
                                     pos, meaning, code_switched, cs_type)
                         if self.auxiliary_experiment:
@@ -456,7 +453,7 @@ class DualPath:
                         if self.pronoun_experiment:
                             log_info += (has_pronoun_error, has_pronoun_error_flex)
                         log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
-                                     not has_wrong_det, '"%s"' % line.message,)
+                                     not has_wrong_det, f'"{line.message}"',)
                         log_info += (' '.join(entropy_idx),)
                         logger.info(",".join(str(x) for x in log_info))
                 self.set_level_logger.info(",".join(str(x) for x in (epoch, set_name, counter['correct_meaning'],
@@ -467,7 +464,7 @@ class DualPath:
             results['type_code_switches'][set_name] = self.aggregate_dict(self.epochs,
                                                                           results['type_code_switches'][set_name])
         # write (single) simulation results to a pickled file
-        with lz4.open("%s/results.pickled" % self.inputs.directory, 'wb') as pckl:
+        with lz4.open(f"{self.inputs.directory}/results.pickled", 'wb') as pckl:
             pickle.dump(results, pckl, protocol=-1)
 
     @staticmethod

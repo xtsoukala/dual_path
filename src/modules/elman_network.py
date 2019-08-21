@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from scipy.stats import entropy
-from . import os, sys, torch, mm, matmul, sqrt, softmax, zeros, cat, stack, empty, pickle, lz4, defaultdict
+from . import os, sys, torch, zeros, cat, stack, empty, pickle, lz4, defaultdict
 
 # remove
 from functools import wraps
 from time import time
+
+#from memory_profiler import profile
 
 
 def measure(func):
@@ -85,15 +87,16 @@ class SimpleRecurrentNetwork:
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
+    #@measure
     def save_weights(self, results_dir, epoch):
         self._create_dir_if_not_exists(results_dir)
-        with lz4.open(f"{results_dir}/weights/w{epoch}.lz4", 'wb') as pckl:
-            pickle.dump(self.layers, pckl, protocol=-1)
+        if self.layers:
+            with lz4.open(f"{results_dir}/weights/w{epoch}.lz4", 'wb') as pckl:
+                pickle.dump(self.layers, pckl, protocol=-1)
 
     def set_message_reset_context(self, weights_role_concept, weights_concept_role, weights_role_identif,
                                   weights_identif_role, event_semantics, target_lang_act, activate_language):
-        # FIXME: update this way so as to keep the bias weights intact
-        # e.g., role_layer.in_weights[0:role_layer.in_size] = weights_concept_role
+        # FIXME: bias weights?
         self.set_layer_in_weights("role", cat((weights_identif_role, weights_concept_role)))
         self.set_layer_in_weights("pred_identifiability", weights_role_identif)
         self.set_layer_in_weights("pred_concept", weights_role_concept)
@@ -167,7 +170,7 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = zeros(layer.size)  # set role_copy to zero   # zeros?
                 continue
-            layer.activation = self.activation_function(dot_product=matmul(layer.in_activation, layer.in_weights),
+            layer.activation = self.activation_function(dot_product=layer.in_activation.matmul(layer.in_weights),#matmul(layer.in_activation, layer.in_weights),
                                                         activation_function=layer.activation_function)
         # Copy output of the hidden to "context" (activation of t-1)
         self.set_context_activation("hidden")
@@ -180,13 +183,14 @@ class SimpleRecurrentNetwork:
     @staticmethod
     def activation_function(dot_product, activation_function):
         if activation_function == "softmax":
-            return softmax(dot_product, dim=0)
+            return dot_product.softmax(dim=0)
         return dot_product.tanh()  # elif activation_function == "tanh"
 
     @staticmethod
     def convert_to_2d(tensor):
         return tensor[None, :]  # if len(tensor.size()) == 1
 
+    #@profile
     def backpropagate(self):
         self.compute_output_error()
         for self.current_layer in self.backpropagated_layers:  # Propagate error back to the previous layers
@@ -210,10 +214,10 @@ class SimpleRecurrentNetwork:
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
         # 2d -> make sure before
-        self.current_layer.delta = mm(self.convert_to_2d(self.current_layer.in_activation).t(),
-                                      self.convert_to_2d(self.current_layer.gradient))
+        self.current_layer.delta = self.current_layer.in_activation[None, :].t().mm(self.current_layer.gradient[
+                                                                                    None, :])
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = sqrt(self.current_layer.delta.pow(2).sum())  # sqrt(np .sum(self.current_layer.delta ** 2))
+        len_delta = self.current_layer.delta.pow(2).sum().sqrt()  # sqrt(sum(self.current_layer.delta ** 2))
         if len_delta > 1:
             self.current_layer.delta.div_(len_delta)
 
@@ -221,7 +225,7 @@ class SimpleRecurrentNetwork:
 
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
-        self.current_layer.total_error = matmul(self.current_layer.gradient, self.current_layer.in_weights.t())
+        self.current_layer.total_error = self.current_layer.gradient.matmul(self.current_layer.in_weights.t())
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -249,7 +253,8 @@ class SimpleRecurrentNetwork:
                 prev_layer.error_out.append(self.current_layer.total_error[layer_start:layer_start + prev_layer.size])
             layer_start += prev_layer.size
 
-    def _create_dir_if_not_exists(self, results_dir):
+    @staticmethod
+    def _create_dir_if_not_exists(results_dir):
         if not os.path.isdir(f'{results_dir}/weights'):
             # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
             # exception even though we have checked.

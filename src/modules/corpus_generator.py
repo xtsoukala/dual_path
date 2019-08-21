@@ -5,13 +5,12 @@ print_on_screen = False  # used only to debug, no need to add it as a called par
 
 
 class SetsGenerator:
-    def __init__(self, use_simple_semantics, allow_free_structure_production,
-                 use_full_verb_form, cognate_percentage, monolingual_only, lang, lexicon_csv, structures_csv,
-                 aux_experiment, input_dir=None, sim_results_dir=None, default_L2='en', include_ff=False):
+    def __init__(self, use_simple_semantics, allow_free_structure_production, cognate_percentage, monolingual_only,
+                 lang, lexicon_csv, structures_csv, aux_experiment, input_dir=None, sim_results_dir=None,
+                 default_L2='en', include_ff=False):
         """
         :param use_simple_semantics:
         :param allow_free_structure_production:
-        :param use_full_verb_form:
         :param aux_experiment: whether we're running the auxiliary experiment (haber/estar asymmetry in CS)
         """
         self.allow_free_structure_production = allow_free_structure_production
@@ -20,7 +19,6 @@ class SetsGenerator:
         self.L1 = lang if len(lang) == 2 else lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else lang[2:]
         self.random = np.random
-        self.use_full_verb = use_full_verb_form
         self.cognate_percentage = cognate_percentage
         self.aux_experiment = aux_experiment
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
@@ -78,7 +76,7 @@ class SetsGenerator:
         # if cognates_experiment or self.aux_experiment:  # return sets of message/sentence pairs
         return test_set, training_set
 
-    def generate_auxiliary_experiment_sentences(self, training_set, percentage_l2, num_test_sentences=1000):
+    def generate_auxiliary_experiment_sentences(self, training_set, percentage_l2, num_test_sentences=800):  # 1000
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            percentage_l2=percentage_l2)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set,
@@ -170,7 +168,6 @@ class SetsGenerator:
         :return:
         """
         aux_structures = self.structures_df[self.structures_df.message.str.contains("PERFECT")]
-        #print(aux_structures, 'AUX')
         return self.generate_sentence_structures(num_sentences, percentage_l2, filtered_structures=aux_structures)
 
     def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=[],
@@ -190,8 +187,7 @@ class SetsGenerator:
         time_start = time.time()
         while len(remaining_structures):  # while loop needed because of the unique sentence restriction
             if time.time() - time_start > 60:
-                sys.exit("You might want to increase the size of the lexicon or decrease the number of allowed "
-                         "structures; the generator doesn't have enough material to generate "
+                sys.exit("The process timed out (limit: 60s). Remaining structures: "
                          f"{len(remaining_structures)} more structures: {set(remaining_structures)} "
                          f"(total: {len(sentence_structures)}).")
             remaining_structures, generated_pairs, max_cognate = self.structures_to_sentences(remaining_structures,
@@ -305,12 +301,12 @@ class SetsGenerator:
             elif only_get_false_friend:
                 query.append("and is_false_friend == '1'")
             cache = self.lexicon_df.query(' '.join(query))
+            # if 'noun' in pos and lang == 'en':
+            #    print(query, cache, len(cache.index))
             self.df_cache[params] = cache
         cache_size = len(cache.index)
         if not cache_size:
-            if query:
-                print(query)
-            sys.exit(f"Empty cache: {params} {cache}")  # throw an error if cache is empty
+            sys.exit(f"Empty cache: {params} {cache} {query if query else ''}")  # throw an error if cache is empty
         idx = self.get_random_row_idx(cache_size)
         if 'noun:animate' in pos:
             self.ALL.append(idx)
@@ -349,7 +345,7 @@ class SetsGenerator:
                 keys.append(l)
                 keys.append(f'percentage_{l}')
         df = structures[keys]
-        if self.use_full_verb:  # replace all "verb_prefix verb_suffix" with "verb"
+        if True:  # replace all "verb_prefix verb_suffix" with "verb"  FIXME
             df = df.replace({'verb(_prefix)?:intrans verb_suffix::present': 'verb:intrans:present'}, regex=True)
             df = df.replace({'verb(_prefix)?:trans verb_suffix::present': 'verb:trans:present'}, regex=True)
             df = df.replace({'verb(_prefix)?:double verb_suffix::present': 'verb:double:present'}, regex=True)
@@ -382,7 +378,8 @@ class SetsGenerator:
             l2 = self.structures_df[self.L2].count()
         return l1, l2
 
-    def get_clean_lexicon(self, lexicon_csv, false_friends, cognates, use_simple_semantics):
+    @staticmethod
+    def get_clean_lexicon(lexicon_csv, false_friends, cognates, use_simple_semantics):
         if not os.path.isfile(lexicon_csv):
             lexicon_csv = "src/%s" % lexicon_csv
         df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
@@ -391,10 +388,6 @@ class SetsGenerator:
             query.append("and is_false_friend != 'Y'")
         if not cognates:
             query.append("and is_cognate != 'Y'")
-        if self.use_full_verb:
-            query.append("and pos not in ['verb_prefix', 'verb_suffix', 'participle_suffix']")
-        else:
-            query.append("and pos not in ['verb', 'participle']")
         lex = df.query(' '.join(query))
         if use_simple_semantics:
             lex.drop(['compositional_concept', 'inactive'], axis=1)
@@ -403,13 +396,12 @@ class SetsGenerator:
             lex = lex.rename(columns={'compositional_concept': 'concept'})
         return lex
 
-    ######################## corpus_for_experiments ###############################
+    # --------------------------- corpus_for_experiments ---------------------------
     def generate_for_cognate_experiment(self, num_training_sentences, percentage_l2, include_ff=False, save_files=True):
-        # first select cognate-free sentences
+        # select cognate-free sentences
         original_test_set, original_training_set = self.generate_general(num_training=num_training_sentences,
                                                                          percentage_l2=percentage_l2,
-                                                                         cognates_experiment=True,
-                                                                         save_files=False)
+                                                                         cognates_experiment=True)
         # modify test set: replace one sentence per word with a cognate
         cognate_sets, replacement_idx = self.generate_replacement_test_sets(original_test_set)
         all_test_sets = original_test_set + cognate_sets
@@ -426,7 +418,7 @@ class SetsGenerator:
             for sentence, message in all_test_sets:
                 f.write(u'%s## %s\n' % (sentence, message))
 
-    def generate_replacement_test_sets(self, original_sets, replacement_idx=[], replace_with_cognates=True):
+    def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
         """
         :param original_sets: the sentence/message pairs that need to be modified to include cognates or false friends
         :param replacement_idx: index (position) of thematic role that needs to be replaced
@@ -453,7 +445,7 @@ class SetsGenerator:
             replace_with_word = self.select_random_morpheme_for_lang(pos=pos_to_replace, lang=lang,
                                                                      gender=syntactic_gender_w,
                                                                      exclude_cognates=False,
-                                                                     only_get_false_fr=not replace_with_cognates,
+                                                                     only_get_false_friend=not replace_with_cognates,
                                                                      only_get_cognate=replace_with_cognates)
             all_roles[role_idx_to_replace] = all_roles[role_idx_to_replace].replace(concept_to_replace,
                                                                                     replace_with_word['concept'])
@@ -461,8 +453,7 @@ class SetsGenerator:
                 all_roles[role_idx_to_replace] += ',COG'
             else:
                 all_roles[role_idx_to_replace] += ',FF'
-            sentence = sentence.replace(" %s " % word_to_replace,
-                                        " %s " % replace_with_word['morpheme_%s' % lang])
+            sentence = sentence.replace(" %s " % word_to_replace, " %s " % replace_with_word['morpheme_%s' % lang])
             message = ';'.join(all_roles)
             replacement_sets.append((sentence, message))
         if not replacement_idx:

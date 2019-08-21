@@ -10,6 +10,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
                                 auxiliary_experiment, simulation_number):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
+
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
     else:
@@ -49,8 +50,9 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=100)  # 110 80
-    parser.add_argument('--compress', '-c', help='Number of compress layer units', type=positive_int, default=70)  # 70
+    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=70)  # 110 100 80
+    parser.add_argument('--compress', '-c', help='Number of compress layer units. The size should be approximately 2/3 '
+                                                 'of the hidden one', type=positive_int, default=60)  # 70
     parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=30)
     parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
@@ -89,7 +91,7 @@ if __name__ == "__main__":
     parser.add_argument('--sim_from', type=positive_int, help='To train several simulations with range other than '
                                                               '(0, number_of_simulations) you need to set the '
                                                               'sim_from and sim_to values')
-    parser.add_argument('--sim_to', type=positive_int, help='See sim_from')
+    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
     parser.add_argument('--pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
@@ -98,9 +100,6 @@ if __name__ == "__main__":
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
-    parser.add_argument('--convert', dest='convert_input', action='store_true',
-                        help='In some cases we want to manipulate the given input')
-    parser.set_defaults(convert_input=False)
     parser.add_argument('--crole', dest='crole', action='store_true',
                         help='If (role copy) is set, the produced role layer is copied back to the comprehension layer')
     parser.set_defaults(crole=False)
@@ -109,7 +108,7 @@ if __name__ == "__main__":
     parser.set_defaults(cinput=False)
     parser.add_argument('--debug', help='Debugging info for SRN layers and deltas', dest='debug', action='store_true')
     parser.set_defaults(debug=False)
-    parser.add_argument('--cs', '--nolang', dest='activate_both_lang', action='store_true',
+    parser.add_argument('--cs', '--code-switching', dest='activate_both_lang', action='store_true',
                         help='Activate both languages during TESTing')
     parser.set_defaults(activate_both_lang=False)
     parser.add_argument('--nodlr', dest='decrease_lrate', action='store_false', help='Keep lrate stable (final_lrate)')
@@ -127,15 +126,12 @@ if __name__ == "__main__":
     parser.add_argument('--eval_training', dest='eval_training', action='store_true',
                         help='Evaluate training sets')
     parser.set_defaults(eval_training=False)
-    parser.add_argument('--only_eval', dest='only_eval', action='store_true',
+    parser.add_argument('--evaluate', dest='only_evaluate', action='store_true',
                         help='Do not train, only evaluate test sets')
-    parser.set_defaults(only_eval=False)
+    parser.set_defaults(only_evaluate=False)
     parser.add_argument('--continue_training', '--continue', dest='continue_training', action='store_true',
                         help='Continue training for more epochs')
     parser.set_defaults(continue_training=False)
-    parser.add_argument('--morphemes', '--morph', dest='full_verb', action='store_false',
-                        help='Use morphemes for verbs (i.e., splitting into lemma/suffix) instead of full lexeme')
-    parser.set_defaults(full_verb=True)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true',
                         help='The model is not given role information in the event semantics and it is therefore '
                              'allowed to use any syntactic structure (which is important for testing, e.g., priming)')
@@ -176,21 +172,17 @@ if __name__ == "__main__":
     l2_percentage = args.l2_percentage
     auxiliary_experiment = args.auxiliary_experiment
 
-    simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to if args.sim_to else args.sim)
+    simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to+1 if args.sim_to else args.sim)
     num_simulations = len(simulation_range)
     set_weights_epoch = args.set_weights_epoch
-    if args.only_eval and not args.set_weights:
+    if args.only_evaluate and not args.set_weights:
         sys.exit(f'No pre-trained weights found. Check the set-weights folder (set_weights: {args.set_weights})')
 
-    if (args.only_eval or args.continue_training) and args.set_weights and not args.input:
+    if (args.only_evaluate or args.continue_training) and args.set_weights and not args.input:
         from copy import deepcopy
 
         # it is implied that the input and the weights are under the same simulation folder; copy the path
         args.input = deepcopy(args.set_weights)
-        print(args.input, args.set_weights)
-
-    if not args.compress:  # compress layer should be approximately 2/3 of the hidden one  FIXME 2/3 or 1/3?
-        args.compress = int(args.hidden * (2 / 3))
 
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
     results_dir = f"{root_folder}/simulations/{(args.resdir if args.resdir else '')}" \
@@ -201,7 +193,6 @@ if __name__ == "__main__":
     if args.auxiliary_experiment:
         args.cognate_percentage = 0
         args.activate_both_lang = True
-        args.full_verb = True
         args.threshold = 30
         if not args.testset:
             args.testset = 'test_aux.in'
@@ -233,7 +224,7 @@ if __name__ == "__main__":
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
         logging.warning(f"Using {args.lexicon} (lexicon) and {args.structures} (structures)")
         # FIXME: SetsGenerator needs to be reconstructed
-        input_sets = SetsGenerator(input_dir=input_dir, use_full_verb_form=args.full_verb, lang=args.lang,
+        input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang,
                                    monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos,
@@ -269,7 +260,7 @@ if __name__ == "__main__":
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
-                                     test_haber_frequency=args.test_haber_frequency, convert_input=args.convert_input)
+                                     test_haber_frequency=args.test_haber_frequency)
 
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
@@ -278,7 +269,7 @@ if __name__ == "__main__":
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_eval,
+                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)

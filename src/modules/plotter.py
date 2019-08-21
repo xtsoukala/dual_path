@@ -1,4 +1,4 @@
-from . import torch, np, extract_cs_keys
+from . import np, extract_cs_keys
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -74,12 +74,12 @@ class Plotter:
             plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
-        plt.xticks(torch.arange(1, max(self.epoch_range), 2))
+        plt.xticks(np.arange(1, max(self.epoch_range), 2))
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc='lower right'):
+    def plot_cs_type_over_time(self, label, results, legend, fname, ylim, legend_loc=None):
         for i, result in enumerate(results):
             legend_label = legend[i]
             res, std = result
@@ -93,7 +93,11 @@ class Plotter:
         plt.ylim([0, ylim])
         plt.xlim(1, max(self.epoch_range))
         if legend:
-            plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
+            if legend_loc:
+                plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
+            else:
+                plt.legend(ncol=2, fancybox=True, shadow=True)
+
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
@@ -107,7 +111,7 @@ class Plotter:
         return max(result)
 
     def plot_bar_chart_original(self, indeces, items_to_plot, legend, fname, label=None, only_last_epoch=False):
-        index_size = torch.arange(len(indeces))
+        index_size = np.arange(len(indeces))
         fig, ax = plt.subplots()
         rects = []
         for i, item in enumerate(items_to_plot):
@@ -161,7 +165,7 @@ class Plotter:
         insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
         alternations = [x for x in indeces if x.startswith('alt')]
         labels_full = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
-        #index_size = torch.arange(len(labels_full))
+        #index_size = np.arange(len(labels_full))
         fname = ['insertional', 'alternational']
         for type, indeces in enumerate([insertions, alternations]):
             fig, ax = plt.subplots()
@@ -171,7 +175,7 @@ class Plotter:
                                                   [x for ind, x in enumerate(self.cs_results[item])
                                                    if original_idx[ind] in indeces])))
                 labels = [x[0] for x in sorted_by_label]
-                index_size = torch.arange(len(labels))
+                index_size = np.arange(len(labels))
                 rects.append(ax.bar(index_size + self.bar_width * (i + 1), [x[1][0] for x in sorted_by_label],
                                     self.bar_width, yerr=[x[1][1] for x in sorted_by_label]))
             ax.set_xticks(index_size + self.bar_width / len(items_to_plot))
@@ -181,7 +185,7 @@ class Plotter:
             ax.set_title(fname[type], fontsize=16)
             ax.set_ylabel(label)
             ax.set_xticklabels(labels, rotation=55)  # rotate labels to fit better
-            ax.tick_params(axis='both', labelsize=14)
+            ax.tick_params(axis='both', labelsize=10)
             plt.tight_layout()  # make room for labels
             filename = self.get_plot_path(fname[type] if not filename_suffix else fname[type] + filename_suffix)
             plt.savefig(filename)
@@ -199,7 +203,7 @@ class Plotter:
 
         fig, ax = plt.subplots()
 
-        index = torch.arange(n_groups)
+        index = np.arange(n_groups)
         bar_width = 0.3
         opacity = 0.7
 
@@ -244,16 +248,8 @@ class Plotter:
                                                  legend_loc='lower right',
                                                  test_percentage_lst=[correct_test, self.num_test],
                                                  training_percentage_lst=[correct_training, self.num_training],
-                                                 ylim=90, ylabel=None,
+                                                 ylim=100, ylabel=None,
                                                  fname='performance_and_code_switches')
-            # !------------  same as above but plot percentage among CORRECTLY produced sentences only ------------!
-            self.plot_changes_over_time(ylim=40, items_to_plot=['correct_code_switches'],
-                                        test_percentage=correct_test,
-                                        training_percentage=(0 if 'training' not in results['correct_meaning'] else
-                                                             results['correct_meaning']['training']),
-                                        fname="code_switches_correct_test_set",
-                                        ylabel='')  # '#%% CS among correctly produced %s set' % 'test')
-
             # !------------  code-switching ------------!
             self.cs_results = {'type_correct_test_en': [], 'type_correct_test_es': [],
                                'type_correct_test_last_epoch_en': [], 'type_correct_test_last_epoch_es': []}
@@ -287,7 +283,7 @@ class Plotter:
                                                               items_to_plot=['type_correct_test_last_epoch_es',
                                                                              'type_correct_test_last_epoch_en'])
                 if False:
-                    # !------------ Now plot all CS types per epoch  ------------#
+                    # !------------ plot all CS types per epoch  ------------#
                     if self.plot_detailed_cs:
                         for i, cs_type in enumerate(all_cs_types):
                             self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
@@ -324,81 +320,41 @@ class Plotter:
                                                     if all_correct[aux] != [] else self.results[key]['test'])
 
                     for cs_direction in ['', '_es_en']:
-                        res_aux_all_set = []
-                        res_aux_all_raw = []
-                        res_aux_participle_all_set = []
-                        res_aux_participle_per_tense = []
-                        res_aux_per_correct_tense = []
-                        res_aux_no_after_per_tense = []
+                        participle_switch_per_tense = []
+                        participle_and_auxiliary_switches_per_tense = []
                         legend = []
-                        l = []
                         for aux in ['is', 'has']:
                             for point in ['aux', 'participle', 'right_after', 'after']:
                                 index = f'{aux}_{point}{cs_direction}'
                                 if index in self.results and self.results[index]['test'] != []:
                                     legend.append(index)
                                     # normalize using the number of correctly produced test sentences (correct_test)
-                                    res_aux_all_set.append((self.percentage(self.results[index]['test'],
-                                                                            correct_test),
-                                                            self.percentage(self.results[index]['test-std_error'],
-                                                                            correct_test)
-                                                            if 'test-std_error' in self.results[index] else None))
-                                    res_aux_all_raw.append((self.results[index]['test'],
-                                                            self.results[index]['test-std_error']
-                                                            if 'test-std_error' in self.results[index] else None))
-                                    res_aux_per_correct_tense.append((self.percentage(self.results[index]['test'],
-                                                                                      all_correct[aux]),
-                                                                      self.percentage(
-                                                                          self.results[index]['test-std_error'],
-                                                                          all_correct[aux])
-                                                                      if 'test-std_error' in self.results[index]
-                                                                      else None))
+                                    per_correct_tense = (self.percentage(self.results[index]['test'], all_correct[aux]),
+                                                         self.percentage(self.results[index]['test-std_error'],
+                                                                         all_correct[aux])
+                                                         if 'test-std_error' in self.results[index] else None)
 
                                     if 'after' not in index:
-                                        res_aux_no_after_per_tense.append(res_aux_per_correct_tense[-1])
+                                        participle_and_auxiliary_switches_per_tense.append(per_correct_tense)
                                     if 'participle' in index:
-                                        l.append(index)
-                                        res_aux_participle_all_set.append(res_aux_all_set[-1])
-                                        res_aux_participle_per_tense.append(res_aux_per_correct_tense[-1])
+                                        participle_switch_per_tense.append(per_correct_tense)
 
-                        if res_aux_all_set:
-                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced test set)',
-                                                        legend=legend, ylim=7, results=res_aux_all_set,
-                                                        fname=f'auxiliary_all_set{cs_direction}')
-
-                            self.plot_cs_type_over_time(label='auxiliary switches in test set',
-                                                        legend=legend, ylim=60, results=res_aux_all_raw,
-                                                        fname=f'auxiliary_all_raw{cs_direction}')
-                            # same for res_percentage:
-                            self.plot_cs_type_over_time(label='auxiliary switches (% of correctly produced per tense)',
-                                                        legend=legend, ylim=14, legend_loc='upper right',
-                                                        fname=f'auxiliary_per_correct_tense{cs_direction}',
-                                                        results=res_aux_per_correct_tense)
-
-                            self.plot_cs_type_over_time(label='participle switches (% of correctly produced sentences)',
-                                                        legend=[f'is_participle{cs_direction}',
-                                                                f'has_participle{cs_direction}'], ylim=5,
-                                                        fname=f'participle_all_set{cs_direction}',
-                                                        results=res_aux_participle_all_set)
-
+                        if participle_switch_per_tense:
                             self.plot_cs_type_over_time(label='participle switches (% of correctly produced per aspect)'
                                                         , legend=[f'progressive_participle{cs_direction}',
-                                                                  f'perfect_participle{cs_direction}'], ylim=5,
+                                                                  f'perfect_participle{cs_direction}'], ylim=6,
                                                         fname=f'participle_per_aspect{cs_direction}',
-                                                        results=res_aux_participle_per_tense)
+                                                        results=participle_switch_per_tense)
                             # for paper:
-                            self.plot_cs_type_over_time(label=''
-                                                        , legend=['progressive', 'perfect'], ylim=5,
+                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=6,
                                                         fname=f'tener{cs_direction}',
-                                                        results=res_aux_participle_per_tense)
+                                                        results=participle_switch_per_tense)
                             plot_label = ''  # auxiliary switches (% of correctly produced per aspect)'
                             plot_legend = [x.replace('is', 'progressive').replace('has', 'perfect')
                                            for x in legend if 'after' not in x]
-                            self.plot_cs_type_over_time(label=plot_label,
-                                                        legend_loc='lower right',
-                                                        legend=plot_legend, ylim=5,
+                            self.plot_cs_type_over_time(label=plot_label, legend=plot_legend, ylim=6,
                                                         fname='auxiliary_no_after_per_tense%s' % cs_direction,
-                                                        results=res_aux_no_after_per_tense)
+                                                        results=participle_and_auxiliary_switches_per_tense)
             ############################################################################################################
             if cognate_experiment:
                 include_ff = False
@@ -439,15 +395,15 @@ class Plotter:
                         if include_ff:
                             items_to_plot.append('type_correct_%s-ff_last_epoch' % dataset_type)
                             legend.append('FF')
-                        self.plot_alternational_insertional_switching(label='CS types (%% of %s set - last epoch)' %
-                                                                            dataset_type, legend=legend,
+                        self.plot_alternational_insertional_switching(label=f'CS types (% of {dataset_type} set - '
+                                                                            f'last epoch)', legend=legend,
                                                                       items_to_plot=items_to_plot, indeces=all_cs_types,
                                                                       filename_suffix='type_cs_cognate_experiment_last_'
-                                                                            'epoch_%sset' % dataset_type)
+                                                                            f'epoch_{dataset_type}set')
                         # !------------ Now plot all CS types per epoch for COGNATE EXPERIMENT  ------------#
                         for i, cs_type in enumerate(all_cs_types):
-                            results_lst = [self.cs_results['type_correct_%s' % dataset_type][i],
-                                           self.cs_results['type_correct_%s-cog' % dataset_type][i]]
+                            results_lst = [self.cs_results[f'type_correct_{dataset_type}'][i],
+                                           self.cs_results[f'type_correct_{dataset_type}-cog'][i]]
                             if include_ff:
                                 results_lst.append(self.cs_results['type_correct_%s-ff' % dataset_type][i])
                             self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, dataset_type)),
@@ -471,15 +427,16 @@ class Plotter:
         :return:
         """
         fig, ax = plt.subplots()
-        ax.bar(torch.arange(len(stats['labels'])), stats['means'], color='r', yerr=stats['std'])
+        ax.bar(np.arange(len(stats['labels'])), stats['means'], color='r', yerr=stats['std'])
         ax.set_xticklabels(stats['labels'])
         plt.savefig('%s/weights/summary_weights.pdf' % self.results_dir)
         plt.close()
 
     @staticmethod
     def percentage(x, total):
-        if isinstance(x, torch.Tensor):
+        if 'torch' in str(type(x)):
             x = np.array(x)
+            total = np.array(total)
         with np.errstate(divide='ignore', invalid='ignore'):
             perc = x * 100 / total
         perc[np.isnan(perc)] = 0

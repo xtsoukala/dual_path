@@ -1,10 +1,10 @@
 from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 main_dir = '../../simulations/'
-results_dir = main_dir + '1-40/'
-results_dir = main_dir + '2019-08-14/02.42.18_esen_sim80_h70_c60_fw30_e30'
-num_sim = 56
+results_dir = main_dir + '2019-08-21/15.11.40_esen_sim16_h50_c35_fw10_e20'
+num_sim = 60
 epochs = 20
+title = ''
 simulation_range = range(num_sim)
 performance_threshold = 5
 test_name = 'test_aux.in'
@@ -22,7 +22,6 @@ edited_dir = (f'{results_dir}/edited_t{performance_threshold}_e{epochs}_sim{num_
               f'{"_excluded{num_excluded}" if excluded_list else ""}')
 os.makedirs(edited_dir, exist_ok=True)
 
-title = ''
 
 cognate_experiment = False
 test_sentences_with_pronoun = pronoun_experiment = False
