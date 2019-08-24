@@ -20,6 +20,13 @@ It it recommended to run the Bilingual Dual-path model using Python3.6 and above
 pip3 install -r requirements.txt
 ```
 
+To run 4 simulations of the Spanish-English auxiliary phrase experiment with 80 hidden units and 60 compress for 20 epochs units you can run:
+```
+python3 src/start_dual_path.py --sim 4 --aux --hidden 80 --compress 60 
+```
+
+The results will be under the folder "simulations/year-month-day/hour_minutes_seconds_esen_sim4_h80_c60_fw10_e20, where "esen" is the language pair, sim4 the number of simulations, h80 the number of hidden units and c60 the number of compress units. fw is the fixed weight between concepts and roles, and e20 the number of epochs.
+
 To see all the parameters of the model: 
 
 
