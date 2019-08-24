@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from . import pd, os, sys, is_not_nan, time, re, datetime, np
 
-print_on_screen = False  # used only to debug, no need to add it as a called parameter
-
 
 class SetsGenerator:
     def __init__(self, use_simple_semantics, allow_free_structure_production, cognate_percentage, monolingual_only,
@@ -110,10 +108,10 @@ class SetsGenerator:
         """
         num_l2 = int(percentage_l2 * num_sentences)
         num_l1 = num_sentences - num_l2
-        # FIXME: if percentages are not set, distribute equally
+
         if filtered_structures is not None:
             pd.options.mode.chained_assignment = None   # it's otherwise impossible to get rid of SettingWithCopyWarning
-            df = filtered_structures
+            df = self.distribute_percentages_equally_if_not_set(filtered_structures)
             percentage_l2 *= 100
             percentage_l1 = 100 - percentage_l2
             key = f'percentage_{self.L1}'
@@ -128,7 +126,7 @@ class SetsGenerator:
                     # df.loc[:, key] = df[key] * percentage_l2 / existing_percentages
                     df.loc[:, key] *= percentage_l2 / existing_percentages
         else:
-            df = self.structures_df
+            df = self.distribute_percentages_equally_if_not_set(self.structures_df)
 
         occurances = [int(x) for x in df[f'percentage_{self.L1}'] * num_l1 / 100]
         sentence_structures = df[['message', self.L1]].values.repeat(occurances, axis=0)
@@ -160,6 +158,12 @@ class SetsGenerator:
         assert num_sentences == len(sentence_structures)
         self.random.shuffle(sentence_structures)
         return sentence_structures
+
+    def distribute_percentages_equally_if_not_set(self, df):
+        for key in [f'percentage_{self.L1}', f'percentage_{self.L2}']:
+            if df[key].sum() == 0:
+                df.loc[:, key] = 100 / df.size
+        return df
 
     def generate_aux_perfect_sentence_structures(self, num_sentences, percentage_l2):
         """
@@ -245,8 +249,6 @@ class SetsGenerator:
                     sentence_idx += 1
                     if not exclude_cognates and ',COG' in message:
                         sentences_with_cognates += 1
-                    if print_on_screen:
-                        print(u'%s## %s' % (sentence, message))
                 else:  # do not add the perfect structure either
                     sentence_is_unique = False
 
@@ -255,8 +257,6 @@ class SetsGenerator:
                 sentence_idx += 1
                 if not exclude_cognates and ',COG' in message:
                     sentences_with_cognates += 1
-                if print_on_screen:
-                    print(u'%s## %s' % (sentence, message))
             else:  # find unique sentence, don't add it to the training set
                 remaining_structures.append((msg, pos_full))
         return remaining_structures, generated_pairs, max_cognate - sentences_with_cognates
@@ -464,15 +464,13 @@ class SetsGenerator:
         return [x for x in role.split('=')[1].split(',') if x not in self.genders + self.identifiability][0]
 
     def get_word_from_concept(self, concept, lang):
-        w = self.lexicon_df.query("concept == '%s'" % concept)
-        return w[['morpheme_%s' % lang, 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
-
-    ###################################################################################################################
+        w = self.lexicon_df.query(f"concept == '{concept}'")
+        return w[[f'morpheme_{lang}', 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
 
     @staticmethod
     def extract_and_append_event_semantics(msg_str):
-        event_sem_roles = [re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")]
-        new_msg = "%s,%s" % (msg_str, ",".join(event_sem_roles))
+        event_sem_roles = ','.join([re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")])
+        new_msg = f"{msg_str},{event_sem_roles}"
         return new_msg.replace("RECIPIENT,PATIENT", "RECIPIENT,-1,PATIENT")
 
     @staticmethod

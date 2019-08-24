@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument('--compress', '-c', help='Number of compress layer units. The size should be approximately 2/3 '
                                                  'of the hidden one', type=positive_int, default=60)  # 70
     parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
-                        type=positive_int, default=30)
+                        type=positive_int, default=20)
     parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('--l2_percentage', '--l2_perc', help='%% of L2 input', type=float, default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
@@ -77,13 +77,13 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('--set_weights_epoch', '--swe', type=int, default=0,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('--fw', '--fixed_weights', type=int, default=30,  # 20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 20
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('--cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('--generate_training_num', type=int, default=3000, help='Sum of test/training sentences to be '
+    parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
     parser.add_argument('--title', help='Title for the plots')
     parser.add_argument('--sim', type=positive_int, default=2,
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     l2_percentage = args.l2_percentage
     auxiliary_experiment = args.auxiliary_experiment
 
-    simulation_range = range(args.sim_from if args.sim_from else 0, args.sim_to+1 if args.sim_to else args.sim)
+    simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim)+1)
     num_simulations = len(simulation_range)
     set_weights_epoch = args.set_weights_epoch
     if args.only_evaluate and not args.set_weights:
@@ -217,7 +217,8 @@ if __name__ == "__main__":
     else:  # generate a new set
         from modules import SetsGenerator
 
-        experiment_dir = "code-switching/" if args.activate_both_lang else ""
+        experiment_dir = "auxiliary_phrase/" if args.auxiliary_experiment else ("code-switching/" if
+                                                                                args.activate_both_lang else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:

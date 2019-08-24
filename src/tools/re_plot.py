@@ -1,11 +1,11 @@
 from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 main_dir = '../../simulations/'
-results_dir = main_dir + '2019-08-21/15.11.40_esen_sim16_h50_c35_fw10_e20'
-num_sim = 60
+results_dir = main_dir + '2019-'
+num_sim = 25
 epochs = 20
 title = ''
-simulation_range = range(num_sim)
+simulation_range = range(1, num_sim+1)
 performance_threshold = 5
 test_name = 'test_aux.in'
 training_name = 'training.in'
@@ -29,8 +29,8 @@ auxiliary_experiment = False if 'aux' not in test_name else True
 
 all_results = []
 for sim in simulation_range:  # read results from all simulations
-    if os.path.isfile('%s/%s/results.pickled' % (results_dir, sim)):
-        with lz4.open('%s/%s/results.pickled' % (results_dir, sim), 'rb') as f:
+    if os.path.isfile(f'{results_dir}/{sim}/results.pickled'):
+        with lz4.open(f'{results_dir}/{sim}/results.pickled', 'rb') as f:
             all_results.append(pickle.load(f))
 
 if all_results:
@@ -41,7 +41,7 @@ if all_results:
                                                              threshold=performance_threshold, num_test=num_test_set):
             valid_results.append(simulation)
             if not training_is_successful(simulation['correct_meaning']['test'], threshold=80, num_test=num_test_set):
-                failed_simulations.append("[%s]" % i)  # flag it, even if it's included in the final analysis
+                failed_simulations.append(f"[{i}]")  # flag it, even if it's included in the final analysis
         else:
             failed_simulations.append(str(i))
 

@@ -263,7 +263,6 @@ class DualPath:
 
         if set_names:
             self.set_level_logger = self.init_logger('set_level')
-            # FIXME: optimize later
             self.evaluate_network(set_names=set_names)
 
     def evaluate_network(self, set_names, top_down_language_activation=False):
