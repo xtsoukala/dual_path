@@ -13,7 +13,6 @@ import re
 import subprocess
 from collections import defaultdict, Counter
 from datetime import datetime
-from numba import jit
 from .formatter import (InputFormatter, compute_mean_and_std, extract_cs_keys, is_not_nan,
                         copy_files, training_is_successful)
 from .elman_network import SimpleRecurrentNetwork
