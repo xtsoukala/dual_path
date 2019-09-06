@@ -6,8 +6,6 @@ from . import os, sys, torch, zeros, cat, stack, empty, pickle, lz4, defaultdict
 from functools import wraps
 from time import time
 
-#from memory_profiler import profile
-
 
 def measure(func):
     @wraps(func)
@@ -87,7 +85,6 @@ class SimpleRecurrentNetwork:
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
-    #@measure
     def save_weights(self, results_dir, epoch):
         self._create_dir_if_not_exists(results_dir)
         if self.layers:

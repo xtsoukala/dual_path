@@ -3,7 +3,7 @@ import math
 from operator import lt, ge, itemgetter
 import shutil
 from itertools import product, zip_longest
-from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess
+from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess, sys
 
 
 class InputFormatter:
@@ -20,7 +20,7 @@ class InputFormatter:
         if self.use_semantic_gender and 'M' not in self.identifiability:
             self.identifiability += ['M', 'F']
         self.identif_size = len(self.identifiability)
-        self.identifiability_index = dict(zip(self.identifiability, range(self.identif_size)))
+        self.identifiability_idx = dict(zip(self.identifiability, range(self.identif_size)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
@@ -33,13 +33,13 @@ class InputFormatter:
         self.concepts = list(self.lexicon_df.concept.dropna().unique()) if not use_word_embeddings \
             else word2vec.load('word2vec/text8.bin')
         self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
-        self.concept_index = dict(zip(self.concepts, range(self.concept_size)))
+        self.concept_idx = dict(zip(self.concepts, range(self.concept_size)))
         self.languages = self._read_file_to_list('target_lang.in')
         self.num_languages = len(self.languages)
         self.language_index = dict(zip(self.languages, range(self.num_languages)))
         self.roles = self._read_file_to_list('roles.in')
         self.roles_size = len(self.roles)
-        self.roles_index = dict(zip(self.roles, range(self.roles_size)))
+        self.roles_idx = dict(zip(self.roles, range(self.roles_size)))
         self.event_semantics = self._read_file_to_list('event_semantics.in')
         self.event_sem_size = len(self.event_semantics)
         self.event_sem_index = dict(zip(self.event_semantics, range(self.event_sem_size)))
@@ -57,7 +57,8 @@ class InputFormatter:
         self.period_idx = self.lexicon_index['.']
         self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
-        self.haber_tener_idx = self.df_query_to_idx("morpheme_es == 'tiene' or morpheme_es == 'ha'", lang='es')
+        self.haber_idx = self.df_query_to_idx("morpheme_es == 'ha'", lang='es')[0]
+        self.tener_idx = self.df_query_to_idx("morpheme_es == 'tiene'", lang='es')[0]
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
@@ -120,21 +121,18 @@ class InputFormatter:
     def make_haber_and_tener_synonyms(directory):
         fname = f"{directory}/training.in"
         sim = directory.split('/')[-1]
-        os.system(f"sed -i -e 's/ ha / tiene /g' {fname}")
-        num = int(subprocess.check_output(f"cat {fname} | grep -w tiene | wc -l", shell=True))
-        num = num // 2  # only convert half of the instances
+        num = int(subprocess.check_output(f"cat {fname} | grep -w ha | wc -l", shell=True))
+        os.system(f"sed -i -e 's/ ha / tiene /g' {fname}")  # convert all "haber" to "tener"
         os.system("awk '{for(i=1;i<=NF;i++){if(x<%s&&$i==\"tiene\"){x++;sub(\"tiene\",\"ha\",$i)}}}1' %s > "
                   "tmp%s && mv tmp%s %s" % (num, fname, sim, sim, fname))
 
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
-        if (self.test_haber_frequency and filter(lambda i: i not in self.haber_tener_idx, out_sentence_idx) ==
-                filter(lambda i: i not in self.haber_tener_idx, trg_sentence_idx)):  # remove haber/tener and check
-                return True
         # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        if self.same_unordered_lists(filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx),
-                                     filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)):
+        if (self.to_prepositions_idx in out_sentence_idx or self.to_prepositions_idx in trg_sentence_idx and
+                self.same_unordered_lists(list(filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx)),
+                                          list(filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)))):
             return True
         return False
 
@@ -289,7 +287,7 @@ class InputFormatter:
             cs_type = f"alt. ({check_idx_pos[0]})"
         else:
             print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indeces(out_sentence_idx)}")
-            import sys;sys.exit()
+            sys.exit()
         return cs_type
 
     def is_code_switched(self, sentence_indeces, target_lang_idx):
@@ -459,11 +457,10 @@ class InputFormatter:
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
-                            E=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
+                            EVENT-SEM=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        norm_activation = 1.  # 0.5 ?
-        reduced_activation = 0.7  # 0.1-4
+        activation = 1.
         event_sem_activations = zeros(self.event_sem_size)
         event_sem_message = None
         weights_role_concept = self.initialized_weights_role_concept.clone()
@@ -472,50 +469,35 @@ class InputFormatter:
         target_language = None
         for info in message.split(';'):
             role, what = info.split("=")
-            if role == "E":  # retrieve activations for the event-sem layer
+            if role == "EVENT-SEM":  # retrieve activations for the event-sem layer
                 event_sem_message = what
-                activation = norm_activation
                 for event in what.split(","):
-                    if event == "-1":  # if -1 precedes an event-sem its activation should be lower than 1
-                        activation = reduced_activation
-                        continue  # otherwise activation will revert to default
-                    elif event in self.languages:
-                        target_language = event
-                        target_lang_activations[self.language_index[event]] = activation
-                    elif event == 'enes':
-                        target_language = event
-                        target_lang_activations = [0.5, 0.5]
+                    if ':' in event:
+                        current_event, current_activation = event.split(':')
+                        event_sem_activations[self.event_sem_index[current_event]] = float(current_activation)
                     else:
                         event_sem_activations[self.event_sem_index[event]] = activation
-                    activation = norm_activation  # reset activation levels to maximum
+            elif role == "TARGET-LANG":
+                if what in self.languages:
+                    target_language = what
+                    target_lang_activations[self.language_index[what]] = activation
+                elif what == 'enes':
+                    target_language = what
+                    target_lang_activations = [0.5, 0.5]
             else:
-                # there's usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
-                # activate the bindings with a high value, e.g. 6 as suggested by Chang, 2002
+                # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
+                # activate the bindings with a high value
                 for concept in what.split(","):
                     if concept in self.identifiability:
-                        weights_role_identif[self.roles_index[role]][self.identifiability_index[concept]] \
-                            = self.fixed_identif
+                        weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
+                            self.fixed_identif
                     elif concept not in ['COG', 'FF']:
-                        if self.use_word_embeddings:
-                            activation_vector = self.concepts['unknown']
-                            # FIXME
-                            lex = next(key for key, value in self.lexicon_to_concept.items() if value == concept)
-                            if lex in self.concepts:
-                                activation_vector = self.concepts[lex]
-                            else:
-                                print(f"UNK: {lex}({concept})")
-
-                            for i, w2v_activation in enumerate(activation_vector):
-                                weights_role_concept[self.roles_index[role]][i] = w2v_activation
+                        if concept in self.concepts:
+                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
                         else:
-                            if concept in self.concepts:
-                                weights_role_concept[self.roles_index[role]][self.concept_index[concept]] \
-                                    = self.fixed_weights
-                            else:
-                                import sys
-                                sys.exit(f"No concept found: {concept} ({message})")
-        return event_sem_activations, target_lang_activations, target_language, weights_role_concept, \
-               weights_role_identif, event_sem_message
+                            sys.exit(f"No concept found: {concept} ({message})")
+        return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
+                weights_role_identif, event_sem_message)
 
     def cosine_similarity(self, first_word, second_word):
         """ Cosine similarity between words when using word2vec """

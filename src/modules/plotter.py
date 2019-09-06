@@ -191,37 +191,29 @@ class Plotter:
             plt.savefig(filename)
             plt.close()
 
-    def simple_bar_plot(self, fname="all_switch_points"):
-        # prog, perfect
-        means_prog = (3.34761383e+000, 4.15960945e+000)
-        std_prog = (4.47782572e-001, 5.77097541e-001)
-
-        means_perfect = (4.08477268e+000, 2.18383959e+000)
-        std_perfect = (5.29089072e-001, 3.82811174e-001)
-
-        n_groups = len(means_prog)
+    def simple_bar_plot(self,  means_aux, std_aux, means_participle, std_participle, fname="all_switch_points"):
+        n_groups = len(means_aux)
 
         fig, ax = plt.subplots()
 
         index = np.arange(n_groups)
-        bar_width = 0.3
-        opacity = 0.7
+        bar_width = 0.2
+        opacity = 0.9
 
         error_config = {'ecolor': '0.3'}
 
-        ax.bar(index, means_prog, bar_width, alpha=opacity,
-               # color='#4daf4a',
-               yerr=std_prog, error_kw=error_config, label='auxiliary')
+        ax.bar(index, means_aux, bar_width, alpha=opacity, # color='#4daf4a',
+               yerr=std_aux, error_kw=error_config, label='switch at auxiliary')
 
-        ax.bar(index + bar_width, means_perfect, bar_width, alpha=opacity,
-               yerr=std_perfect, error_kw=error_config, label='participle')
+        ax.bar(index + bar_width, means_participle, bar_width, alpha=opacity,
+               yerr=std_participle, error_kw=error_config, label='switch at participle')
 
         ax.set_xticks(index + bar_width / 2)
         ax.set_xticklabels(('progressive', 'perfect'))
         ax.legend()
 
         fig.tight_layout()  # make room for labels
-        filename = f'{self.results_dir}/{fname}.pdf'
+        filename = f'{self.results_dir}/{self.summary_sim}_{fname}.pdf'
         plt.savefig(filename)
         plt.close()
 
@@ -311,13 +303,15 @@ class Plotter:
                                                            else "," * self.num_epochs,
                                                            sum(test_df.message.str.count(key)), key))
                 if auxiliary_experiment:
-                    all_correct = {'has': [], 'is': []}
+                    all_correct = {}  # {'has': [], 'is': []}
                     for aux in ['is', 'has']:
+                        all_correct[aux] = []
                         for lang in ['en', 'es']:
                             key = f'correct_{aux}_{lang}'
                             if key in self.results:
                                 all_correct[aux] = ([x + y for x, y in zip(all_correct[aux], self.results[key]['test'])]
                                                     if all_correct[aux] != [] else self.results[key]['test'])
+                    print(all_correct, '------')
 
                     for cs_direction in ['', '_es_en']:
                         participle_switch_per_tense = []
@@ -342,17 +336,17 @@ class Plotter:
                         if participle_switch_per_tense:
                             self.plot_cs_type_over_time(label='participle switches (% of correctly produced per aspect)'
                                                         , legend=[f'progressive_participle{cs_direction}',
-                                                                  f'perfect_participle{cs_direction}'], ylim=6,
+                                                                  f'perfect_participle{cs_direction}'], ylim=5,
                                                         fname=f'participle_per_aspect{cs_direction}',
                                                         results=participle_switch_per_tense)
                             # for paper:
-                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=6,
+                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=5,
                                                         fname=f'tener{cs_direction}',
                                                         results=participle_switch_per_tense)
                             plot_label = ''  # auxiliary switches (% of correctly produced per aspect)'
                             plot_legend = [x.replace('is', 'progressive').replace('has', 'perfect')
                                            for x in legend if 'after' not in x]
-                            self.plot_cs_type_over_time(label=plot_label, legend=plot_legend, ylim=6,
+                            self.plot_cs_type_over_time(label=plot_label, legend=plot_legend, ylim=5,
                                                         fname='auxiliary_no_after_per_tense%s' % cs_direction,
                                                         results=participle_and_auxiliary_switches_per_tense)
             ############################################################################################################

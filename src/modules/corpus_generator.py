@@ -4,12 +4,11 @@ from . import pd, os, sys, is_not_nan, time, re, datetime, np
 
 class SetsGenerator:
     def __init__(self, use_simple_semantics, allow_free_structure_production, cognate_percentage, monolingual_only,
-                 lang, lexicon_csv, structures_csv, aux_experiment, input_dir=None, sim_results_dir=None,
-                 default_L2='en', include_ff=False):
+                 lang, lexicon_csv, structures_csv, input_dir=None, sim_results_dir=None, default_L2='en',
+                 include_ff=False):
         """
         :param use_simple_semantics:
         :param allow_free_structure_production:
-        :param aux_experiment: whether we're running the auxiliary experiment (haber/estar asymmetry in CS)
         """
         self.allow_free_structure_production = allow_free_structure_production
         self.lang = lang
@@ -18,7 +17,6 @@ class SetsGenerator:
         self.L2 = None if len(lang) == 2 else lang[2:]
         self.random = np.random
         self.cognate_percentage = cognate_percentage
-        self.aux_experiment = aux_experiment
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
                                                  cognates=True if cognate_percentage > 0 else False,
                                                  use_simple_semantics=use_simple_semantics)
@@ -59,7 +57,6 @@ class SetsGenerator:
         sentence_structures_train = self.generate_sentence_structures(num_training, percentage_l2=percentage_l2)
         sentence_structures_test = self.generate_sentence_structures(num_test, percentage_l2=percentage_l2)
         # save only training set if we're selecting sentences for the cognate experiment
-        # test_fname = "test.in" if not aux_experiment else "test_all.in" if not cognates_experiment else None
         test_fname = "test.in" if not cognates_experiment else None
         test_set = self.generate_sentences(sentence_structures_test, fname=test_fname,
                                            exclude_cognates=cognates_experiment,
@@ -71,7 +68,6 @@ class SetsGenerator:
         if self.input_dir_empty:
             self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
             self.save_lexicon_and_structures_to_csv()
-        # if cognates_experiment or self.aux_experiment:  # return sets of message/sentence pairs
         return test_set, training_set
 
     def generate_auxiliary_experiment_sentences(self, training_set, percentage_l2, num_test_sentences=800):  # 1000
@@ -84,16 +80,16 @@ class SetsGenerator:
         """
         :param sentence:
         :param message:
-        :return: replaces has -> is, ha -> está, perfect participle -> prog participle
+        :return: replaces has -> is, ha -> está, perfect participle -> progressive participle
         """
-        msg = message.replace('PERFECT', 'PROG')
-        concept = re.search(';AAL=([A-Z]*);', msg).group(1)
-        lang = msg.split(',')[-1]
-        # look up prog and perfect participles and replace
+        msg = message.replace('PERFECT', 'PROGRESSIVE')
+        concept = re.search(';ACTION-LINKING=([A-Z]*);', msg).group(1)
+        lang = msg[-2:]#msg.split(',')[-1]
+        # look up progressive and perfect participles and replace
         res = self.lexicon_df.query(f"pos == 'participle' and concept == '{concept}'")
-        prog = res[f'morpheme_{lang}'].loc[res['aspect'] == 'prog'].max()
+        progressive = res[f'morpheme_{lang}'].loc[res['aspect'] == 'progressive'].max()
         perfect = res[f'morpheme_{lang}'].loc[res['aspect'] == 'perfect'].max()
-        sent = sentence.replace(' has ', ' is ').replace(' ha ', ' está ').replace(perfect, prog)
+        sent = sentence.replace(' has ', ' is ').replace(' ha ', ' está ').replace(perfect, progressive)
         return sent, msg
 
     def get_random_row_idx(self, data_len):
@@ -138,7 +134,7 @@ class SetsGenerator:
             sentence_structures = np.delete(sentence_structures,
                                             self.random.randint(len(sentence_structures),
                                                                 size=abs(structures_missing)), axis=0)
-        sentence_structures[:, 0] += f',{self.L1}'  # append language code at the end
+        sentence_structures[:, 0] += f';TARGET-LANG={self.L1}'  # append language code at the end
 
         if num_l2:  # repeat the procedure for L2
             occurances = [int(x) for x in df[f'percentage_{self.L2}'] * num_l2 / 100]
@@ -152,7 +148,7 @@ class SetsGenerator:
                 sentence_structures_l2 = np.delete(sentence_structures_l2,
                                                    self.random.randint(len(sentence_structures_l2),
                                                                        size=abs(structures_missing)), axis=0)
-            sentence_structures_l2[:, 0] += f',{self.L2}'  # append language code at the end
+            sentence_structures_l2[:, 0] += f';TARGET-LANG={self.L2}'  # append language code at the end
             sentence_structures = np.append(sentence_structures, sentence_structures_l2, axis=0)
 
         assert num_sentences == len(sentence_structures)
@@ -219,7 +215,7 @@ class SetsGenerator:
             if not exclude_cognates and sentences_with_cognates >= max_cognate:
                 exclude_cognates = True
             message = msg.split(';')
-            lang = message[-1].split(',')[-1]
+            lang = message[-1].split('=')[1]
             sentence = []
             msg_idx = 0
             gender = None
@@ -301,8 +297,6 @@ class SetsGenerator:
             elif only_get_false_friend:
                 query.append("and is_false_friend == '1'")
             cache = self.lexicon_df.query(' '.join(query))
-            # if 'noun' in pos and lang == 'en':
-            #    print(query, cache, len(cache.index))
             self.df_cache[params] = cache
         cache_size = len(cache.index)
         if not cache_size:
@@ -315,10 +309,18 @@ class SetsGenerator:
         return selected
 
     def save_lexicon_and_structures_to_csv(self):
-        # Matches strings between ;E= or ,           E.g., 'PROG', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
+        # Matches strings between ;EVENT-SEM= or , E.g., 'PROGRESSIVE', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
         # "?" is necessary for multiple matches
+        # AGENT=;AGENT-MOD=;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE-MOD
         if not os.listdir(self.input_dir):
-            event_semantics = self.structures_df['message'].str.extractall(';E=|,?([A-Z-]*)(,|$)')[0].dropna().unique()
+            # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
+            event_semantics = []
+            for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
+                for evsem in event_semantic_str.split('EVENT-SEM=')[1].split(','):
+                    if ':' in evsem:
+                        evsem = evsem.split(':')[0]  # remove activation
+                    if evsem and evsem not in event_semantics:
+                        event_semantics.append(evsem)
             self.list_to_file("event_semantics", event_semantics)
             self.list_to_file("identifiability", self.identifiability)
             self.list_to_file("target_lang", set(self.target_lang))
@@ -345,30 +347,8 @@ class SetsGenerator:
                 keys.append(l)
                 keys.append(f'percentage_{l}')
         df = structures[keys]
-        if True:  # replace all "verb_prefix verb_suffix" with "verb"  FIXME
-            df = df.replace({'verb(_prefix)?:intrans verb_suffix::present': 'verb:intrans:present'}, regex=True)
-            df = df.replace({'verb(_prefix)?:trans verb_suffix::present': 'verb:trans:present'}, regex=True)
-            df = df.replace({'verb(_prefix)?:double verb_suffix::present': 'verb:double:present'}, regex=True)
-
-            df = df.replace({'verb(_prefix)?:intrans verb_suffix::past': 'verb:intrans:past'}, regex=True)
-            df = df.replace({'verb(_prefix)?:trans verb_suffix::past': 'verb:trans:past'}, regex=True)
-            df = df.replace({'verb(_prefix)?:double verb_suffix::past': 'verb:double:past'}, regex=True)
-
-            df = df.replace({'verb_prefix:copular': 'verb:copular'}, regex=True)
-            df = df.replace({'verb_prefix:possession': 'verb:possession'}, regex=True)
-
-            df = df.replace({'verb(_prefix)?:trans participle_suffix:::prog': 'participle:trans::prog'}, regex=True)
-            df = df.replace({'verb(_prefix)?:intrans participle_suffix:::prog': 'participle:intrans::prog'}, regex=True)
-            df = df.replace({'verb(_prefix)?:double participle_suffix:::prog': 'participle:double::prog'}, regex=True)
-
-            df = df.replace({'verb(_prefix)?:trans participle_suffix:::perfect': 'participle:trans::perfect'},
-                            regex=True)
-            df = df.replace({'verb(_prefix)?:intrans participle_suffix:::perfect': 'participle:intrans::perfect'},
-                            regex=True)
-            df = df.replace({'verb(_prefix)?:double participle_suffix:::perfect': 'participle:double::perfect'},
-                            regex=True)
-        if not self.allow_free_structure_production:
-            df.message = df.message.map(lambda a: self.extract_and_append_event_semantics(a))
+        if self.allow_free_structure_production:
+            df.message = df.message.map(lambda a: self.remove_event_semantics(a))
         return df
 
     def get_num_structures_per_language(self):
@@ -428,7 +408,7 @@ class SetsGenerator:
         replacement_sets = []
         new_replacement_idx = []
         for idx, (sentence, message) in enumerate(original_sets):
-            lang = message[-2:]
+            lang = message[-1].split('=')[1]  # final two letters
             all_roles = message.split(';')
             if replacement_idx:
                 role_idx_to_replace = all_roles[replacement_idx[idx]]
@@ -453,7 +433,7 @@ class SetsGenerator:
                 all_roles[role_idx_to_replace] += ',COG'
             else:
                 all_roles[role_idx_to_replace] += ',FF'
-            sentence = sentence.replace(" %s " % word_to_replace, " %s " % replace_with_word['morpheme_%s' % lang])
+            sentence = sentence.replace(f" {word_to_replace} ", " %s " % replace_with_word[f'morpheme_{lang}'])
             message = ';'.join(all_roles)
             replacement_sets.append((sentence, message))
         if not replacement_idx:
@@ -468,10 +448,19 @@ class SetsGenerator:
         return w[[f'morpheme_{lang}', 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
 
     @staticmethod
-    def extract_and_append_event_semantics(msg_str):
-        event_sem_roles = ','.join([re.sub("=(pron)?", "", m) for m in msg_str.split(';') if not m.startswith("E=")])
-        new_msg = f"{msg_str},{event_sem_roles}"
-        return new_msg.replace("RECIPIENT,PATIENT", "RECIPIENT,-1,PATIENT")
+    def remove_event_semantics(msg_str):
+        for event in msg_str.split("EVENT-SEM=")[1].split(','):
+            if ':' in event:   # the user has the option to set the activation, e.g.: 'PATIENT:0.7,AGENT:0.9'
+                core_event = event.split(':')[0]
+            else:
+                core_event = event
+            if msg_str.count(core_event) > 1:   # we only want tense/aspect info, not roles
+                if f'={event}' in msg_str:
+                    reg_ex = rf'{event}'
+                else:
+                    reg_ex = rf',{event}'
+                msg_str = re.sub(reg_ex, '', msg_str)
+        return msg_str
 
     @staticmethod
     def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):

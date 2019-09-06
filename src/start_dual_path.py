@@ -3,14 +3,16 @@
 import json
 import argparse
 from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath,
-                     Plotter, copy_files, datetime, training_is_successful, Process, cpu_count)
+                     Plotter, copy_files, datetime, training_is_successful, Process, cpu_count, round)
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
-                                auxiliary_experiment, simulation_number):
+                                auxiliary_experiment, simulation_number, randomize):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
-
+    if randomize:
+        l2_percentage = round(sets.random.normal(l2_percentage, 0.09), decimals=2)
+        print("l2 percentage:", l2_percentage)
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
     else:
@@ -160,6 +162,10 @@ if __name__ == "__main__":
     parser.add_argument('--separate', dest='separate_hidden_layers', action='store_true',
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
+    parser.add_argument('--norandomization', dest='randomize', action='store_false',
+                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 percentage) '
+                             'within a certain standard deviation. Using this flag deactivates this setting.')
+    parser.set_defaults(randomize=True)
     args = parser.parse_args()
 
     if args.config:  # read params from file; I used the json format instead of pickle to make it readable
@@ -190,6 +196,9 @@ if __name__ == "__main__":
                   f"sim{args.sim}_h{args.hidden}_c{args.compress}_fw{args.fw}_e{args.epochs}"
     os.makedirs(results_dir)
 
+    if args.replace_haber or args.test_haber_frequency:
+        args.auxiliary_experiment = True
+
     if args.auxiliary_experiment:
         args.cognate_percentage = 0
         args.activate_both_lang = True
@@ -217,28 +226,24 @@ if __name__ == "__main__":
     else:  # generate a new set
         from modules import SetsGenerator
 
-        experiment_dir = "auxiliary_phrase/" if args.auxiliary_experiment else ("code-switching/" if
-                                                                                args.activate_both_lang else "")
+        experiment_dir = "auxiliary_phrase/" if args.auxiliary_experiment else ""
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
         logging.warning(f"Using {args.lexicon} (lexicon) and {args.structures} (structures)")
-        # FIXME: SetsGenerator needs to be reconstructed
-        input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang,
-                                   monolingual_only=args.monolingual, use_simple_semantics=args.simple_semantics,
+        input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
+                                   use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
-                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos,
-                                   aux_experiment=args.auxiliary_experiment)
-        # If prefer="threads" make sure to deepcopy input sets. -1 means that all CPUs will be used
+                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos)
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
-        # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(results_dir, input_sets, cognate_experiment,
-        # training_num, num_test, l2_percentage, auxiliary_experiment, sim) for sim in simulation_range)
+        # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
+        # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(sim) for sim in simulation_range)
         parallel_jobs = []
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_percentage, auxiliary_experiment, sim)))
+                                               num_test, l2_percentage, auxiliary_experiment, sim, args.randomize)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -266,7 +271,7 @@ if __name__ == "__main__":
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
-                     cognate_experiment=args.cognate_experiment, momentum=args.momentum,
+                     cognate_experiment=args.cognate_experiment, momentum=args.momentum, randomize=args.randomize,
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,

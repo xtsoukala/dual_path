@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import lz4, pickle, defaultdict, logging, SimpleRecurrentNetwork, ones, os, copy_files, time
 import threading
+import random
 
 
 class DualPath:
@@ -21,7 +22,7 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, simulation_num=None):
+                 starting_epoch, randomize, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -36,6 +37,8 @@ class DualPath:
         :param set_weights_epoch: In case of pre-trained weights we can also specify num of epochs (stage of training)
         :param input_class: Instance of InputFormatter Class (contains all the input for the model)
         :param pronoun_experiment: Whether to evaluate pronoun production
+        :param randomize: if set to False, the exact (free parameter) values are used for each simulation (e.g., hidden
+        size, fixed weights), otherwise a new value is sampled within a certain standard deviation.
         :param simulation_num: Number of simulation (useful in case we run several simulations in parallel)
         :param evaluate_test_set: Whether to evaluate test set every x epochs. The only reason NOT to evaluate
         is for speed, if we want to training network and save weights
@@ -54,6 +57,7 @@ class DualPath:
         self.set_level_logger = None
         self.only_evaluate = only_evaluate
         self.continue_training = continue_training
+        self.randomize = randomize
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -211,7 +215,17 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
+        :set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
         """
+        if self.randomize:
+            random.seed(simulation_num)  # select a random hidden seed
+            self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
+            self.compress_size = int(self.hidden_size // 1.3)
+            self.srn.fw = random.randint(10, 30)
+            print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
+                  f"fw: {self.srn.fw}")
+            self.initialize_srn()
+
         self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
         self.simulation_num = simulation_num
         if set_existing_weights:
@@ -234,14 +248,13 @@ class DualPath:
             target_lang_act = self.inputs.target_lang_act['training']
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
-            buffer_to_produce = [None] * 5
             epoch_range = range(self.starting_epoch, self.epochs)
             for epoch in epoch_range:
                 threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
                 # times = time.time()
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
                     line_idx = line.Index
-                    self.feed_line(line.target_sentence_idx + buffer_to_produce, target_lang_act[line_idx], line.lang,
+                    self.feed_line(line.target_sentence_idx, target_lang_act[line_idx], line.lang,
                                    weights_role_concept[line_idx], weights_concept_role[line_idx],
                                    weights_role_identif[line_idx],
                                    weights_identif_role[line_idx],
@@ -326,6 +339,7 @@ class DualPath:
                 self.srn.load_weights(results_dir=directory, set_weights_folder=directory, set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     line_idx = line.Index
+                    target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
                     produced_idx, entropy_idx = self.feed_line(line.target_sentence_idx + buffer_to_produce,
                                                                target_lang_act[line_idx], line.lang,
                                                                weights_role_concept[line_idx],
@@ -334,16 +348,23 @@ class DualPath:
                                                                weights_identif_role[line_idx],
                                                                event_semantics[line_idx],
                                                                activate_target_lang=not top_down_language_activation)
+
+                    if self.inputs.test_haber_frequency:
+                        if self.inputs.tener_idx in target_sentence_idx:
+                            target_sentence_idx = [self.inputs.haber_idx if x == self.inputs.tener_idx
+                                                   else x for x in target_sentence_idx]
+                        if self.inputs.tener_idx in produced_idx:
+                            produced_idx = [self.inputs.haber_idx if x == self.inputs.tener_idx
+                                            else x for x in produced_idx]
+
                     produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
 
-                    target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
-
-                    if False:  # debug_sentence: # debug specific sentence
+                    if False:  # debug specific sentence
                         logger.warning('Debugging sentence pair')
-                        produced_sentence = 'a happy host has carried the bolígrafo .'
-                        target_sentence = 'a happy host has carried the pen .'
-                        target_lang = 'en'
+                        produced_sentence = 'él tiene comido .'
+                        target_sentence = 'él ha comido .'
+                        target_lang = 'es'
                         produced_idx = self.inputs.sentence_indeces(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indeces(target_sentence)

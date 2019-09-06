@@ -1,14 +1,14 @@
 from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 main_dir = '../../simulations/'
-results_dir = main_dir + '2019-'
-num_sim = 25
+results_dir = main_dir + 'blc/haber'  # 50_h70_c60_fw10_e20'
+num_sim = 3
 epochs = 20
-title = ''
-simulation_range = range(1, num_sim+1)
-performance_threshold = 5
+simulation_range = range(1, num_sim + 1)
+performance_threshold = 0
 test_name = 'test_aux.in'
 training_name = 'training.in'
+title = 'synonym'
 num_test_set = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{test_name}",
                                            shell=True).split()[0])
 num_train = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{training_name}",
@@ -21,7 +21,6 @@ num_excluded = len(excluded_list)
 edited_dir = (f'{results_dir}/edited_t{performance_threshold}_e{epochs}_sim{num_sim}'
               f'{"_excluded{num_excluded}" if excluded_list else ""}')
 os.makedirs(edited_dir, exist_ok=True)
-
 
 cognate_experiment = False
 test_sentences_with_pronoun = pronoun_experiment = False
@@ -64,17 +63,25 @@ if all_results:
                           test_sentences_with_pronoun=test_sentences_with_pronoun,
                           auxiliary_experiment=auxiliary_experiment, evaluated_datasets=evaluated_sets)
 
-        all_haber_tener = []
-        if all_haber_tener:
-            plot.plot_cs_type_over_time(label=None, ylim=5, legend_loc='lower right',
-                                        legend=['progressive_tener', 'perfect_tener',
-                                                'progressive', 'perfect'],
-                                        fname='haber_tener', results=all_haber_tener)
-            plot.plot_bar_chart_original(indeces=['progressive_tener', 'perfect_tener', 'progressive', 'perfect'],
-                                         items_to_plot=all_haber_tener, legend=None, only_last_epoch=True,
-                                         fname="testin")
-            plot.plot_bar_chart_original(indeces=['progressive_tener', 'perfect_tener',
-                                                  'progressive', 'perfect'], label=None, items_to_plot=all_haber_tener,
-                                         legend=['progressive_tener', 'perfect_tener',
-                                                 'progressive', 'perfect'], fname="direct_comparison",
-                                         only_last_epoch=True)
+        correct_progressive = 328.47
+        correct_perfect = 317.25
+        """print('means_aux', (results_mean_and_std['is_aux_es_en']['test'][-1],
+                            results_mean_and_std['has_aux_es_en']['test'][-1]),
+              'std_aux=', (results_mean_and_std['is_aux_es_en']['test-std_error'][-1],
+                           results_mean_and_std['has_aux_es_en']['test-std_error'][-1]),
+              'means_participle=', (results_mean_and_std['is_participle_es_en']['test'] * 100 / correct_progressive,
+                                    results_mean_and_std['has_participle_es_en']['test'] * 100 / correct_perfect),
+              'std_participle=', (results_mean_and_std['is_participle_es_en']['test-std_error'][-1],
+                                  results_mean_and_std['has_participle_es_en']['test-std_error'][-1]))"""
+        plot.simple_bar_plot(means_aux=(results_mean_and_std['is_aux_es_en']['test'][-1] * 100 / correct_progressive,
+                                        results_mean_and_std['has_aux_es_en']['test'][-1] * 100 / correct_perfect),
+                             std_aux=(
+                             results_mean_and_std['is_aux_es_en']['test-std_error'][-1] * 100 / correct_progressive,
+                             results_mean_and_std['has_aux_es_en']['test-std_error'][-1] * 100 / correct_perfect),
+                             means_participle=(
+                             results_mean_and_std['is_participle_es_en']['test'][-1] * 100 / correct_progressive,
+                             results_mean_and_std['has_participle_es_en']['test'][-1] * 100 / correct_perfect),
+                             std_participle=(results_mean_and_std['is_participle_es_en']['test-std_error'][-1] *
+                                             100 / correct_progressive,
+                                             results_mean_and_std['has_participle_es_en']['test-std_error'][-1] *
+                                             100 / correct_perfect))
