@@ -2,7 +2,7 @@ from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, trai
 
 main_dir = '../../simulations/'
 results_dir = main_dir + 'blc/haber'  # 50_h70_c60_fw10_e20'
-num_sim = 3
+num_sim = 8
 epochs = 20
 simulation_range = range(1, num_sim + 1)
 performance_threshold = 0

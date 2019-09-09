@@ -61,7 +61,7 @@ class SimpleRecurrentNetwork:
         second.in_size += self.layers[first_layer_name].size
         second.in_layer_names += (first_layer_name,)
 
-    def load_weights(self, results_dir, set_weights_folder, set_weights_epoch, simulation_num=None):
+    def load_weights(self, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
             if simulation_num is not None:
                 weights_fname = os.path.join(set_weights_folder, str(simulation_num),
@@ -78,10 +78,6 @@ class SimpleRecurrentNetwork:
             for layer in self.layers.values():
                 # if layer.in_size:
                 layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
-
-            if simulation_num:
-                self._create_dir_if_not_exists(results_dir)
-                self.save_weights(results_dir, set_weights_epoch)
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
@@ -90,6 +86,8 @@ class SimpleRecurrentNetwork:
         if self.layers:
             with lz4.open(f"{results_dir}/weights/w{epoch}.lz4", 'wb') as pckl:
                 pickle.dump(self.layers, pckl, protocol=-1)
+        else:
+            sys.exit(f"The layers haven't been correctly initialized for epoch {epoch}")
 
     def set_message_reset_context(self, weights_role_concept, weights_concept_role, weights_role_identif,
                                   weights_identif_role, event_semantics, target_lang_act, activate_language):
@@ -167,7 +165,7 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = zeros(layer.size)  # set role_copy to zero   # zeros?
                 continue
-            layer.activation = self.activation_function(dot_product=layer.in_activation.matmul(layer.in_weights),#matmul(layer.in_activation, layer.in_weights),
+            layer.activation = self.activation_function(dot_product=layer.in_activation.matmul(layer.in_weights),
                                                         activation_function=layer.activation_function)
         # Copy output of the hidden to "context" (activation of t-1)
         self.set_context_activation("hidden")

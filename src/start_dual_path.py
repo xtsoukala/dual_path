@@ -12,7 +12,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize:
         l2_percentage = round(sets.random.normal(l2_percentage, 0.09), decimals=2)
-        print("l2 percentage:", l2_percentage)
+        print(f"L1 percentage: {1.-l2_percentage}, L2 percentage: {l2_percentage}")
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
     else:
@@ -273,7 +273,7 @@ if __name__ == "__main__":
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                      cognate_experiment=args.cognate_experiment, momentum=args.momentum, randomize=args.randomize,
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
-                     input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det, simulation_num=0,
+                     input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,

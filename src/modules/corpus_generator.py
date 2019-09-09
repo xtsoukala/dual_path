@@ -316,7 +316,7 @@ class SetsGenerator:
             # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
             event_semantics = []
             for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
-                for evsem in event_semantic_str.split('EVENT-SEM=')[1].split(','):
+                for evsem in event_semantic_str.split("EVENT-SEM=")[1].split(','):
                     if ':' in evsem:
                         evsem = evsem.split(':')[0]  # remove activation
                     if evsem and evsem not in event_semantics:
@@ -348,7 +348,7 @@ class SetsGenerator:
                 keys.append(f'percentage_{l}')
         df = structures[keys]
         if self.allow_free_structure_production:
-            df.message = df.message.map(lambda a: self.remove_event_semantics(a))
+            df.message = df.message.map(lambda a: self.remove_roles_from_event_semantics(a))
         return df
 
     def get_num_structures_per_language(self):
@@ -448,18 +448,20 @@ class SetsGenerator:
         return w[[f'morpheme_{lang}', 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
 
     @staticmethod
-    def remove_event_semantics(msg_str):
+    def remove_roles_from_event_semantics(msg_str):
         for event in msg_str.split("EVENT-SEM=")[1].split(','):
             if ':' in event:   # the user has the option to set the activation, e.g.: 'PATIENT:0.7,AGENT:0.9'
                 core_event = event.split(':')[0]
             else:
                 core_event = event
-            if msg_str.count(core_event) > 1:   # we only want tense/aspect info, not roles
-                if f'={event}' in msg_str:
-                    reg_ex = rf'{event}'
-                else:
-                    reg_ex = rf',{event}'
-                msg_str = re.sub(reg_ex, '', msg_str)
+
+            if f'{core_event}=' in msg_str:
+                if f'={event},' in msg_str:
+                    msg_str = re.sub(f'={event},', '=', msg_str)
+                elif f',{event},' in msg_str:
+                    msg_str = re.sub(f',{event},', ',', msg_str)
+                elif f',{event}' in msg_str:
+                    msg_str = re.sub(f',{event}', '', msg_str)
         return msg_str
 
     @staticmethod

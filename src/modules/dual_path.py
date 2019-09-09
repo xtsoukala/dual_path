@@ -161,9 +161,9 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        if not self.only_evaluate:  # else they will be loaded again at the next phase
+        if not self.only_evaluate and self.simulation_num:  # else they will be loaded again at the next phase
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
-                                  results_dir=self.inputs.directory, simulation_num=self.simulation_num)
+                                  simulation_num=self.simulation_num)
 
     def feed_line(self, target_sentence_idx, target_lang_act, lang, weights_role_concept, weights_concept_role,
                   weights_role_identif, weights_identif_role, event_semantics, backpropagate=False,
@@ -217,6 +217,9 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         :set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
         """
+        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
+        self.simulation_num = simulation_num
+
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
             self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
@@ -226,8 +229,6 @@ class DualPath:
                   f"fw: {self.srn.fw}")
             self.initialize_srn()
 
-        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
-        self.simulation_num = simulation_num
         if set_existing_weights:
             destination_folder = f'{self.inputs.directory}/weights'
             self.set_weights_folder = self.inputs.directory if set_existing_weights else None
@@ -336,7 +337,7 @@ class DualPath:
             for epoch in range(self.epochs):
                 counter = defaultdict(int)
                 counter['type_code_switches'] = defaultdict(int)
-                self.srn.load_weights(results_dir=directory, set_weights_folder=directory, set_weights_epoch=epoch)
+                self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     line_idx = line.Index
                     target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
