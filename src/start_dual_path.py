@@ -147,6 +147,8 @@ if __name__ == "__main__":
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
                         help='Run auxiliary asymmetry experiment')
     parser.set_defaults(auxiliary_experiment=False)
+    parser.add_argument('--priming', dest='priming', action='store_true', help='Priming experiment')
+    parser.set_defaults(priming=False)
     parser.add_argument('--tener', dest='replace_haber', action='store_true',
                         help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
     parser.set_defaults(replace_haber=False)
@@ -275,7 +277,8 @@ if __name__ == "__main__":
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
+                     auxiliary_experiment=args.auxiliary_experiment, priming_experiment=args.priming,
+                     only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)

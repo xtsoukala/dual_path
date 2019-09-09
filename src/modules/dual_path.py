@@ -22,7 +22,7 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, randomize, simulation_num=None):
+                 starting_epoch, randomize, priming_experiment, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -52,6 +52,7 @@ class DualPath:
         self.pronoun_experiment = pronoun_experiment
         self.cognate_experiment = cognate_experiment
         self.auxiliary_experiment = auxiliary_experiment
+        self.priming_experiment = priming_experiment
         self.training_logger = None
         self.test_logger = None
         self.set_level_logger = None

@@ -381,7 +381,8 @@ class InputFormatter:
     def read_set_to_df(self, test=False):
         set_name = self.testset if test else self.training_set
         df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
-                         sep='## ', engine='python')
+                         sep='##', engine='python')
+        df.message = df.message.str.strip()  # strip whitespace
         if self.prodrop:  # TODO: make pro-drop
             if self.emphasis_percentage > 0:  # keep pronoun if emphasized
                 # find num of lines that are in ES. decide on num that will be emphasized:
@@ -460,42 +461,43 @@ class InputFormatter:
                             EVENT-SEM=PAST,PROG" which maps roles (AGENT, PATIENT, ACTION) with concepts and also
                             gives information about the event-semantics (E)
         """
-        activation = 1.
         event_sem_activations = zeros(self.event_sem_size)
         event_sem_message = None
         weights_role_concept = self.initialized_weights_role_concept.clone()
         weights_role_identif = self.initialized_weights_role_identif.clone()
         target_lang_activations = zeros(self.num_languages)
         target_language = None
-        for info in message.split(';'):
-            role, what = info.split("=")
-            if role == "EVENT-SEM":  # retrieve activations for the event-sem layer
-                event_sem_message = what
-                for event in what.split(","):
-                    if ':' in event:
-                        current_event, current_activation = event.split(':')
-                        event_sem_activations[self.event_sem_index[current_event]] = float(current_activation)
-                    else:
-                        event_sem_activations[self.event_sem_index[event]] = activation
-            elif role == "TARGET-LANG":
-                if what in self.languages:
-                    target_language = what
-                    target_lang_activations[self.language_index[what]] = activation
-                elif what == 'enes':
-                    target_language = what
-                    target_lang_activations = [0.5, 0.5]
-            else:
-                # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
-                # activate the bindings with a high value
-                for concept in what.split(","):
-                    if concept in self.identifiability:
-                        weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
-                            self.fixed_identif
-                    elif concept not in ['COG', 'FF']:
-                        if concept in self.concepts:
-                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
+        if is_not_nan(message):
+            activation = 1.
+            for info in message.split(';'):
+                role, what = info.split("=")
+                if role == "EVENT-SEM":  # retrieve activations for the event-sem layer
+                    event_sem_message = what
+                    for event in what.split(","):
+                        if ':' in event:
+                            current_event, current_activation = event.split(':')
+                            event_sem_activations[self.event_sem_index[current_event]] = float(current_activation)
                         else:
-                            sys.exit(f"No concept found: {concept} ({message})")
+                            event_sem_activations[self.event_sem_index[event]] = activation
+                elif role == "TARGET-LANG":
+                    if what in self.languages:
+                        target_language = what
+                        target_lang_activations[self.language_index[what]] = activation
+                    elif what == 'enes':
+                        target_language = what
+                        target_lang_activations = [0.5, 0.5]
+                else:
+                    # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
+                    # activate the bindings with a high value
+                    for concept in what.split(","):
+                        if concept in self.identifiability:
+                            weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
+                                self.fixed_identif
+                        elif concept not in ['COG', 'FF']:
+                            if concept in self.concepts:
+                                weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
+                            else:
+                                sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
                 weights_role_identif, event_sem_message)
 
