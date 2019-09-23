@@ -22,7 +22,7 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, randomize, priming_experiment, simulation_num=None):
+                 starting_epoch, randomize, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -52,7 +52,6 @@ class DualPath:
         self.pronoun_experiment = pronoun_experiment
         self.cognate_experiment = cognate_experiment
         self.auxiliary_experiment = auxiliary_experiment
-        self.priming_experiment = priming_experiment
         self.training_logger = None
         self.test_logger = None
         self.set_level_logger = None
@@ -225,7 +224,7 @@ class DualPath:
             random.seed(simulation_num)  # select a random hidden seed
             self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
             self.compress_size = int(self.hidden_size // 1.3)
-            self.srn.fw = random.randint(10, 30)
+            self.srn.fw = random.randint(10, 20)
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
                   f"fw: {self.srn.fw}")
             self.initialize_srn()
@@ -252,7 +251,8 @@ class DualPath:
             directory = self.inputs.directory
             epoch_range = range(self.starting_epoch, self.epochs)
             for epoch in epoch_range:
-                threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
+                self.srn.save_weights(directory, epoch)
+                # threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
                 # times = time.time()
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
                     line_idx = line.Index

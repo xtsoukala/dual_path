@@ -11,8 +11,9 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize:
-        l2_percentage = round(sets.random.normal(l2_percentage, 0.09), decimals=2)
-        print(f"L1 percentage: {1.-l2_percentage}, L2 percentage: {l2_percentage}")
+        l2_percentage = round(sets.random.normal(l2_percentage, 0.08), decimals=2)
+        print(f"Simulation {simulation_number}: L1 percentage: {1.-l2_percentage:.2}, "
+              f"L2 percentage: {l2_percentage}")
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
     else:
@@ -33,13 +34,13 @@ def calculate_testset_size(num_training, percentage_test_set=0.2):
 
 
 def check_given_input_path(input_path):
-    if not os.path.isfile(os.path.join(input_path, "test.in")) and 'input' not in input_path:
+    if not os.path.isfile(os.path.join(input_path, "test.in")) and '/input' not in input_path:
         corrected_dir = os.path.join(input_path, "input")  # the user may have forgotten to add the 'input' dir
         if os.path.exists(corrected_dir):
             input_path = corrected_dir
         else:
             sys.exit(f'No input folder found in the path ({input_path})')
-    logging.warning(f"Predefined input folder ({input_path}), will use that instead of generating a new set")
+    logging.info(f"Predefined input folder ({input_path}), will use that instead of generating a new set")
     return input_path
 
 
@@ -119,9 +120,6 @@ if __name__ == "__main__":
     parser.set_defaults(gender=False)
     parser.add_argument('--monolingual', dest='monolingual', action='store_true', help='Do not include L2 lexicon')
     parser.set_defaults(monolingual=False)
-    parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
-                        help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
-    parser.set_defaults(simple_semantics=True)
     parser.add_argument('--noeval', dest='eval_test', action='store_false',
                         help='Do not evaluate test set')
     parser.set_defaults(eval_test=True)
@@ -147,12 +145,10 @@ if __name__ == "__main__":
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
                         help='Run auxiliary asymmetry experiment')
     parser.set_defaults(auxiliary_experiment=False)
-    parser.add_argument('--priming', dest='priming', action='store_true', help='Priming experiment')
-    parser.set_defaults(priming=False)
     parser.add_argument('--tener', dest='replace_haber', action='store_true',
                         help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
     parser.set_defaults(replace_haber=False)
-    parser.add_argument('--haber_frequency', dest='test_haber_frequency', action='store_true',
+    parser.add_argument('--synonym', dest='test_haber_frequency', action='store_true',
                         help='Run auxiliary asymmetry experiment making haber and tener perfect synonyms')
     parser.set_defaults(test_haber_frequency=False)
     parser.add_argument('--gender_error_experiment', dest='pronoun_experiment', action='store_true',
@@ -233,9 +229,9 @@ if __name__ == "__main__":
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
-        logging.warning(f"Using {args.lexicon} (lexicon) and {args.structures} (structures)")
+        logging.info(f"Generating input for {num_simulations} simulations using: {args.lexicon} (lexicon) "
+                     f"and {args.structures} (structures)")
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
-                                   use_simple_semantics=args.simple_semantics,
                                    cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos)
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
@@ -256,7 +252,7 @@ if __name__ == "__main__":
         del input_sets  # we no longer need it
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
-        logging.warning(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
+        logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
     with open(f'{results_dir}/commandline_args.txt', 'w') as f:
@@ -277,8 +273,7 @@ if __name__ == "__main__":
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                     auxiliary_experiment=args.auxiliary_experiment, priming_experiment=args.priming,
-                     only_evaluate=args.only_evaluate,
+                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
@@ -299,7 +294,6 @@ if __name__ == "__main__":
     num_test = dualp.inputs.num_test
 
     test_sentences_with_pronoun = dualp.inputs.test_sentences_with_pronoun
-    lexicon_size = dualp.inputs.lexicon_size
     layers_with_softmax = ', '.join([layer.name for layer in dualp.srn.backpropagated_layers
                                      if layer.activation_function == 'softmax'])
     del dualp
@@ -350,7 +344,7 @@ if __name__ == "__main__":
                             f"{Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test)}")
 
     with open(f"{results_dir}/results.log", 'w') as f:
-        f.write(f"Lexicon size:{lexicon_size}\nLayers with softmax activation function: "
+        f.write(f"Layers with softmax activation function: "
                 f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
                 f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
                 f"Indeces of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")

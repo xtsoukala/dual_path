@@ -3,11 +3,10 @@ from . import pd, os, sys, is_not_nan, time, re, datetime, np
 
 
 class SetsGenerator:
-    def __init__(self, use_simple_semantics, allow_free_structure_production, cognate_percentage, monolingual_only,
+    def __init__(self, allow_free_structure_production, cognate_percentage, monolingual_only,
                  lang, lexicon_csv, structures_csv, input_dir=None, sim_results_dir=None, default_L2='en',
                  include_ff=False):
         """
-        :param use_simple_semantics:
         :param allow_free_structure_production:
         """
         self.allow_free_structure_production = allow_free_structure_production
@@ -18,8 +17,7 @@ class SetsGenerator:
         self.random = np.random
         self.cognate_percentage = cognate_percentage
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
-                                                 cognates=True if cognate_percentage > 0 else False,
-                                                 use_simple_semantics=use_simple_semantics)
+                                                 cognates=True if cognate_percentage > 0 else False)
         self.results_dir = sim_results_dir
         self.input_dir = input_dir
         if input_dir and not os.path.exists(input_dir):
@@ -84,7 +82,7 @@ class SetsGenerator:
         """
         msg = message.replace('PERFECT', 'PROGRESSIVE')
         concept = re.search(';ACTION-LINKING=([A-Z]*);', msg).group(1)
-        lang = msg[-2:]#msg.split(',')[-1]
+        lang = msg[-2:]
         # look up progressive and perfect participles and replace
         res = self.lexicon_df.query(f"pos == 'participle' and concept == '{concept}'")
         progressive = res[f'morpheme_{lang}'].loc[res['aspect'] == 'progressive'].max()
@@ -359,7 +357,7 @@ class SetsGenerator:
         return l1, l2
 
     @staticmethod
-    def get_clean_lexicon(lexicon_csv, false_friends, cognates, use_simple_semantics):
+    def get_clean_lexicon(lexicon_csv, false_friends, cognates):
         if not os.path.isfile(lexicon_csv):
             lexicon_csv = "src/%s" % lexicon_csv
         df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
@@ -369,11 +367,11 @@ class SetsGenerator:
         if not cognates:
             query.append("and is_cognate != 'Y'")
         lex = df.query(' '.join(query))
-        if use_simple_semantics:
+        """if use_simple_semantics:
             lex.drop(['compositional_concept', 'inactive'], axis=1)
         else:
             lex.drop(['concept', 'inactive'], axis=1)
-            lex = lex.rename(columns={'compositional_concept': 'concept'})
+            lex = lex.rename(columns={'compositional_concept': 'concept'})"""
         return lex
 
     # --------------------------- corpus_for_experiments ---------------------------

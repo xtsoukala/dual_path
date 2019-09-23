@@ -311,7 +311,6 @@ class Plotter:
                             if key in self.results:
                                 all_correct[aux] = ([x + y for x, y in zip(all_correct[aux], self.results[key]['test'])]
                                                     if all_correct[aux] != [] else self.results[key]['test'])
-                    print(all_correct, '------')
 
                     for cs_direction in ['', '_es_en']:
                         participle_switch_per_tense = []

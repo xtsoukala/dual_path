@@ -493,11 +493,10 @@ class InputFormatter:
                         if concept in self.identifiability:
                             weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
                                 self.fixed_identif
+                        elif concept in self.concepts:
+                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
                         elif concept not in ['COG', 'FF']:
-                            if concept in self.concepts:
-                                weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
-                            else:
-                                sys.exit(f"No concept found: {concept} ({message})")
+                            sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
                 weights_role_identif, event_sem_message)
 
@@ -577,7 +576,6 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
     all_simulation_keys = list(valid_results[0].keys())  # e.g., 'correct_code_switches', 'correct_sentences'
     all_simulation_keys.remove('type_code_switches')
     all_cs_types = extract_cs_keys(valid_results, set_names=evaluated_sets, strip_language_info=False)
-
     for key in all_simulation_keys + all_cs_types:
         results_sum[key] = {set_name: [] for set_name in evaluated_sets}
         for simulation in valid_results:  # go through all simulations
@@ -588,7 +586,10 @@ def compute_mean_and_std(valid_results, epochs, evaluated_sets):
                     else:  # fill with 0
                         results_sum[key][set_name].append([0] * epochs)
                 else:
-                    results_sum[key][set_name].append(simulation[key][set_name][:epochs])
+                    if key in simulation:
+                        results_sum[key][set_name].append(simulation[key][set_name][:epochs])
+                    else:
+                        results_sum[key][set_name].append([0] * epochs)
     # now compute MEAN and STANDARD ERROR of all simulations
     for key in results_sum.keys():
         for set_name in evaluated_sets:

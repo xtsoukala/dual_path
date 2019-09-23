@@ -1,20 +1,19 @@
 from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 main_dir = '../../simulations/'
-results_dir = main_dir + 'blc/haber'  # 50_h70_c60_fw10_e20'
-num_sim = 8
-epochs = 20
+results_dir = main_dir + '2019-09-23/09.11.33_esen_sim75_h100_c60_fw10_e30' #'2019-09-22/haber_blc_h100_c60_fw10_e30' #  '2019-09-20/haber_sim80_h70_c60_fw10_e30'  #
+num_sim = 32
+epochs = 30
 simulation_range = range(1, num_sim + 1)
 performance_threshold = 0
 test_name = 'test_aux.in'
 training_name = 'training.in'
-title = 'synonym'
+title = ''
 num_test_set = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{test_name}",
                                            shell=True).split()[0])
 num_train = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{training_name}",
                                         shell=True).split()[0])
 evaluated_sets = ('test',)
-
 # tener + haber + synonyms
 excluded_list = []  # [12, 21, 31, 32, 36, 42, 43, 57] + [1, 2, 5, 11, 54] + [2, 17, 20, 24, 31, 36, 43, 51, 54, 56]
 num_excluded = len(excluded_list)
@@ -31,6 +30,8 @@ for sim in simulation_range:  # read results from all simulations
     if os.path.isfile(f'{results_dir}/{sim}/results.pickled'):
         with lz4.open(f'{results_dir}/{sim}/results.pickled', 'rb') as f:
             all_results.append(pickle.load(f))
+    else:
+        print(f"No results file found for {sim}")
 
 if all_results:
     valid_results = []
@@ -63,25 +64,26 @@ if all_results:
                           test_sentences_with_pronoun=test_sentences_with_pronoun,
                           auxiliary_experiment=auxiliary_experiment, evaluated_datasets=evaluated_sets)
 
-        correct_progressive = 328.47
-        correct_perfect = 317.25
-        """print('means_aux', (results_mean_and_std['is_aux_es_en']['test'][-1],
-                            results_mean_and_std['has_aux_es_en']['test'][-1]),
-              'std_aux=', (results_mean_and_std['is_aux_es_en']['test-std_error'][-1],
-                           results_mean_and_std['has_aux_es_en']['test-std_error'][-1]),
-              'means_participle=', (results_mean_and_std['is_participle_es_en']['test'] * 100 / correct_progressive,
-                                    results_mean_and_std['has_participle_es_en']['test'] * 100 / correct_perfect),
-              'std_participle=', (results_mean_and_std['is_participle_es_en']['test-std_error'][-1],
-                                  results_mean_and_std['has_participle_es_en']['test-std_error'][-1]))"""
-        plot.simple_bar_plot(means_aux=(results_mean_and_std['is_aux_es_en']['test'][-1] * 100 / correct_progressive,
-                                        results_mean_and_std['has_aux_es_en']['test'][-1] * 100 / correct_perfect),
-                             std_aux=(
-                             results_mean_and_std['is_aux_es_en']['test-std_error'][-1] * 100 / correct_progressive,
-                             results_mean_and_std['has_aux_es_en']['test-std_error'][-1] * 100 / correct_perfect),
-                             means_participle=(
-                             results_mean_and_std['is_participle_es_en']['test'][-1] * 100 / correct_progressive,
-                             results_mean_and_std['has_participle_es_en']['test'][-1] * 100 / correct_perfect),
-                             std_participle=(results_mean_and_std['is_participle_es_en']['test-std_error'][-1] *
-                                             100 / correct_progressive,
-                                             results_mean_and_std['has_participle_es_en']['test-std_error'][-1] *
-                                             100 / correct_perfect))
+        if False:
+            correct_progressive = 328.47
+            correct_perfect = 317.25
+            """print('means_aux', (results_mean_and_std['is_aux_es_en']['test'][-1],
+                                results_mean_and_std['has_aux_es_en']['test'][-1]),
+                  'std_aux=', (results_mean_and_std['is_aux_es_en']['test-std_error'][-1],
+                               results_mean_and_std['has_aux_es_en']['test-std_error'][-1]),
+                  'means_participle=', (results_mean_and_std['is_participle_es_en']['test'] * 100 / correct_progressive,
+                                        results_mean_and_std['has_participle_es_en']['test'] * 100 / correct_perfect),
+                  'std_participle=', (results_mean_and_std['is_participle_es_en']['test-std_error'][-1],
+                                      results_mean_and_std['has_participle_es_en']['test-std_error'][-1]))"""
+            plot.simple_bar_plot(means_aux=(results_mean_and_std['is_aux_es_en']['test'][-1] * 100 / correct_progressive,
+                                            results_mean_and_std['has_aux_es_en']['test'][-1] * 100 / correct_perfect),
+                                 std_aux=(
+                                 results_mean_and_std['is_aux_es_en']['test-std_error'][-1] * 100 / correct_progressive,
+                                 results_mean_and_std['has_aux_es_en']['test-std_error'][-1] * 100 / correct_perfect),
+                                 means_participle=(
+                                 results_mean_and_std['is_participle_es_en']['test'][-1] * 100 / correct_progressive,
+                                 results_mean_and_std['has_participle_es_en']['test'][-1] * 100 / correct_perfect),
+                                 std_participle=(results_mean_and_std['is_participle_es_en']['test-std_error'][-1] *
+                                                 100 / correct_progressive,
+                                                 results_mean_and_std['has_participle_es_en']['test-std_error'][-1] *
+                                                 100 / correct_perfect))

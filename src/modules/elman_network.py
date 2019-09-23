@@ -15,6 +15,7 @@ def measure(func):
             return func(*args, **kwargs)
         finally:
             print(func.__name__, ':', (time() / 100) - start)
+
     return _time_it
 
 
@@ -42,7 +43,6 @@ class SimpleRecurrentNetwork:
         self.dir = rdir
         self.mse = defaultdict(list)
         self.divergence_error = defaultdict(list)
-        self.normal_distribution = torch.distributions.normal.Normal
 
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
@@ -72,12 +72,9 @@ class SimpleRecurrentNetwork:
                 self.layers = pickle.load(f)
         else:
             torch.manual_seed(simulation_num)  # set number of simulation as the seed
-            sd = 0.05  # or calculate according to input size (self.input_sd(layer.in_size) and move to the loop
-            # np.random.standard_normal has variance of 1 (too high) and np.random.uniform doesn't always have μ = 0
-            m = self.normal_distribution(0, sd)  # Using random weights with μ = 0 and low variance is CRUCIAL.
             for layer in self.layers.values():
-                # if layer.in_size:
-                layer.in_weights = m.sample([layer.in_size + int(layer.has_bias), layer.size])
+                layer.in_weights = torch.nn.init.xavier_normal_(torch.empty([layer.in_size + int(layer.has_bias),
+                                                                             layer.size]))
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
@@ -105,8 +102,6 @@ class SimpleRecurrentNetwork:
         self.set_context_activation("hidden", reset=True)
         for layer in self.backpropagated_layers:  # Also reset the previous delta values
             layer.previous_delta = empty([])
-        """"for layer_name in self.backpropagated_layers:  # Also reset the previous delta values
-            self.layers[layer_name].previous_delta = empty([])"""
 
         if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
             self.initialize_layer_activation("role_copy")
@@ -149,7 +144,7 @@ class SimpleRecurrentNetwork:
         for layer in self.feedforward_layers:
             # combines the activation of all previous layers (e.g. role and compress and... to hidden)
             layer.in_activation = cat([self.layers[incoming_layer_name].activation
-                                             for incoming_layer_name in layer.in_layer_names])
+                                       for incoming_layer_name in layer.in_layer_names])
             """for incoming_layer in layer.in_layers:
                 if (start_of_sentence and self.lesion_syntax and incoming_layer.name in self.syntactic_layers or
                         self.lesion_semantics and incoming_layer.name in self.semantic_layers):
@@ -185,11 +180,11 @@ class SimpleRecurrentNetwork:
     def convert_to_2d(tensor):
         return tensor[None, :]  # if len(tensor.size()) == 1
 
-    #@profile
+    # @profile
     def backpropagate(self):
         self.compute_output_error()
         for self.current_layer in self.backpropagated_layers:  # Propagate error back to the previous layers
-            #self.current_layer = self.layers[layer_name]
+            # self.current_layer = self.layers[layer_name]
             self._compute_current_layer_gradient()
             self._compute_current_delta_weight_matrix()
             self._update_total_error_for_backpropagation()
@@ -287,13 +282,6 @@ class SimpleRecurrentNetwork:
     @staticmethod
     def calculate_tensor_entropy(output_tensor):
         return str(entropy(output_tensor, base=None))
-
-    @staticmethod
-    def input_sd(number_of_inputs):
-        """
-        As pointed out by Chang: Haykin (1997, p.184) argues that you should initialize to sd = 1/number_of_inputs
-        """
-        return 1.0 / number_of_inputs
 
 
 class NeuronLayer:
