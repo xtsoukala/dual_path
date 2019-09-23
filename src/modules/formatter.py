@@ -286,15 +286,15 @@ class InputFormatter:
         if len(set(check_idx_pos)) > 1 and set(check_idx).issubset(out_sentence_idx):
             cs_type = f"alt. ({check_idx_pos[0]})"
         else:
-            print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indeces(out_sentence_idx)}")
+            print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
             sys.exit()
         return cs_type
 
-    def is_code_switched(self, sentence_indeces, target_lang_idx):
+    def is_code_switched(self, sentence_indices, target_lang_idx):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
-        # skip indeces that are common in all lang
-        clean_sentence = list(filter(lambda i: i not in self.shared_idx, sentence_indeces))
+        # skip indices that are common in all lang
+        clean_sentence = list(filter(lambda i: i not in self.shared_idx, sentence_indices))
         if not clean_sentence:
             return False  # empty sentence
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
@@ -304,8 +304,8 @@ class InputFormatter:
             return False
         return True
 
-    def check_switch_points(self, sentence_indeces, sentence_pos, pos_of_interest='aux'):
-        out_idx = repr(sentence_indeces)
+    def check_switch_points(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
+        out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.switch_points_cache)
         if not cache:
             # FIXME: current assumption: lexicon contains first EN and then ES words
@@ -316,22 +316,22 @@ class InputFormatter:
                 pos_idx = sentence_pos.index(pos_of_interest)
             if pos_idx:
                 # check switch before pos_of_interest
-                at = self.is_code_switched(sentence_indeces[:pos_idx + 1], target_lang_idx=sentence_indeces[0])
+                at = self.is_code_switched(sentence_indices[:pos_idx + 1], target_lang_idx=sentence_indices[0])
                 # check Spanish-to-English direction
-                at_esen = True if at and sentence_indeces[pos_idx] >= self.code_switched_idx else False
+                at_esen = True if at and sentence_indices[pos_idx] >= self.code_switched_idx else False
                 # check switch right after (e.g. between aux and participle)
-                right_after = self.is_code_switched(sentence_indeces[pos_idx:pos_idx + 2],
-                                                    target_lang_idx=sentence_indeces[pos_idx])
-                right_after_esen = (True if right_after and sentence_indeces[pos_idx] < self.code_switched_idx
+                right_after = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
+                                                    target_lang_idx=sentence_indices[pos_idx])
+                right_after_esen = (True if right_after and sentence_indices[pos_idx] < self.code_switched_idx
                                     else False)
                 # check switch at the end (e.g. after aux and participle)
-                after = self.is_code_switched(sentence_indeces[pos_idx + 1:pos_idx + 3],
-                                              target_lang_idx=sentence_indeces[pos_idx + 1])
-                after_esen = True if after and sentence_indeces[pos_idx + 1] < self.code_switched_idx else False
+                after = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
+                                              target_lang_idx=sentence_indices[pos_idx + 1])
+                after_esen = True if after and sentence_indices[pos_idx + 1] < self.code_switched_idx else False
 
-                after_anywhere = self.is_code_switched(sentence_indeces[pos_idx + 1:],
-                                                       target_lang_idx=sentence_indeces[pos_idx + 1])
-                after_anywhere_esen = (True if after_anywhere and sentence_indeces[pos_idx + 1] < self.code_switched_idx
+                after_anywhere = self.is_code_switched(sentence_indices[pos_idx + 1:],
+                                                       target_lang_idx=sentence_indices[pos_idx + 1])
+                after_anywhere_esen = (True if after_anywhere and sentence_indices[pos_idx + 1] < self.code_switched_idx
                                        else False)
             cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
                      after_esen, after_anywhere_esen)
@@ -340,7 +340,7 @@ class InputFormatter:
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
         """
-        Assumption: this doesn't check for shared indeces (period/congates) because they have already been stripped
+        Assumption: this doesn't check for shared indices (period/congates) because they have already been stripped
         """
         if (all(x >= self.code_switched_idx for x in [morpheme_idx, target_idx]) or
                 all(x < self.code_switched_idx for x in [morpheme_idx, target_idx])):
@@ -394,7 +394,7 @@ class InputFormatter:
         if not self.use_semantic_gender:
             df.message = df.message.str.replace(',(M|F);', ';', regex=True)
 
-        df['target_sentence_idx'] = df.target_sentence.apply(self.sentence_indeces)
+        df['target_sentence_idx'] = df.target_sentence.apply(self.sentence_indices)
         df['target_pos'] = df.target_sentence_idx.apply(self.sentence_pos)
         (event_sem_activations, target_lang_act, df['lang'], weights_role_concept, weights_role_identif,
          df['event_sem_message']) = zip_longest(*df.message.apply(self.get_message_info))
@@ -434,14 +434,14 @@ class InputFormatter:
         """
         return self.pos[word_idx]
 
-    def sentence_from_indeces(self, sentence_idx):
+    def sentence_from_indices(self, sentence_idx):
         """
-        :param sentence_idx: list with sentence indeces
+        :param sentence_idx: list with sentence indices
         :return: converts a list of idx into a sentence (string of words)
         """
         return " ".join(list(itemgetter(*sentence_idx)(self.lexicon)))
 
-    def sentence_indeces(self, sentence):
+    def sentence_indices(self, sentence):
         """
         :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walks'])
         :return: list of activations in the lexicon for the words above (e.g. [0, 4, 33]
@@ -513,7 +513,7 @@ class InputFormatter:
         return list(self.lexicon_index[x] for x in list(q) if is_not_nan(x))
 
     def find_equivalent_translation_idx(self, idx, lang):
-        # ignore shared indeces (cognates/period)
+        # ignore shared indices (cognates/period)
         if (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L1) or
                                             (lang == self.L2 and idx < self.code_switched_idx))):
             return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
@@ -521,7 +521,7 @@ class InputFormatter:
 
 
 def get_minimum_and_maximum_idx(clean_sentence):
-    return min(clean_sentence), max(clean_sentence)  # set with 2 indeces, min and max
+    return min(clean_sentence), max(clean_sentence)  # set with 2 indices, min and max
 
 
 def is_not_nan(x):

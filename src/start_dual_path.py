@@ -347,4 +347,4 @@ if __name__ == "__main__":
         f.write(f"Layers with softmax activation function: "
                 f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
                 f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
-                f"Indeces of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")
+                f"Indices of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")

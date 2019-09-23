@@ -359,7 +359,7 @@ class DualPath:
                             produced_idx = [self.inputs.haber_idx if x == self.inputs.tener_idx
                                             else x for x in produced_idx]
 
-                    produced_sentence = self.inputs.sentence_from_indeces(produced_idx)
+                    produced_sentence = self.inputs.sentence_from_indices(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
 
                     if False:  # debug specific sentence
@@ -367,9 +367,9 @@ class DualPath:
                         produced_sentence = 'él tiene comido .'
                         target_sentence = 'él ha comido .'
                         target_lang = 'es'
-                        produced_idx = self.inputs.sentence_indeces(produced_sentence)
+                        produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
-                        target_sentence_idx = self.inputs.sentence_indeces(target_sentence)
+                        target_sentence_idx = self.inputs.sentence_indices(target_sentence)
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
                     has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
