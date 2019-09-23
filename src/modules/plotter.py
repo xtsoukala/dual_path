@@ -50,8 +50,8 @@ class Plotter:
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst, ylabel, ylim,
-                                        fname, legend_loc='upper right'):
+    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst,
+                                        ylabel, ylim, fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
             if not isinstance(test_value, np.ndarray):

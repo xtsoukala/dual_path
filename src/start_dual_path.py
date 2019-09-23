@@ -6,31 +6,33 @@ from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean
                      Plotter, copy_files, datetime, training_is_successful, Process, cpu_count, round)
 
 
-def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
+def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
                                 auxiliary_experiment, simulation_number, randomize):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize:
-        l2_percentage = round(sets.random.normal(l2_percentage, 0.08), decimals=2)
-        print(f"Simulation {simulation_number}: L1 percentage: {1.-l2_percentage:.2}, "
-              f"L2 percentage: {l2_percentage}")
+        l2_decimal = round(sets.random.normal(l2_decimal, 0.08), decimals=2)
+        print(f"Simulation {simulation_number}: L1 decimal fraction: {1.-l2_decimal:.2}, "
+              f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
-        sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
+        sets.generate_for_cognate_experiment(num_training_sentences=training_num,
+                                             l2_decimal=l2_decimal)
     else:
         test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
-                                                       percentage_l2=l2_percentage)
+                                                       l2_decimal=l2_decimal)
         if auxiliary_experiment:
             sets.aux_experiment = True
-            sets.generate_auxiliary_experiment_sentences(training_set=training_set, percentage_l2=l2_percentage)
+            sets.generate_auxiliary_experiment_sentences(training_set=training_set,
+                                                         l2_decimal=l2_decimal)
 
 
-def calculate_testset_size(num_training, percentage_test_set=0.2):
+def calculate_testset_size(num_training, test_set_decimal=0.2):
     """
     :param num_training: Number of training sentences
-    :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
+    :param test_set_decimal: default: 0.2 (20%) of sentences are set aside for testing. (80%: training)
     :return: Number of sentences for training and test sets
     """
-    return int((num_training * 100 / 80) * percentage_test_set)
+    return int((num_training * 100 / 80) * test_set_decimal)
 
 
 def check_given_input_path(input_path):
@@ -51,15 +53,22 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
+    def decimal_fraction(x):
+        x = float(x)
+        if x > 1.0:
+            raise argparse.ArgumentTypeError(f"{x} is not allowed: the range is between 0.0 and 1.0")
+        return x
+
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=70)  # 110 100 80
+    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=100)
     parser.add_argument('--compress', '-c', help='Number of compress layer units. The size should be approximately 2/3 '
-                                                 'of the hidden one', type=positive_int, default=60)  # 70
+                                                 'of the hidden one', type=positive_int, default=70)
     parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
     parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
-    parser.add_argument('--l2_percentage', '--l2_perc', help='%% of L2 input', type=float, default=0.5)
+    parser.add_argument('--l2_decimal_fraction', help='Decimal fraction of L2 input (0.0-1.0)', type=decimal_fraction,
+                        default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
     parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
@@ -78,14 +87,14 @@ if __name__ == "__main__":
                         type=float, default=0.9)
     parser.add_argument('--set_weights', '--sw', default=None,
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('--set_weights_epoch', '--swe', type=int, default=0,
+    parser.add_argument('--set_weights_epoch', '--swe', type=positive_int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 10-20
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('--cognate_percentage', help='Amount of sentences with cognates in test/training sets',
-                        type=float, default=0.35)
+    parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
+                        type=decimal_fraction, default=0.35)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
     parser.add_argument('--title', help='Title for the plots')
@@ -95,7 +104,8 @@ if __name__ == "__main__":
                                                               '(0, number_of_simulations) you need to set the '
                                                               'sim_from and sim_to values')
     parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
-    parser.add_argument('--pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
+    parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
+                        help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
@@ -161,7 +171,7 @@ if __name__ == "__main__":
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
     parser.add_argument('--norandomization', dest='randomize', action='store_false',
-                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 percentage) '
+                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 decimal) '
                              'within a certain standard deviation. Using this flag deactivates this setting.')
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
@@ -173,7 +183,7 @@ if __name__ == "__main__":
     root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
     cognate_experiment = args.cognate_experiment
     training_num = args.generate_training_num
-    l2_percentage = args.l2_percentage
+    l2_decimal = args.l2_decimal_fraction
     auxiliary_experiment = args.auxiliary_experiment
 
     simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim)+1)
@@ -198,7 +208,7 @@ if __name__ == "__main__":
         args.auxiliary_experiment = True
 
     if args.auxiliary_experiment:
-        args.cognate_percentage = 0
+        args.cognate_decimal_fraction = 0
         args.activate_both_lang = True
         args.threshold = 30
         if not args.testset:
@@ -232,7 +242,7 @@ if __name__ == "__main__":
         logging.info(f"Generating input for {num_simulations} simulations using: {args.lexicon} (lexicon) "
                      f"and {args.structures} (structures)")
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
-                                   cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
+                                   cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos)
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
         # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
@@ -241,7 +251,7 @@ if __name__ == "__main__":
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_percentage, auxiliary_experiment, sim, args.randomize)))
+                                               num_test, l2_decimal, auxiliary_experiment, sim, args.randomize)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:

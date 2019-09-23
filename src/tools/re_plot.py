@@ -1,8 +1,8 @@
 from src.modules import Plotter, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 main_dir = '../../simulations/'
-results_dir = main_dir + '2019-09-23/09.11.33_esen_sim75_h100_c60_fw10_e30' #'2019-09-22/haber_blc_h100_c60_fw10_e30' #  '2019-09-20/haber_sim80_h70_c60_fw10_e30'  #
-num_sim = 32
+results_dir = main_dir + '2019-09-23/13.20.34_esen_sim75_h100_c60_fw10_e30' #'2019-09-22/haber_blc_h100_c60_fw10_e30' #  '2019-09-20/haber_sim80_h70_c60_fw10_e30'  #
+num_sim = 60
 epochs = 30
 simulation_range = range(1, num_sim + 1)
 performance_threshold = 0

@@ -44,7 +44,7 @@ class InputFormatter:
         self.event_sem_size = len(self.event_semantics)
         self.event_sem_index = dict(zip(self.event_semantics, range(self.event_sem_size)))
         self.prodrop = prodrop
-        self.emphasis_percentage = overt_pronouns
+        self.emphasis_decimal_fraction = overt_pronouns
         self.translation_cache = {}
         self.code_switched_type_cache = {}
         self.switch_points_cache = {}
@@ -384,9 +384,9 @@ class InputFormatter:
                          sep='##', engine='python')
         df.message = df.message.str.strip()  # strip whitespace
         if self.prodrop:  # TODO: make pro-drop
-            if self.emphasis_percentage > 0:  # keep pronoun if emphasized
+            if self.emphasis_decimal_fraction > 0:  # keep pronoun if emphasized
                 # find num of lines that are in ES. decide on num that will be emphasized:
-                number_emphasized = len([]) * self.emphasis_percentage / 100  # replace('AGENT=', 'AGENT=EMPH,')
+                number_emphasized = len([]) * self.emphasis_decimal_fraction  # replace('AGENT=', 'AGENT=EMPH,')
             else:
                 df.line = df.line.str.replace('(^| )(él|ella) ', ' ', regex=True)
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
