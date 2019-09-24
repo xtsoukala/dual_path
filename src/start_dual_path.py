@@ -7,7 +7,7 @@ from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
-                                auxiliary_experiment, simulation_number, randomize, messageless_fraction):
+                                auxiliary_experiment, simulation_number, randomize):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize:
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('--cognate_percentage', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
-    parser.add_argument('--messageless_fraction', help='Fraction of messageless sentences in training set',
+    parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
                         type=float, default=0)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
@@ -247,8 +247,7 @@ if __name__ == "__main__":
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_percentage, auxiliary_experiment, sim, args.randomize,
-                                               args.messageless_fraction)))
+                                               num_test, l2_percentage, auxiliary_experiment, sim, args.randomize)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -272,7 +271,7 @@ if __name__ == "__main__":
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
                                      test_haber_frequency=args.test_haber_frequency,
-                                     messageless_fraction=args.messageless_fraction)
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
 
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,

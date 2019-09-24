@@ -9,7 +9,7 @@ from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess, sy
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, monolingual_only,
-                 replace_haber_tener, test_haber_frequency, num_training, messageless_fraction):
+                 replace_haber_tener, test_haber_frequency, num_training, messageless_decimal_fraction):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
@@ -27,7 +27,7 @@ class InputFormatter:
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
         self.replace_haber_tener = replace_haber_tener
         self.test_haber_frequency = test_haber_frequency
-        self.messageless_fraction = messageless_fraction
+        self.messageless_decimal_fraction = messageless_decimal_fraction
         if use_word_embeddings:
             import word2vec
         self.use_word_embeddings = use_word_embeddings
@@ -114,11 +114,11 @@ class InputFormatter:
         self.weights_concept_role['test'] = [x.t() for x in self.weights_role_concept['test']]
         self.weights_identif_role['test'] = [x.t() for x in self.weights_role_identif['test']]
         
-        if self.messageless_fraction > 0:
+        if self.messageless_decimal_fraction:
             # Create a backup of training data with all messages
             os.system(f"mv {new_directory}/training.in {new_directory}/training_full.in")
             # Remove messages from randomly sampled fraction of sentences in training set
-            messageless_indices = self.trainlines_df.sample(frac=self.messageless_fraction).index.values    
+            messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values    
             self.trainlines_df.loc[messageless_indices,'message'] = ''
             # Can't use df.to_csv, because separater must be a 1-character string
             with open(f'{new_directory}/training.in', 'w') as f:
