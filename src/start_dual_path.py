@@ -6,40 +6,43 @@ from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean
                      Plotter, copy_files, datetime, training_is_successful, Process, cpu_count, round)
 
 
-def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_percentage,
+def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
                                 auxiliary_experiment, simulation_number, randomize):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize:
-        l2_percentage = round(sets.random.normal(l2_percentage, 0.09), decimals=2)
-        print(f"L1 percentage: {1.-l2_percentage}, L2 percentage: {l2_percentage}")
+        l2_decimal = round(sets.random.normal(l2_decimal, 0.08), decimals=2)
+        print(f"Simulation {simulation_number}: L1 decimal fraction: {1.-l2_decimal:.2}, "
+              f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
-        sets.generate_for_cognate_experiment(num_training_sentences=training_num, percentage_l2=l2_percentage)
+        sets.generate_for_cognate_experiment(num_training_sentences=training_num,
+                                             l2_decimal=l2_decimal)
     else:
         test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
-                                                       percentage_l2=l2_percentage)
+                                                       l2_decimal=l2_decimal)
         if auxiliary_experiment:
             sets.aux_experiment = True
-            sets.generate_auxiliary_experiment_sentences(training_set=training_set, percentage_l2=l2_percentage)
+            sets.generate_auxiliary_experiment_sentences(training_set=training_set,
+                                                         l2_decimal=l2_decimal)
 
 
-def calculate_testset_size(num_training, percentage_test_set=0.2):
+def calculate_testset_size(num_training, test_set_decimal=0.2):
     """
     :param num_training: Number of training sentences
-    :param percentage_test_set: default: 20% of sentences are set aside for testing. (80%: training)
+    :param test_set_decimal: default: 0.2 (20%) of sentences are set aside for testing. (80%: training)
     :return: Number of sentences for training and test sets
     """
-    return int((num_training * 100 / 80) * percentage_test_set)
+    return int((num_training * 100 / 80) * test_set_decimal)
 
 
 def check_given_input_path(input_path):
-    if not os.path.isfile(os.path.join(input_path, "test.in")) and 'input' not in input_path:
+    if not os.path.isfile(os.path.join(input_path, "test.in")) and '/input' not in input_path:
         corrected_dir = os.path.join(input_path, "input")  # the user may have forgotten to add the 'input' dir
         if os.path.exists(corrected_dir):
             input_path = corrected_dir
         else:
             sys.exit(f'No input folder found in the path ({input_path})')
-    logging.warning(f"Predefined input folder ({input_path}), will use that instead of generating a new set")
+    logging.info(f"Predefined input folder ({input_path}), will use that instead of generating a new set")
     return input_path
 
 
@@ -50,15 +53,22 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
+    def decimal_fraction(x):
+        x = float(x)
+        if x > 1.0:
+            raise argparse.ArgumentTypeError(f"{x} is not allowed: the range is between 0.0 and 1.0")
+        return x
+
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=70)  # 110 100 80
+    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=100)
     parser.add_argument('--compress', '-c', help='Number of compress layer units. The size should be approximately 2/3 '
-                                                 'of the hidden one', type=positive_int, default=60)  # 70
+                                                 'of the hidden one', type=positive_int, default=70)
     parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
                         type=positive_int, default=20)
     parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
-    parser.add_argument('--l2_percentage', '--l2_perc', help='%% of L2 input', type=float, default=0.5)
+    parser.add_argument('--l2_decimal_fraction', help='Decimal fraction of L2 input (0.0-1.0)', type=decimal_fraction,
+                        default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
     parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
@@ -77,13 +87,13 @@ if __name__ == "__main__":
                         type=float, default=0.9)
     parser.add_argument('--set_weights', '--sw', default=None,
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('--set_weights_epoch', '--swe', type=int, default=0,
+    parser.add_argument('--set_weights_epoch', '--swe', type=positive_int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 10-20
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('--cognate_percentage', help='Amount of sentences with cognates in test/training sets',
+    parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
     parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
                         type=float, default=0)
@@ -96,7 +106,8 @@ if __name__ == "__main__":
                                                               '(0, number_of_simulations) you need to set the '
                                                               'sim_from and sim_to values')
     parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
-    parser.add_argument('--pron', dest='overt_pronouns', type=int, default=0, help='Percentage of overt pronouns in es')
+    parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
+                        help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
@@ -121,9 +132,6 @@ if __name__ == "__main__":
     parser.set_defaults(gender=False)
     parser.add_argument('--monolingual', dest='monolingual', action='store_true', help='Do not include L2 lexicon')
     parser.set_defaults(monolingual=False)
-    parser.add_argument('--comb-sem', dest='simple_semantics', action='store_false',
-                        help='Produce combined concepts instead of simple ones (e.g., PARENT+M instead of FATHER)')
-    parser.set_defaults(simple_semantics=True)
     parser.add_argument('--noeval', dest='eval_test', action='store_false',
                         help='Do not evaluate test set')
     parser.set_defaults(eval_test=True)
@@ -149,12 +157,10 @@ if __name__ == "__main__":
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true',
                         help='Run auxiliary asymmetry experiment')
     parser.set_defaults(auxiliary_experiment=False)
-    parser.add_argument('--priming', dest='priming', action='store_true', help='Priming experiment')
-    parser.set_defaults(priming=False)
     parser.add_argument('--tener', dest='replace_haber', action='store_true',
                         help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
     parser.set_defaults(replace_haber=False)
-    parser.add_argument('--haber_frequency', dest='test_haber_frequency', action='store_true',
+    parser.add_argument('--synonym', dest='test_haber_frequency', action='store_true',
                         help='Run auxiliary asymmetry experiment making haber and tener perfect synonyms')
     parser.set_defaults(test_haber_frequency=False)
     parser.add_argument('--gender_error_experiment', dest='pronoun_experiment', action='store_true',
@@ -167,7 +173,7 @@ if __name__ == "__main__":
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
     parser.add_argument('--norandomization', dest='randomize', action='store_false',
-                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 percentage) '
+                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 decimal) '
                              'within a certain standard deviation. Using this flag deactivates this setting.')
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
@@ -179,7 +185,7 @@ if __name__ == "__main__":
     root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
     cognate_experiment = args.cognate_experiment
     training_num = args.generate_training_num
-    l2_percentage = args.l2_percentage
+    l2_decimal = args.l2_decimal_fraction
     auxiliary_experiment = args.auxiliary_experiment
 
     simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim)+1)
@@ -204,7 +210,7 @@ if __name__ == "__main__":
         args.auxiliary_experiment = True
 
     if args.auxiliary_experiment:
-        args.cognate_percentage = 0
+        args.cognate_decimal_fraction = 0
         args.activate_both_lang = True
         args.threshold = 30
         if not args.testset:
@@ -235,10 +241,10 @@ if __name__ == "__main__":
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
-        logging.warning(f"Using {args.lexicon} (lexicon) and {args.structures} (structures)")
+        logging.info(f"Generating input for {num_simulations} simulations using: {args.lexicon} (lexicon) "
+                     f"and {args.structures} (structures)")
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
-                                   use_simple_semantics=args.simple_semantics,
-                                   cognate_percentage=args.cognate_percentage, lexicon_csv=args.lexicon,
+                                   cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos)
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
         # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
@@ -247,7 +253,7 @@ if __name__ == "__main__":
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_percentage, auxiliary_experiment, sim, args.randomize)))
+                                               num_test, l2_decimal, auxiliary_experiment, sim, args.randomize)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -258,7 +264,7 @@ if __name__ == "__main__":
         del input_sets  # we no longer need it
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
-        logging.warning(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
+        logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
     with open(f'{results_dir}/commandline_args.txt', 'w') as f:
@@ -280,8 +286,7 @@ if __name__ == "__main__":
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
-                     auxiliary_experiment=args.auxiliary_experiment, priming_experiment=args.priming,
-                     only_evaluate=args.only_evaluate,
+                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
@@ -302,7 +307,6 @@ if __name__ == "__main__":
     num_test = dualp.inputs.num_test
 
     test_sentences_with_pronoun = dualp.inputs.test_sentences_with_pronoun
-    lexicon_size = dualp.inputs.lexicon_size
     layers_with_softmax = ', '.join([layer.name for layer in dualp.srn.backpropagated_layers
                                      if layer.activation_function == 'softmax'])
     del dualp
@@ -353,7 +357,7 @@ if __name__ == "__main__":
                             f"{Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test)}")
 
     with open(f"{results_dir}/results.log", 'w') as f:
-        f.write(f"Lexicon size:{lexicon_size}\nLayers with softmax activation function: "
+        f.write(f"Layers with softmax activation function: "
                 f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
                 f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
-                f"Indeces of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")
+                f"Indices of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")

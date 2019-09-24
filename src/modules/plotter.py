@@ -50,8 +50,8 @@ class Plotter:
         plt.savefig(self.get_plot_path(fname))
         plt.close()
 
-    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst, ylabel, ylim,
-                                        fname, legend_loc='upper right'):
+    def plot_multiple_changes_over_time(self, items_to_plot, test_percentage_lst, training_percentage_lst,
+                                        ylabel, ylim, fname, legend_loc='upper right'):
         for item_idx, item in enumerate(items_to_plot):
             test_value = self.percentage(self.results[item]['test'], test_percentage_lst[item_idx])
             if not isinstance(test_value, np.ndarray):
@@ -110,8 +110,8 @@ class Plotter:
             return max(result) + 5
         return max(result)
 
-    def plot_bar_chart_original(self, indeces, items_to_plot, legend, fname, label=None, only_last_epoch=False):
-        index_size = np.arange(len(indeces))
+    def plot_bar_chart_original(self, indices, items_to_plot, legend, fname, label=None, only_last_epoch=False):
+        index_size = np.arange(len(indices))
         fig, ax = plt.subplots()
         rects = []
         for i, item in enumerate(items_to_plot):
@@ -132,7 +132,7 @@ class Plotter:
         if legend:
             ax.legend(legend)
 
-        ax.set_xticklabels(indeces, rotation=55)  # rotate labels to fit better
+        ax.set_xticklabels(indices, rotation=55)  # rotate labels to fit better
         plt.tight_layout()  # make room for labels
         fname = f'{self.results_dir}/{self.summary_sim}_{fname}_cs.pdf'
         plt.savefig(fname)
@@ -159,21 +159,21 @@ class Plotter:
             new_label = 'pronoun'
         return new_label
 
-    def plot_alternational_insertional_switching(self, indeces, items_to_plot, legend, label='% of correct sentences',
+    def plot_alternational_insertional_switching(self, indices, items_to_plot, legend, label='% of correct sentences',
                                                  filename_suffix=None):
-        original_idx = list(indeces)
-        insertions = [x for x in indeces if not x.startswith('alt') and x != 'inter-sentential']
-        alternations = [x for x in indeces if x.startswith('alt')]
+        original_idx = list(indices)
+        insertions = [x for x in indices if not x.startswith('alt') and x != 'inter-sentential']
+        alternations = [x for x in indices if x.startswith('alt')]
         labels_full = ['adjective', 'auxiliary', 'determiner', 'noun', 'participle', 'preposition', 'verb']
         #index_size = np.arange(len(labels_full))
         fname = ['insertional', 'alternational']
-        for type, indeces in enumerate([insertions, alternations]):
+        for type, indices in enumerate([insertions, alternations]):
             fig, ax = plt.subplots()
             rects = []
             for i, item in enumerate(items_to_plot):
-                sorted_by_label = sorted(list(zip([self.rename_label(x) for x in indeces],
+                sorted_by_label = sorted(list(zip([self.rename_label(x) for x in indices],
                                                   [x for ind, x in enumerate(self.cs_results[item])
-                                                   if original_idx[ind] in indeces])))
+                                                   if original_idx[ind] in indices])))
                 labels = [x[0] for x in sorted_by_label]
                 index_size = np.arange(len(labels))
                 rects.append(ax.bar(index_size + self.bar_width * (i + 1), [x[1][0] for x in sorted_by_label],
@@ -270,7 +270,7 @@ class Plotter:
             # make sure there is still something to be plotted after the manipulations
             if self.cs_results['type_correct_test_last_epoch_es'] or self.cs_results['type_correct_last_epoch_test_en']:
                 self.plot_alternational_insertional_switching(label='CS types (% of correctly produced test set)',
-                                                              indeces=all_cs_types,
+                                                              indices=all_cs_types,
                                                               legend=('target lang: Spanish', 'target lang: English'),
                                                               items_to_plot=['type_correct_test_last_epoch_es',
                                                                              'type_correct_test_last_epoch_en'])
@@ -311,7 +311,6 @@ class Plotter:
                             if key in self.results:
                                 all_correct[aux] = ([x + y for x, y in zip(all_correct[aux], self.results[key]['test'])]
                                                     if all_correct[aux] != [] else self.results[key]['test'])
-                    print(all_correct, '------')
 
                     for cs_direction in ['', '_es_en']:
                         participle_switch_per_tense = []
@@ -391,7 +390,7 @@ class Plotter:
                             legend.append('FF')
                         self.plot_alternational_insertional_switching(label=f'CS types (% of {dataset_type} set - '
                                                                             f'last epoch)', legend=legend,
-                                                                      items_to_plot=items_to_plot, indeces=all_cs_types,
+                                                                      items_to_plot=items_to_plot, indices=all_cs_types,
                                                                       filename_suffix='type_cs_cognate_experiment_last_'
                                                                             f'epoch_{dataset_type}set')
                         # !------------ Now plot all CS types per epoch for COGNATE EXPERIMENT  ------------#

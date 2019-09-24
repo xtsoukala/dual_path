@@ -3,11 +3,10 @@ from . import pd, os, sys, is_not_nan, time, re, datetime, np
 
 
 class SetsGenerator:
-    def __init__(self, use_simple_semantics, allow_free_structure_production, cognate_percentage, monolingual_only,
+    def __init__(self, allow_free_structure_production, cognate_decimal, monolingual_only,
                  lang, lexicon_csv, structures_csv, input_dir=None, sim_results_dir=None, default_L2='en',
                  include_ff=False):
         """
-        :param use_simple_semantics:
         :param allow_free_structure_production:
         """
         self.allow_free_structure_production = allow_free_structure_production
@@ -16,10 +15,9 @@ class SetsGenerator:
         self.L1 = lang if len(lang) == 2 else lang[:2]  # take first 2 letters as L1
         self.L2 = None if len(lang) == 2 else lang[2:]
         self.random = np.random
-        self.cognate_percentage = cognate_percentage
+        self.cognate_decimal = cognate_decimal
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
-                                                 cognates=True if cognate_percentage > 0 else False,
-                                                 use_simple_semantics=use_simple_semantics)
+                                                 cognates=True if cognate_decimal > 0 else False)
         self.results_dir = sim_results_dir
         self.input_dir = input_dir
         if input_dir and not os.path.exists(input_dir):
@@ -45,36 +43,36 @@ class SetsGenerator:
         os.makedirs(results_dir)
         self.results_dir = results_dir
 
-    def generate_general(self, num_training, num_test, percentage_l2, cognates_experiment=False):
+    def generate_general(self, num_training, num_test, l2_decimal, cognates_experiment=False):
         """
         :param num_training: number of training sentences to be generated
-        :param percentage_l2: percentage of L2 (e.g., English) vs L1
+        :param l2_decimal: percentage of L2 (e.g., English) vs L1
         :param cognates_experiment: (if True) include cognates and ff only in training sets
         """
-        if len(self.lang) == 2 and percentage_l2 != 0:  # correct L2 percentage in monolingual setting
-            percentage_l2 = 0
+        if len(self.lang) == 2 and l2_decimal != 0:  # correct L2 percentage in monolingual setting
+            l2_decimal = 0
 
-        sentence_structures_train = self.generate_sentence_structures(num_training, percentage_l2=percentage_l2)
-        sentence_structures_test = self.generate_sentence_structures(num_test, percentage_l2=percentage_l2)
+        sentence_structures_train = self.generate_sentence_structures(num_training, l2_decimal=l2_decimal)
+        sentence_structures_test = self.generate_sentence_structures(num_test, l2_decimal=l2_decimal)
         # save only training set if we're selecting sentences for the cognate experiment
         test_fname = "test.in" if not cognates_experiment else None
         test_set = self.generate_sentences(sentence_structures_test, fname=test_fname,
                                            exclude_cognates=cognates_experiment,
-                                           max_cognate=0 if cognates_experiment else num_test * self.cognate_percentage)
+                                           max_cognate=0 if cognates_experiment else num_test * self.cognate_decimal)
         training_set = self.generate_sentences(sentence_structures_train, fname="training.in",
                                                exclude_test_sentences=test_set,
-                                               max_cognate=num_training * self.cognate_percentage)
+                                               max_cognate=num_training * self.cognate_decimal)
         assert num_test == len(test_set) and num_training == len(training_set)
         if self.input_dir_empty:
             self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
             self.save_lexicon_and_structures_to_csv()
         return test_set, training_set
 
-    def generate_auxiliary_experiment_sentences(self, training_set, percentage_l2, num_test_sentences=800):  # 1000
+    def generate_auxiliary_experiment_sentences(self, training_set, l2_decimal, num_test_sentences=800):
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
-                                                                           percentage_l2=percentage_l2)
+                                                                           l2_decimal=l2_decimal)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set,
-                                max_cognate=(num_test_sentences // 2) * self.cognate_percentage)
+                                max_cognate=(num_test_sentences // 2) * self.cognate_decimal)
 
     def replace_perfect_with_progressive(self, sentence, message):
         """
@@ -84,7 +82,7 @@ class SetsGenerator:
         """
         msg = message.replace('PERFECT', 'PROGRESSIVE')
         concept = re.search(';ACTION-LINKING=([A-Z]*);', msg).group(1)
-        lang = msg[-2:]#msg.split(',')[-1]
+        lang = msg[-2:]
         # look up progressive and perfect participles and replace
         res = self.lexicon_df.query(f"pos == 'participle' and concept == '{concept}'")
         progressive = res[f'morpheme_{lang}'].loc[res['aspect'] == 'progressive'].max()
@@ -95,20 +93,20 @@ class SetsGenerator:
     def get_random_row_idx(self, data_len):
         return self.random.randint(0, data_len) if data_len > 1 else 0
 
-    def generate_sentence_structures(self, num_sentences, percentage_l2, filtered_structures=None):
+    def generate_sentence_structures(self, num_sentences, l2_decimal, filtered_structures=None):
         """
         :param num_sentences: number of message/sentence pairs that need to be generated
-        :param percentage_l2: percentage of L2 structures
+        :param l2_decimal: Decimal fraction (0.0-1.0) of L2 structures
         :param filtered_structures: use given structures (that have been filtered before)
         :return:
         """
-        num_l2 = int(percentage_l2 * num_sentences)
+        num_l2 = int(l2_decimal * num_sentences)
         num_l1 = num_sentences - num_l2
 
         if filtered_structures is not None:
             pd.options.mode.chained_assignment = None   # it's otherwise impossible to get rid of SettingWithCopyWarning
             df = self.distribute_percentages_equally_if_not_set(filtered_structures)
-            percentage_l2 *= 100
+            percentage_l2 = l2_decimal * 100
             percentage_l1 = 100 - percentage_l2
             key = f'percentage_{self.L1}'
             existing_percentages = df[key].sum()
@@ -161,14 +159,14 @@ class SetsGenerator:
                 df.loc[:, key] = 100 / df.size
         return df
 
-    def generate_aux_perfect_sentence_structures(self, num_sentences, percentage_l2):
+    def generate_aux_perfect_sentence_structures(self, num_sentences, l2_decimal):
         """
         :param num_sentences: number of message/sentence pairs that need to be generated
-        :param percentage_l2: percentage of L2 structures
+        :param l2_decimal: decimal fraction of L2 structures
         :return:
         """
         aux_structures = self.structures_df[self.structures_df.message.str.contains("PERFECT")]
-        return self.generate_sentence_structures(num_sentences, percentage_l2, filtered_structures=aux_structures)
+        return self.generate_sentence_structures(num_sentences, l2_decimal, filtered_structures=aux_structures)
 
     def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=[],
                            exclude_cognates=False):
@@ -359,7 +357,7 @@ class SetsGenerator:
         return l1, l2
 
     @staticmethod
-    def get_clean_lexicon(lexicon_csv, false_friends, cognates, use_simple_semantics):
+    def get_clean_lexicon(lexicon_csv, false_friends, cognates):
         if not os.path.isfile(lexicon_csv):
             lexicon_csv = "src/%s" % lexicon_csv
         df = pd.read_csv(lexicon_csv, sep=',', header=0)  # first line is the header
@@ -369,18 +367,19 @@ class SetsGenerator:
         if not cognates:
             query.append("and is_cognate != 'Y'")
         lex = df.query(' '.join(query))
-        if use_simple_semantics:
+        """if use_simple_semantics:
             lex.drop(['compositional_concept', 'inactive'], axis=1)
         else:
             lex.drop(['concept', 'inactive'], axis=1)
-            lex = lex.rename(columns={'compositional_concept': 'concept'})
+            lex = lex.rename(columns={'compositional_concept': 'concept'})"""
         return lex
 
     # --------------------------- corpus_for_experiments ---------------------------
-    def generate_for_cognate_experiment(self, num_training_sentences, percentage_l2, include_ff=False, save_files=True):
+    def generate_for_cognate_experiment(self, num_training_sentences, l2_decimal, include_ff=False, save_files=True):
         # select cognate-free sentences
         original_test_set, original_training_set = self.generate_general(num_training=num_training_sentences,
-                                                                         percentage_l2=percentage_l2,
+                                                                         num_test=800,
+                                                                         l2_decimal=l2_decimal,
                                                                          cognates_experiment=True)
         # modify test set: replace one sentence per word with a cognate
         cognate_sets, replacement_idx = self.generate_replacement_test_sets(original_test_set)
