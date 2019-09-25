@@ -94,7 +94,9 @@ if __name__ == "__main__":
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
-                        type=decimal_fraction, default=0.35)
+                        type=float, default=0.35)
+    parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
+                        type=float, default=0)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
     parser.add_argument('--title', help='Title for the plots')
@@ -274,7 +276,8 @@ if __name__ == "__main__":
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
-                                     test_haber_frequency=args.test_haber_frequency)
+                                     test_haber_frequency=args.test_haber_frequency,
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
 
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
