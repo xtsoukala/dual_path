@@ -227,7 +227,7 @@ class SetsGenerator:
                                                                    exclude_cognates=exclude_cognates)
                 gender = self.get_df_gender(morpheme_df, prev_gender=gender)
                 sentence.append(morpheme_df.values[0])
-                if pos == 'pron':  # also need to choose a random concept -- only constraint: gender
+                if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender,
                                                                        exclude_cognates=exclude_cognates)
                 concept = self.get_df_concept(morpheme_df)
