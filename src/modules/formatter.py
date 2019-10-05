@@ -9,10 +9,14 @@ from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess, sy
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, monolingual_only,
-                 replace_haber_tener, test_haber_frequency, num_training, messageless_decimal_fraction):
+                 replace_haber_tener, test_haber_frequency, num_training, messageless_decimal_fraction,
+                 auxiliary_experiment, cognate_experiment):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.monolingual_only = monolingual_only
         self.L1, self.L2 = self.get_l1_and_l2(language)
+        self.languages = [self.L1]
+        if self.L2:
+            self.languages.append(self.L2)
         self.directory = directory  # folder that contains input files and where the results are saved
         self.root_directory = directory.replace('/input', '/')
         self.identifiability = self._read_file_to_list('identifiability.in')
@@ -56,15 +60,17 @@ class InputFormatter:
         self.fixed_weights = fixed_weights
         self.fixed_identif = fixed_weights_identif
         self.period_idx = self.lexicon_index['.']
+
         self.auxiliary_idx = self.df_query_to_idx("pos == 'aux'")
         self.to_prepositions_idx = self.df_query_to_idx("pos == 'prep'")
-        self.haber_idx = self.df_query_to_idx("morpheme_es == 'ha'", lang='es')[0]
-        self.tener_idx = self.df_query_to_idx("morpheme_es == 'tiene'", lang='es')[0]
+        self.haber_idx = self.df_query_to_idx("morpheme_es == 'ha'", lang='es')[0] if auxiliary_experiment else []
+        self.tener_idx = self.df_query_to_idx("morpheme_es == 'tiene'", lang='es')[0] if auxiliary_experiment else []
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
-        self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang='en')
-        self.false_friend_idx = self.df_query_to_idx("is_false_friend == 'Y'", lang='en')
+        self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang=self.L1) if cognate_experiment else []
+        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == 'Y'", lang=self.L1)
+                                 if cognate_experiment else [])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
         self.initialized_weights_role_identif = zeros(self.roles_size, self.identif_size)
@@ -365,7 +371,7 @@ class InputFormatter:
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
         info = defaultdict(list)
-        for lang in [self.L1, self.L2]:
+        for lang in self.languages:
             if lang:
                 column = self.lexicon_df[[f'morpheme_{lang}', 'pos',
                                           'concept', 'type']].dropna(subset=[f'morpheme_{lang}'])
@@ -521,7 +527,7 @@ class InputFormatter:
         if lang:
             languages = [f'morpheme_{lang}']
         else:
-            languages = ['morpheme_en', 'morpheme_es']
+            languages = [f'morpheme_{lang}' for lang in self.languages]
         q = self.lexicon_df.query(query)[languages].values.ravel()
         return list(self.lexicon_index[x] for x in list(q) if is_not_nan(x))
 

@@ -154,7 +154,10 @@ class SetsGenerator:
         return sentence_structures
 
     def distribute_percentages_equally_if_not_set(self, df):
-        for key in [f'percentage_{self.L1}', f'percentage_{self.L2}']:
+        keys = [f'percentage_{self.L1}']
+        if self.L2:
+            keys.append(f'percentage_{self.L2}')
+        for key in keys:
             if df[key].sum() == 0:
                 df.loc[:, key] = 100 / df.size
         return df
@@ -338,7 +341,10 @@ class SetsGenerator:
         if not os.path.isfile(structures_csv):
             structures_csv = "src/%s" % structures_csv
         df = pd.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
-        structures = df.query(f"percentage_{self.L1} != 0 and percentage_{self.L2} != 0")
+        query = f"percentage_{self.L1} != 0"
+        if self.L2:
+            query = f"{query} and percentage_{self.L2} != 0"
+        structures = df.query(query)
         keys = ['message']
         for l in [self.L1, self.L2]:
             if l:

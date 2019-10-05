@@ -10,7 +10,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
                                 auxiliary_experiment, simulation_number, randomize):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
-    if randomize:
+    if randomize and l2_decimal:
         l2_decimal = round(sets.random.normal(l2_decimal, 0.08), decimals=2)
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1.-l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
@@ -188,6 +188,9 @@ if __name__ == "__main__":
     l2_decimal = args.l2_decimal_fraction
     auxiliary_experiment = args.auxiliary_experiment
 
+    if args.monolingual or len(args.lang) == 2:
+        l2_decimal = 0
+
     simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim)+1)
     num_simulations = len(simulation_range)
     set_weights_epoch = args.set_weights_epoch
@@ -277,7 +280,8 @@ if __name__ == "__main__":
                                      use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
                                      replace_haber_tener=args.replace_haber,
                                      test_haber_frequency=args.test_haber_frequency,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction,
+                                     auxiliary_experiment=auxiliary_experiment, cognate_experiment=cognate_experiment)
 
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
