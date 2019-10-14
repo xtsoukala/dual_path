@@ -112,6 +112,8 @@ if __name__ == "__main__":
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
     parser.add_argument('--config', default=False, help='Read arguments from file')
+    parser.add_argument('--generator_timeout', type=positive_int, default=60,
+                        help="Number of seconds before the sentence generation process times out, defaults to 60 seconds")
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -248,7 +250,8 @@ if __name__ == "__main__":
                      f"and {args.structures} (structures)")
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
                                    cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
-                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos)
+                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos,
+                                  generator_timeout=args.generator_timeout)
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
         # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
         # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(sim) for sim in simulation_range)
