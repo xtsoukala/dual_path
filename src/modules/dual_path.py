@@ -89,17 +89,16 @@ class DualPath:
         logger.propagate = False  # no stdout to console
         logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
         if name in ['test', 'training']:
-            header = ("epoch, produced_sentence, target_sentence, is_grammatical, meaning, "
-                      "is_code_switched, switched_type")
+            header = "epoch,produced_sentence,target_sentence,is_grammatical,meaning,is_code_switched,switched_type"
             if self.auxiliary_experiment:
-                header += (",switched_at, switched_participle,switched_right_after, switched_after,switched_at_es_en,"
+                header += (",switched_at,switched_participle,switched_right_after,switched_after,switched_at_es_en,"
                            "switched_participle_es_en,switched_right_after_es_en, switched_after_es_en")
             if self.pronoun_experiment:
-                header += ",pronoun_error, pronoun_error_flex"
-            header += ", produced_pos, target_pos, correct_tense, correct_definiteness, message"
+                header += ",pronoun_error,pronoun_error_flex"
+            header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message"
         else:
-            header = "epoch, set_name, correct_meaning, correct_pos, total_sentences"
-        header += ", entropy"
+            header = "epoch,set_name,correct_meaning,correct_pos,total_sentences"
+        header += ",entropy"
         logger.info(header)
         return logger
 

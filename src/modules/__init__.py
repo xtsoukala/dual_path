@@ -18,7 +18,7 @@ from .formatter import (InputFormatter, compute_mean_and_std, extract_cs_keys, i
                         copy_files, training_is_successful)
 from .elman_network import SimpleRecurrentNetwork
 from .dual_path import DualPath
-from .plotter import Plotter
+from .plotter import Plotter, plt
 from .corpus_generator import SetsGenerator
 
 # if torch.cuda.is_available(): torch.set_default_tensor_type('torch.cuda.FloatTensor')

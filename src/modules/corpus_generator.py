@@ -46,6 +46,7 @@ class SetsGenerator:
     def generate_general(self, num_training, num_test, l2_decimal, cognates_experiment=False):
         """
         :param num_training: number of training sentences to be generated
+        :param num_test: number of test sentences
         :param l2_decimal: percentage of L2 (e.g., English) vs L1
         :param cognates_experiment: (if True) include cognates and ff only in training sets
         """
@@ -68,7 +69,10 @@ class SetsGenerator:
             self.save_lexicon_and_structures_to_csv()
         return test_set, training_set
 
-    def generate_auxiliary_experiment_sentences(self, training_set, l2_decimal, num_test_sentences=800):
+    def generate_auxiliary_experiment_sentences(self, training_set, l2_decimal, test_spanish_only=True,
+                                                num_test_sentences=750):
+        if test_spanish_only:
+            l2_decimal = 1.0 if self.L2 == 'es' else 0.0
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            l2_decimal=l2_decimal)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set,
@@ -104,7 +108,7 @@ class SetsGenerator:
         num_l1 = num_sentences - num_l2
 
         if filtered_structures is not None:
-            pd.options.mode.chained_assignment = None   # it's otherwise impossible to get rid of SettingWithCopyWarning
+            pd.options.mode.chained_assignment = None  # it's otherwise impossible to get rid of SettingWithCopyWarning
             df = self.distribute_percentages_equally_if_not_set(filtered_structures)
             percentage_l2 = l2_decimal * 100
             percentage_l1 = 100 - percentage_l2
@@ -122,35 +126,27 @@ class SetsGenerator:
         else:
             df = self.distribute_percentages_equally_if_not_set(self.structures_df)
 
-        occurances = [int(x) for x in df[f'percentage_{self.L1}'] * num_l1 / 100]
-        sentence_structures = df[['message', self.L1]].values.repeat(occurances, axis=0)
-        structures_missing = num_l1 - len(sentence_structures)
-        if structures_missing > 0:
-            sentence_structures = np.append(sentence_structures,
-                                            df[['message', self.L1]].sample(n=structures_missing, replace=True), axis=0)
-        elif structures_missing < 0:
-            sentence_structures = np.delete(sentence_structures,
-                                            self.random.randint(len(sentence_structures),
-                                                                size=abs(structures_missing)), axis=0)
-        sentence_structures[:, 0] += f';TARGET-LANG={self.L1}'  # append language code at the end
-
+        sentence_structures = self.structures_per_lang_and_occurrance(df, num_l1, self.L1)
         if num_l2:  # repeat the procedure for L2
-            occurances = [int(x) for x in df[f'percentage_{self.L2}'] * num_l2 / 100]
-            sentence_structures_l2 = df[['message', self.L2]].values.repeat(occurances, axis=0)
-            structures_missing = num_l2 - len(sentence_structures_l2)
-            if structures_missing > 0:
-                sentence_structures_l2 = np.append(sentence_structures_l2,
-                                                   df[['message', self.L2]].sample(n=structures_missing,
-                                                                                   replace=True), axis=0)
-            elif structures_missing < 0:
-                sentence_structures_l2 = np.delete(sentence_structures_l2,
-                                                   self.random.randint(len(sentence_structures_l2),
-                                                                       size=abs(structures_missing)), axis=0)
-            sentence_structures_l2[:, 0] += f';TARGET-LANG={self.L2}'  # append language code at the end
+            sentence_structures_l2 = self.structures_per_lang_and_occurrance(df, num_l2, self.L2)
             sentence_structures = np.append(sentence_structures, sentence_structures_l2, axis=0)
 
         assert num_sentences == len(sentence_structures)
         self.random.shuffle(sentence_structures)
+        return sentence_structures
+
+    def structures_per_lang_and_occurrance(self, df, num_total, lang):
+        occurrences = [int(x) for x in df[f'percentage_{lang}'] * num_total / 100]
+        sentence_structures = df[['message', lang]].values.repeat(occurrences, axis=0)
+        structures_missing = num_total - len(sentence_structures)
+        if structures_missing > 0:
+            sentence_structures = np.append(sentence_structures,
+                                            df[['message', lang]].sample(n=structures_missing, replace=True), axis=0)
+        elif structures_missing < 0:
+            sentence_structures = np.delete(sentence_structures,
+                                            self.random.randint(len(sentence_structures), size=abs(structures_missing)),
+                                            axis=0)
+        sentence_structures[:, 0] += f';TARGET-LANG={lang}'  # append language code at the end
         return sentence_structures
 
     def distribute_percentages_equally_if_not_set(self, df):
@@ -171,7 +167,7 @@ class SetsGenerator:
         aux_structures = self.structures_df[self.structures_df.message.str.contains("PERFECT")]
         return self.generate_sentence_structures(num_sentences, l2_decimal, filtered_structures=aux_structures)
 
-    def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=[],
+    def generate_sentences(self, sentence_structures, fname, max_cognate, exclude_test_sentences=None,
                            exclude_cognates=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
@@ -237,7 +233,7 @@ class SetsGenerator:
                     next_pos = pos_list[i + 1] if i + 1 < len(pos_list) else None
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
             sentence = u'%s .' % ' '.join(sentence)
-            message = ";".join(message)  # .upper()
+            message = ";".join(message)
             sentence_is_unique = self.sentence_is_unique(message, exclude_test_sentences, generated_pairs)
             if replace_aux_sentences and sentence_is_unique:
                 prog_sentence, prog_msg = self.replace_perfect_with_progressive(sentence=sentence, message=message)
@@ -310,9 +306,11 @@ class SetsGenerator:
         return selected
 
     def save_lexicon_and_structures_to_csv(self):
-        # Matches strings between ;EVENT-SEM= or , E.g., 'PROGRESSIVE', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
-        # "?" is necessary for multiple matches
-        # AGENT=;AGENT-MOD=;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE-MOD
+        """
+        Matches strings between ;EVENT-SEM= or , E.g.: AGENT=;AGENT-MOD=;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE
+        "?" is necessary for multiple matches
+        :return: e.g., 'PROGRESSIVE', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
+        """
         if not os.listdir(self.input_dir):
             # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
             event_semantics = []
@@ -373,11 +371,6 @@ class SetsGenerator:
         if not cognates:
             query.append("and is_cognate != 'Y'")
         lex = df.query(' '.join(query))
-        """if use_simple_semantics:
-            lex.drop(['compositional_concept', 'inactive'], axis=1)
-        else:
-            lex.drop(['concept', 'inactive'], axis=1)
-            lex = lex.rename(columns={'compositional_concept': 'concept'})"""
         return lex
 
     # --------------------------- corpus_for_experiments ---------------------------
@@ -455,7 +448,7 @@ class SetsGenerator:
     @staticmethod
     def remove_roles_from_event_semantics(msg_str):
         for event in msg_str.split("EVENT-SEM=")[1].split(','):
-            if ':' in event:   # the user has the option to set the activation, e.g.: 'PATIENT:0.7,AGENT:0.9'
+            if ':' in event:  # the user has the option to set the activation, e.g.: 'PATIENT:0.7,AGENT:0.9'
                 core_event = event.split(':')[0]
             else:
                 core_event = event
@@ -494,7 +487,8 @@ class SetsGenerator:
 
     @staticmethod
     def sentence_is_unique(message, exclude_test_sentences, generated_pairs):
-        if message in ([x[1] for x in exclude_test_sentences + generated_pairs]):
+        message_sentence_pairs = generated_pairs + exclude_test_sentences if exclude_test_sentences else generated_pairs
+        if message in ([x[1] for x in message_sentence_pairs]):
             return False
         return True
 
