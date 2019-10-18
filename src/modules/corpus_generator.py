@@ -5,7 +5,7 @@ from . import pd, os, sys, is_not_nan, time, re, datetime, np
 class SetsGenerator:
     def __init__(self, allow_free_structure_production, cognate_decimal, monolingual_only,
                  lang, lexicon_csv, structures_csv, input_dir=None, sim_results_dir=None, default_L2='en',
-                 include_ff=False):
+                 include_ff=False, generator_timeout=60):
         """
         :param allow_free_structure_production:
         """
@@ -36,6 +36,7 @@ class SetsGenerator:
         self.target_lang = [self.L1, L2] if not monolingual_only else [self.L1]
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
+        self.generator_timeout = generator_timeout
 
     def set_new_results_dir(self, results_dir):
         if os.path.isdir(results_dir):  # if this folder name exists already add a timestamp at the end
@@ -183,8 +184,8 @@ class SetsGenerator:
         remaining_structures = sentence_structures
         time_start = time.time()
         while len(remaining_structures):  # while loop needed because of the unique sentence restriction
-            if time.time() - time_start > 60:
-                sys.exit("The process timed out (limit: 60s). Remaining structures: "
+            if time.time() - time_start > self.generator_timeout:
+                sys.exit(f"The process timed out (limit: {self.generator_timeout}s). Remaining structures: "
                          f"{len(remaining_structures)} more structures: {set(remaining_structures)} "
                          f"(total: {len(sentence_structures)}).")
             remaining_structures, generated_pairs, max_cognate = self.structures_to_sentences(remaining_structures,
@@ -223,7 +224,7 @@ class SetsGenerator:
                                                                    exclude_cognates=exclude_cognates)
                 gender = self.get_df_gender(morpheme_df, prev_gender=gender)
                 sentence.append(morpheme_df.values[0])
-                if pos == 'pron':  # also need to choose a random concept -- only constraint: gender
+                if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender,
                                                                        exclude_cognates=exclude_cognates)
                 concept = self.get_df_concept(morpheme_df)
