@@ -8,7 +8,7 @@ sys.path.append('..')
 from modules import Plotter, plt, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
 
 
-def re_plot(results_directory='2019-10-18/tener_sim70_e30', num_sim=60, epochs=30, performance_threshold=0, title=None,
+def re_plot(results_directory, num_sim=60, epochs=40, performance_threshold=0, title=None,
             test_name='test_aux.in', training_name='training.in'):
     results_dir = '../../simulations/' + results_directory
     simulation_range = range(1, num_sim + 1)
@@ -18,10 +18,10 @@ def re_plot(results_directory='2019-10-18/tener_sim70_e30', num_sim=60, epochs=3
                                             shell=True).split()[0])
     evaluated_sets = ('test',)
     # tener + haber + synonyms
-    excluded_list = []  # [12, 21, 31, 32, 36, 42, 43, 57] + [1, 2, 5, 11, 54] + [2, 17, 20, 24, 31, 36, 43, 51, 54, 56]
+    excluded_list = []
     num_excluded = len(excluded_list)
     edited_dir = (f'{results_dir}/edited_t{performance_threshold}_e{epochs}_sim{num_sim}'
-                  f'{"_excluded{num_excluded}" if excluded_list else ""}')
+                  f'{f"_excluded{num_excluded}" if excluded_list else ""}')
     os.makedirs(edited_dir, exist_ok=True)
 
     cognate_experiment = False

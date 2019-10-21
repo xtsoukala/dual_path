@@ -345,7 +345,7 @@ class Plotter:
                                                         fname=f'participle_per_aspect{cs_direction}',
                                                         results=participle_switch_per_tense)
                             # for paper:
-                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=35,
+                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=6,
                                                         fname=f'participle{cs_direction}',
                                                         results=participle_switch_per_tense)
                             plot_label = ''  # auxiliary switches (% of correctly produced per aspect)'
