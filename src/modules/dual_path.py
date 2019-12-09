@@ -103,12 +103,16 @@ class DualPath:
         return logger
 
     def initialize_srn(self):
+        if not self.compress_size:
+            compress_size = int(self.hidden_size // 1.3)
+        else:
+            compress_size = self.compress_size
         # Chang: The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size)  # tried softmax with fw == 1, it didn't work.
-        self.srn.add_layer("compress", self.compress_size)
+        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")  # tried softmax with fw == 1, it didn't work.
+        self.srn.add_layer("compress", compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", self.inputs.num_languages)
         if self.separate_hidden_layers:
@@ -121,7 +125,7 @@ class DualPath:
         self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
         self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("pred_compress", self.compress_size)
+        self.srn.add_layer("pred_compress", compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
         # Connect layers
@@ -189,7 +193,7 @@ class DualPath:
                 # reset the target language for the rest of the sentence (during testing only!)
                 if activate_target_lang and prod_idx is None and self.activate_both_lang:
                     # TODO: play with activations, e.g. activate the target language slightly more
-                    # ones or: [1, 0.9] if self.inputs.languages.index(lang) == 0 else [0.9, 1]
+                    # ones or: [1, 0.9] if self.inputs.target_lang.index(lang) == 0 else [0.9, 1]
                     self.srn.set_layer_activation("target_lang", activation=ones(2))
                 if False:  # include entropy
                     prod_idx, entropy_idx = self.srn.get_max_output_activation_and_entropy()
@@ -222,10 +226,13 @@ class DualPath:
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
             self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
-            self.compress_size = int(self.hidden_size // 1.3)
+            self.compress_size = (random.randint(self.compress_size-10, self.compress_size+10)
+                                  if self.compress_size else int(self.hidden_size // 1.3))
             self.srn.fw = random.randint(10, 20)
+            if self.set_weights_epoch:
+                self.set_weights_epoch = random.randint(self.set_weights_epoch-2, self.set_weights_epoch+2)
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.srn.fw}")
+                  f"fw: {self.srn.fw}, starting weight epoch: {self.set_weights_epoch}")
             self.initialize_srn()
 
         if set_existing_weights:
@@ -248,7 +255,7 @@ class DualPath:
             target_lang_act = self.inputs.target_lang_act['training']
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
-            epoch_range = range(self.starting_epoch, self.epochs)
+            epoch_range = range(self.starting_epoch, self.epochs+1)
             for epoch in epoch_range:
                 self.srn.save_weights(directory, epoch)
                 # threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
@@ -265,7 +272,8 @@ class DualPath:
                     elif self.srn.learn_rate != self.final_lrate:
                         self.srn.learn_rate = self.final_lrate
                 # print('loop', time.time() - times, self.srn.learn_rate)
-            threading.Thread(target=self.srn.save_weights, args=(directory, epoch_range[-1]), daemon=True).start()
+            self.srn.save_weights(directory, epoch_range[-1])
+            #threading.Thread(target=self.srn.save_weights, args=(directory, epoch_range[-1]), daemon=True).start()
 
         set_names = set()
         if self.evaluate_training_set:
@@ -334,7 +342,7 @@ class DualPath:
                 results["%s_cs" % i] = {set_name: [] for set_name in set_names}
             logger = self.test_logger if 'test' in set_name else self.training_logger
             buffer_to_produce = [None] * 2
-            for epoch in range(self.epochs):
+            for epoch in range(self.epochs+1):
                 counter = defaultdict(int)
                 counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)
@@ -497,7 +505,7 @@ class DualPath:
         all_keys = sorted(set().union(*(d.keys() for d in results_type_code_switches)))
         for key in all_keys:
             val = []
-            for epoch in range(epochs):
+            for epoch in range(epochs+1):
                 v = results_type_code_switches[epoch][key] if key in results_type_code_switches[epoch] else 0
                 val.append(v)
             types_dict[key] = val

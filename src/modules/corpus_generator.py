@@ -3,17 +3,13 @@ from . import pd, os, sys, is_not_nan, time, re, datetime, np
 
 
 class SetsGenerator:
-    def __init__(self, allow_free_structure_production, cognate_decimal, monolingual_only,
-                 lang, lexicon_csv, structures_csv, input_dir=None, sim_results_dir=None, default_L2='en',
-                 include_ff=False, generator_timeout=60):
+    def __init__(self, allow_free_structure_production, cognate_decimal, lang, lexicon_csv, structures_csv,
+                 input_dir=None, sim_results_dir=None, include_ff=False, generator_timeout=60):
         """
         :param allow_free_structure_production:
         """
         self.allow_free_structure_production = allow_free_structure_production
-        self.lang = lang
-        self.ALL = []
-        self.L1 = lang if len(lang) == 2 else lang[:2]  # take first 2 letters as L1
-        self.L2 = None if len(lang) == 2 else lang[2:]
+        self.L = self.get_languages_with_idx(lang)
         self.random = np.random
         self.cognate_decimal = cognate_decimal
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv, false_friends=include_ff,
@@ -32,11 +28,13 @@ class SetsGenerator:
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
         self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=;)')[1].unique()  # AGENT etc
         self.df_cache = {}
-        L2 = self.L2 if self.L2 is not None else default_L2
-        self.target_lang = [self.L1, L2] if not monolingual_only else [self.L1]
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
         self.generator_timeout = generator_timeout
+
+    @staticmethod
+    def get_languages_with_idx(languages):
+        return {k + 1: v for k, v in enumerate(languages)}
 
     def set_new_results_dir(self, results_dir):
         if os.path.isdir(results_dir):  # if this folder name exists already add a timestamp at the end
@@ -51,7 +49,7 @@ class SetsGenerator:
         :param l2_decimal: percentage of L2 (e.g., English) vs L1
         :param cognates_experiment: (if True) include cognates and ff only in training sets
         """
-        if len(self.lang) == 2 and l2_decimal != 0:  # correct L2 percentage in monolingual setting
+        if len(self.L) == 1 and l2_decimal != 0:  # correct L2 percentage in monolingual setting
             l2_decimal = 0
 
         sentence_structures_train = self.generate_sentence_structures(num_training, l2_decimal=l2_decimal)
@@ -73,7 +71,7 @@ class SetsGenerator:
     def generate_auxiliary_experiment_sentences(self, training_set, l2_decimal, test_spanish_only=True,
                                                 num_test_sentences=750):
         if test_spanish_only:
-            l2_decimal = 1.0 if self.L2 == 'es' else 0.0
+            l2_decimal = 1.0 if self.L[2] == 'es' else 0.0
         perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
                                                                            l2_decimal=l2_decimal)
         self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set,
@@ -113,13 +111,13 @@ class SetsGenerator:
             df = self.distribute_percentages_equally_if_not_set(filtered_structures)
             percentage_l2 = l2_decimal * 100
             percentage_l1 = 100 - percentage_l2
-            key = f'percentage_{self.L1}'
+            key = f'percentage_{self.L[1]}'
             existing_percentages = df[key].sum()
             if existing_percentages != percentage_l1:
                 # df.loc[:, key] = df[key] * percentage_l1 / existing_percentages
                 df.loc[:, key] *= percentage_l1 / existing_percentages
             if percentage_l2:
-                key = f'percentage_{self.L2}'
+                key = f'percentage_{self.L[2]}'
                 existing_percentages = df[key].sum()
                 if existing_percentages != percentage_l2:
                     # df.loc[:, key] = df[key] * percentage_l2 / existing_percentages
@@ -127,9 +125,9 @@ class SetsGenerator:
         else:
             df = self.distribute_percentages_equally_if_not_set(self.structures_df)
 
-        sentence_structures = self.structures_per_lang_and_occurrance(df, num_l1, self.L1)
+        sentence_structures = self.structures_per_lang_and_occurrance(df, num_l1, self.L[1])
         if num_l2:  # repeat the procedure for L2
-            sentence_structures_l2 = self.structures_per_lang_and_occurrance(df, num_l2, self.L2)
+            sentence_structures_l2 = self.structures_per_lang_and_occurrance(df, num_l2, self.L[2])
             sentence_structures = np.append(sentence_structures, sentence_structures_l2, axis=0)
 
         assert num_sentences == len(sentence_structures)
@@ -151,9 +149,9 @@ class SetsGenerator:
         return sentence_structures
 
     def distribute_percentages_equally_if_not_set(self, df):
-        keys = [f'percentage_{self.L1}']
-        if self.L2:
-            keys.append(f'percentage_{self.L2}')
+        keys = [f'percentage_{self.L[1]}']
+        if 2 in self.L:  # if there is an L2
+            keys.append(f'percentage_{self.L[2]}')
         for key in keys:
             if df[key].sum() == 0:
                 df.loc[:, key] = 100 / df.size
@@ -300,8 +298,6 @@ class SetsGenerator:
         if not cache_size:
             sys.exit(f"Empty cache: {params} {cache} {query if query else ''}")  # throw an error if cache is empty
         idx = self.get_random_row_idx(cache_size)
-        if 'noun:animate' in pos:
-            self.ALL.append(idx)
         selected = cache[[f'morpheme_{lang}', 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
                           'is_cognate', 'is_false_friend']].iloc[idx]
         return selected
@@ -323,7 +319,6 @@ class SetsGenerator:
                         event_semantics.append(evsem)
             self.list_to_file("event_semantics", event_semantics)
             self.list_to_file("identifiability", self.identifiability)
-            self.list_to_file("target_lang", set(self.target_lang))
             self.list_to_file("roles", self.roles)
             self.list_to_file("concepts", self.concepts)
             self.lexicon_df.to_csv('%s/lexicon.csv' % self.input_dir, encoding='utf-8', index=False)
@@ -334,31 +329,32 @@ class SetsGenerator:
             f.write("%s" % "\n".join(content))
 
     def get_determiners_from_lexicon(self):
-        return pd.unique(self.lexicon_df.query("pos == 'det'")[['morpheme_en', 'morpheme_es']].values.ravel())
+        #return pd.unique(self.lexicon_df.query("pos == 'det'")[['morpheme_en', 'morpheme_es']].values.ravel())
+        return pd.unique(self.lexicon_df.query("pos == 'det'")[[f'morpheme_{l}'
+                                                                for l in self.L.values()]].values.ravel())
 
     def get_structures(self, structures_csv, sep=","):
         if not os.path.isfile(structures_csv):
             structures_csv = "src/%s" % structures_csv
         df = pd.read_csv(structures_csv, sep=sep, header=0)  # first line is the header
-        query = f"percentage_{self.L1} != 0"
-        if self.L2:
-            query = f"{query} and percentage_{self.L2} != 0"
+        query = f"percentage_{self.L[1]} != 0"
+        if 2 in self.L:  # if there is an L2
+            query = f"{query} and percentage_{self.L[2]} != 0"
         structures = df.query(query)
         keys = ['message']
-        for l in [self.L1, self.L2]:
-            if l:
-                keys.append(l)
-                keys.append(f'percentage_{l}')
+        for l in self.L.values():
+            keys.append(l)
+            keys.append(f'percentage_{l}')
         df = structures[keys]
         if self.allow_free_structure_production:
             df.message = df.message.map(lambda a: self.remove_roles_from_event_semantics(a))
         return df
 
     def get_num_structures_per_language(self):
-        l1 = self.structures_df[self.L1].count()
+        l1 = self.structures_df[self.L[1]].count()
         l2 = None
-        if self.L2:
-            l2 = self.structures_df[self.L2].count()
+        if 2 in self.L:  # if there is an L2
+            l2 = self.structures_df[self.L[2]].count()
         return l1, l2
 
     @staticmethod

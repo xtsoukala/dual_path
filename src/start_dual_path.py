@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import json
 import argparse
-from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath,
-                     Plotter, copy_files, datetime, training_is_successful, Process, cpu_count, round)
+from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter,
+                     copy_files, datetime, training_is_successful, Process, cpu_count, round, re)
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
@@ -12,7 +12,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize and l2_decimal:
         l2_decimal = round(sets.random.normal(l2_decimal, 0.08), decimals=2)
-        print(f"Simulation {simulation_number}: L1 decimal fraction: {1.-l2_decimal:.2}, "
+        print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
         sets.generate_for_cognate_experiment(num_training_sentences=training_num,
@@ -53,6 +53,7 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
+
     def decimal_fraction(x):
         x = float(x)
         if x > 1.0:
@@ -61,25 +62,25 @@ if __name__ == "__main__":
 
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=100)
+    parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=80)
     parser.add_argument('--compress', '-c', help='Number of compress layer units. The size should be approximately 2/3 '
-                                                 'of the hidden one', type=positive_int, default=70)
-    parser.add_argument('--epochs', '--total_epochs', help='Number of training set iterations during (total) training.',
-                        type=positive_int, default=20)
-    parser.add_argument('--l2_epochs', '--l2e', help='# of epoch when L2 input gets introduced', type=positive_int)
+                                                 'of the hidden one', type=positive_int)
+    parser.add_argument('--epochs', type=positive_int, default=20,
+                        help='Number of total training set iterations during (full) training.')
+    parser.add_argument('--l2_epochs', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('--l2_decimal_fraction', help='Decimal fraction of L2 input (0.0-1.0)', type=decimal_fraction,
                         default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
-    """ input-related arguments; some are redundant as all the user needs to specify is the input folder """
+    """ input-related arguments. Some are redundant: all the user needs to specify is the input folder """
     parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
     parser.add_argument('--structures', help='CSV file that contains the structures')
-    parser.add_argument('--trainingset', '--training', help='File name that contains the message-sentence pair for '
-                                                            'training.', default="training.in")
-    parser.add_argument('--testset', '--test', help='Test set file name')
-    parser.add_argument('--resdir', '-r', help='Prefix of results folder name; will be stored under folder '
-                                               '"simulations" and a timestamp will be added')
-    parser.add_argument('--lang', help='In case we want to generate a new set, we need to specify the language (en, es '
-                                       'or any combination [enes, esen] for bilingual)', default='esen', type=str.lower)
+    parser.add_argument('--trainingset', '--training', default="training.in",
+                        help='File name that contains the message-sentence pair for training.')
+    parser.add_argument('--testset', help='Test set file name')
+    parser.add_argument('--languages', help='To generate a new set, specify the language (en, es or any combination '
+                                            '[enes, esen] for bilingual)', nargs='*', default='es en', type=str.lower)
+    parser.add_argument('--target_lang', nargs='*', help='Values for the target language node. It may differ from the '
+                                                         'input languages (e.g., lang=en but target_lang=en es)')
     parser.add_argument('--lrate', help='Learning rate', type=float, default=0.10)
     parser.add_argument('--final_lrate', '--flrate', type=float, default=0.02,
                         help='Final learning rate after linear decrease. If not set, rate does not decrease')
@@ -95,6 +96,8 @@ if __name__ == "__main__":
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.35)
+    parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
+                        help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
                         type=float, default=0)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
@@ -106,14 +109,12 @@ if __name__ == "__main__":
                                                               '(0, number_of_simulations) you need to set the '
                                                               'sim_from and sim_to values')
     parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
-    parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
-                        help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
-    parser.add_argument('--config', default=False, help='Read arguments from file')
+    parser.add_argument('--config_file', default=False, help='Read arguments from file')
     parser.add_argument('--generator_timeout', type=positive_int, default=60,
-                        help="Number of seconds before the sentence generation process times out, defaults to 60 seconds")
+                        help="Number of seconds before the sentence generation process times out")
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -132,8 +133,6 @@ if __name__ == "__main__":
     parser.set_defaults(decrease_lrate=True)
     parser.add_argument('--gender', dest='gender', action='store_true', help='Include semantic gender for nouns')
     parser.set_defaults(gender=False)
-    parser.add_argument('--monolingual', dest='monolingual', action='store_true', help='Do not include L2 lexicon')
-    parser.set_defaults(monolingual=False)
     parser.add_argument('--noeval', dest='eval_test', action='store_false',
                         help='Do not evaluate test set')
     parser.set_defaults(eval_test=True)
@@ -180,8 +179,8 @@ if __name__ == "__main__":
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
 
-    if args.config:  # read params from file; I used the json format instead of pickle to make it readable
-        with open(args.config, 'r') as f:
+    if args.config_file:  # read params from file; I used the json format instead of pickle to make it readable
+        with open(args.config_file, 'r') as f:
             args.__dict__ = json.load(f)
 
     root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -189,11 +188,10 @@ if __name__ == "__main__":
     training_num = args.generate_training_num
     l2_decimal = args.l2_decimal_fraction
     auxiliary_experiment = args.auxiliary_experiment
-
-    if args.monolingual or len(args.lang) == 2:
+    if len(args.languages) == 1:  # monolingual case
         l2_decimal = 0
 
-    simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim)+1)
+    simulation_range = range(args.sim_from if args.sim_from else 1, (args.sim_to if args.sim_to else args.sim) + 1)
     num_simulations = len(simulation_range)
     set_weights_epoch = args.set_weights_epoch
     if args.only_evaluate and not args.set_weights:
@@ -206,9 +204,9 @@ if __name__ == "__main__":
         args.input = deepcopy(args.set_weights)
 
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = f"{root_folder}/simulations/{(args.resdir if args.resdir else '')}" \
-                  f"{datetime.now().strftime('%Y-%m-%d')}/{datetime.now().strftime('%H.%M.%S')}_{args.lang}_" \
-                  f"sim{args.sim}_h{args.hidden}_c{args.compress}_fw{args.fw}_e{args.epochs}"
+    results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
+                   f"{datetime.now().strftime('%H.%M.%S')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
+                   f"c{args.compress}_fw{args.fw}_e{args.epochs}")
     os.makedirs(results_dir)
 
     if args.replace_haber or args.test_haber_frequency:
@@ -238,20 +236,27 @@ if __name__ == "__main__":
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
         num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}"))
+
+        if args.target_lang:  # replace with given target language
+            with open(f'{given_input_path}/target_lang.in', 'w') as f:
+                f.write("%s" % "\n".join(args.target_lang))
+
     else:  # generate a new set
         from modules import SetsGenerator
 
-        experiment_dir = "auxiliary_phrase/" if args.auxiliary_experiment else ""
+        experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment
+                          else "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
         logging.info(f"Generating input for {num_simulations} simulations using: {args.lexicon} (lexicon) "
                      f"and {args.structures} (structures)")
-        input_sets = SetsGenerator(input_dir=input_dir, lang=args.lang, monolingual_only=args.monolingual,
+
+        input_sets = SetsGenerator(input_dir=input_dir, lang=args.languages, generator_timeout=args.generator_timeout,
                                    cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
-                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos,
-                                  generator_timeout=args.generator_timeout)
+                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos)
+
         # I had issues with joblib installation on Ubuntu 16.04.6 LTS
         # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
         # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(sim) for sim in simulation_range)
@@ -269,6 +274,11 @@ if __name__ == "__main__":
 
         del input_sets  # we no longer need it
 
+        if not args.target_lang:
+            args.target_lang = args.languages
+        with open(f'{input_dir}/target_lang.in', 'w') as f:
+            f.write("%s" % "\n".join(args.target_lang))
+
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
         logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
@@ -276,15 +286,14 @@ if __name__ == "__main__":
     with open(f'{results_dir}/commandline_args.txt', 'w') as f:
         json.dump(args.__dict__, f, indent=2)
 
-    formatted_input = InputFormatter(directory=input_dir, language=args.lang, use_semantic_gender=args.gender,
-                                     overt_pronouns=args.overt_pronouns, prodrop=args.prodrop,
+    formatted_input = InputFormatter(directory=input_dir, language=args.languages, use_semantic_gender=args.gender,
+                                     overt_pronouns=args.overt_pronouns, test_haber_frequency=args.test_haber_frequency,
                                      num_training=num_training, training_set_name=args.trainingset,
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
-                                     use_word_embeddings=args.word_embeddings, monolingual_only=args.monolingual,
-                                     replace_haber_tener=args.replace_haber,
-                                     test_haber_frequency=args.test_haber_frequency,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction,
-                                     auxiliary_experiment=auxiliary_experiment, cognate_experiment=cognate_experiment)
+                                     use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
+                                     auxiliary_experiment=auxiliary_experiment, cognate_experiment=cognate_experiment,
+                                     prodrop=args.prodrop,
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
 
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
@@ -363,8 +372,8 @@ if __name__ == "__main__":
                     f.write(f"Code-switched percentage (test set): "
                             f"{Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test)}")
 
-    with open(f"{results_dir}/results.log", 'w') as f:
-        f.write(f"Layers with softmax activation function: "
-                f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
-                f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
-                f"Indices of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")
+        with open(f"{results_dir}/results.log", 'w') as f:
+            f.write(f"Layers with softmax activation function: "
+                    f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
+                    f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
+                    f"Indices of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")

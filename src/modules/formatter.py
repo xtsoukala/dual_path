@@ -8,23 +8,22 @@ from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess, sy
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
-                 overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, monolingual_only,
-                 replace_haber_tener, test_haber_frequency, num_training, messageless_decimal_fraction,
-                 auxiliary_experiment, cognate_experiment):
+                 overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
+                 test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
+                 cognate_experiment):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
-        self.monolingual_only = monolingual_only
-        self.L1, self.L2 = self.get_l1_and_l2(language)
-        self.languages = [self.L1]
-        if self.L2:
-            self.languages.append(self.L2)
+        self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
         self.root_directory = directory.replace('/input', '/')
+        self.target_lang = self._read_file_to_list('target_lang.in')
         self.identifiability = self._read_file_to_list('identifiability.in')
         self.use_semantic_gender = use_semantic_gender
         if self.use_semantic_gender and 'M' not in self.identifiability:
             self.identifiability += ['M', 'F']
         self.identif_size = len(self.identifiability)
         self.identifiability_idx = dict(zip(self.identifiability, range(self.identif_size)))
+        self.num_languages = len(self.target_lang)
+        self.language_index = dict(zip(self.target_lang, range(self.num_languages)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
@@ -39,9 +38,6 @@ class InputFormatter:
             else word2vec.load('word2vec/text8.bin')
         self.concept_size = len(self.concepts) if not self.use_word_embeddings else self.concepts['dog'].size
         self.concept_idx = dict(zip(self.concepts, range(self.concept_size)))
-        self.languages = self._read_file_to_list('target_lang.in')
-        self.num_languages = len(self.languages)
-        self.language_index = dict(zip(self.languages, range(self.num_languages)))
         self.roles = self._read_file_to_list('roles.in')
         self.roles_size = len(self.roles)
         self.roles_idx = dict(zip(self.roles, range(self.roles_size)))
@@ -68,8 +64,8 @@ class InputFormatter:
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
-        self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang=self.L1) if cognate_experiment else []
-        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == 'Y'", lang=self.L1)
+        self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang=self.L[1]) if cognate_experiment else []
+        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == 'Y'", lang=self.L[1])
                                  if cognate_experiment else [])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
@@ -87,18 +83,8 @@ class InputFormatter:
         self.testlines_df, self.test_sentences_with_pronoun = None, None
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
 
-    def get_l1_and_l2(self, lang_code):
-        if len(lang_code) == 4:
-            L1 = lang_code[:2]
-            L2 = lang_code[2:]
-        else:
-            L1 = lang_code
-            if self.monolingual_only:
-                L2 = None
-            else:
-                L2 = [x for x in ['en', 'es'] if x != L1][0]
-                print(f"Will include L2 ({L2}) lexicon")
-        return L1, L2
+    def get_languages_with_idx(self, languages):
+        return {k + 1: v for k, v in enumerate(languages)}
 
     def update_sets(self, new_directory):
         self.directory = new_directory
@@ -182,7 +168,7 @@ class InputFormatter:
                 elif 'participle' in out_sentence_pos:
                     p_idx = out_sentence_pos.index('participle')
 
-                if p_idx and out_sentence_idx[p_idx] < self.code_switched_idx:  # assumption: L1 English in lex
+                if p_idx and out_sentence_idx[p_idx] < self.code_switched_idx:  # FIXME assumption: L1 English in lex
                     if self.same_unordered_lists(out_sentence_pos + ['prep'], trg_sentence_pos):
                         return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
@@ -263,7 +249,7 @@ class InputFormatter:
         non_shared_idx = list(filter(lambda i: i not in self.shared_idx, out_sentence_idx))
         l2_words = sum([1 for i in non_shared_idx if i >= self.code_switched_idx])
         l1_words = sum([1 for i in non_shared_idx if i < self.code_switched_idx])
-        filter_idx = lt if target_lang == self.L2 or l2_words > l1_words else ge
+        filter_idx = lt if target_lang == self.L[2] or l2_words > l1_words else ge
         check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
         if target_lang and not check_idx:
             # all words were in the "non-target" language. Doesn't really count as inter-sentential as
@@ -371,7 +357,7 @@ class InputFormatter:
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
         info = defaultdict(list)
-        for lang in self.languages:
+        for lang in self.target_lang:
             if lang:
                 column = self.lexicon_df[[f'morpheme_{lang}', 'pos',
                                           'concept', 'type']].dropna(subset=[f'morpheme_{lang}'])
@@ -389,7 +375,7 @@ class InputFormatter:
         idx = repr((lex_idx, target_lang))
         cache = self.query_cache(idx, self.concept_to_morpheme_cache)
         if not cache:
-            current_lang = self.L1 if target_lang == self.L2 else self.L2
+            current_lang = self.L[1] if target_lang == self.L[2] else self.L[2]
             cache = self.df_query_to_idx(f"morpheme_{current_lang} == '{self.lexicon[lex_idx]}'", lang=target_lang)
             self.concept_to_morpheme_cache[idx] = cache
         return cache
@@ -499,7 +485,7 @@ class InputFormatter:
                         else:
                             event_sem_activations[self.event_sem_index[event]] = activation
                 elif role == "TARGET-LANG":
-                    if what in self.languages:
+                    if what in self.target_lang:
                         target_language = what
                         target_lang_activations[self.language_index[what]] = activation
                     elif what == 'enes':
@@ -527,14 +513,14 @@ class InputFormatter:
         if lang:
             languages = [f'morpheme_{lang}']
         else:
-            languages = [f'morpheme_{lang}' for lang in self.languages]
+            languages = [f'morpheme_{lang}' for lang in self.target_lang]
         q = self.lexicon_df.query(query)[languages].values.ravel()
         return list(self.lexicon_index[x] for x in list(q) if is_not_nan(x))
 
     def find_equivalent_translation_idx(self, idx, lang):
         # ignore shared indices (cognates/period)
-        if (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L1) or
-                                            (lang == self.L2 and idx < self.code_switched_idx))):
+        if (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L[1]) or
+                                            (lang == self.L[2] and idx < self.code_switched_idx))):
             return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
         return [idx]
 

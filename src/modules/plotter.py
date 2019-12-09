@@ -45,6 +45,7 @@ class Plotter:
         if ylabel:
             plt.ylabel(ylabel)
         plt.ylim([0, ylim])
+        plt.yticks(np.arange(0, ylim, step=5))
         plt.xlim(0 if fname == "performance" else 1, max(self.epoch_range))  # only start from epoch 0 for "performance"
         plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
         plt.savefig(self.get_plot_path(fname))
@@ -90,15 +91,15 @@ class Plotter:
                 plt.fill_between(self.epoch_range, lower_bound, upper_bound, alpha=0.3)
         plt.xlabel('epochs')
         plt.ylabel(label)
-        plt.ylim([0, ylim])
+        plt.ylim(0, ylim)
         plt.xlim(1, max(self.epoch_range))
         if legend:
             if legend_loc:
-                plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True)
+                plt.legend(loc=legend_loc, ncol=2, fancybox=True, shadow=True, bbox_to_anchor=(0.5, 1.05))
             else:
                 plt.legend(ncol=2, fancybox=True, shadow=True)
 
-        plt.savefig(self.get_plot_path(fname))
+        plt.savefig(self.get_plot_path(fname), bbox_inches='tight')
         plt.close()
 
     def get_plot_path(self, fname):
@@ -232,7 +233,7 @@ class Plotter:
         correct_code_switches = results['correct_code_switches']['test']
         if not isinstance(correct_code_switches, int) and sum(correct_code_switches):
             self.plot_changes_over_time(items_to_plot=['correct_code_switches', 'all_code_switches'],
-                                        ylim=40, ylabel=f'%% CS among test set',
+                                        ylim=40, ylabel=f'% CS among test set',
                                         fname='code_switches_test_set')
 
             self.plot_multiple_changes_over_time(items_to_plot=['correct_code_switches', 'correct_meaning'],
@@ -277,7 +278,7 @@ class Plotter:
                     # !------------ plot all CS types per epoch  ------------#
                     if self.plot_detailed_cs:
                         for i, cs_type in enumerate(all_cs_types):
-                            self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, 'test')),
+                            self.plot_cs_type_over_time(label=f'{cs_type} (% of correct test set)',
                                                         ylim=15,
                                                         legend=('target lang: Spanish', 'target lang: English'),
                                                         fname='code_switches_correct_test_%s' % cs_type,
@@ -345,8 +346,9 @@ class Plotter:
                                                         fname=f'participle_per_aspect{cs_direction}',
                                                         results=participle_switch_per_tense)
                             # for paper:
-                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=6,
+                            self.plot_cs_type_over_time(label='', legend=['progressive', 'perfect'], ylim=4,
                                                         fname=f'participle{cs_direction}',
+                                                        legend_loc='upper center',
                                                         results=participle_switch_per_tense)
                             plot_label = ''  # auxiliary switches (% of correctly produced per aspect)'
                             plot_legend = [x.replace('is', 'progressive').replace('has', 'perfect')
@@ -405,7 +407,7 @@ class Plotter:
                                            self.cs_results[f'type_correct_{dataset_type}-cog'][i]]
                             if include_ff:
                                 results_lst.append(self.cs_results['type_correct_%s-ff' % dataset_type][i])
-                            self.plot_cs_type_over_time(label=('%s (%% of correct %s set)' % (cs_type, dataset_type)),
+                            self.plot_cs_type_over_time(label=f'{cs_type} (% of correct {dataset_type} set)',
                                                         fname='cognate_experiment_%s_%s' % (cs_type, dataset_type),
                                                         ylim=15, results=results_lst, legend=legend)
         # !------------ Pronoun errors - only plot if there's something to be plotted ------------!
