@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-import math
 from operator import lt, ge, itemgetter
 import shutil
 from itertools import product, zip_longest
-from . import defaultdict, Counter, np, pd, os, torch, zeros, re, subprocess, sys
+from . import defaultdict, Counter, pd, os, torch, zeros, subprocess, sys
 
 
 class InputFormatter:
@@ -173,11 +172,11 @@ class InputFormatter:
                         return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
-    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=True):
+    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=False):
         """
         :param out_sentence_idx:
         :param trg_sentence_idx:
-        :param ignore_det: Whether to count article definiteness (a/the) as a mistake
+        :param ignore_det: Whether to count article definiteness (a/the) and gender (e.g., la, el) as a mistake
         :return: if produced sentence was not identical to the target one, check if the meaning was correct but
         expressed with a different syntactic structure (due to, e.g., priming)
         """
@@ -211,12 +210,12 @@ class InputFormatter:
             return True
         return False
 
-    def get_code_switched_type(self, out_sentence_idx, trg_sentence_idx, target_lang, top_down_language_activation):
+    def get_code_switched_type(self, out_sentence_idx, out_pos, trg_sentence_idx, target_lang,
+                               top_down_language_activation):
         """ Types of code-switches:
-                - intra-sentential (in the middle of the sentence)
+                - alternational (in the middle of the sentence)
+                - insertional (insertion of single words)
                 - inter-sentential (full switch at sentence boundaries)
-                - extra-sentential (insertion of tag)
-                - noun borrowing? (if no determiners were switched)
             Note: Returns FALSE if the message conveyed was not correct
         """
         out_idx = repr(out_sentence_idx)
@@ -226,40 +225,48 @@ class InputFormatter:
             translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
                                                                                             target_lang)
             # check for insertions (cases where only 1 idx is from the other language)
-            insertion_type = self.check_for_insertions(out_sentence_idx,
-                                                       None if top_down_language_activation else target_lang)
-            if insertion_type:
+            switch_type, switch_pos = self.check_for_insertions(out_sentence_idx, out_pos,
+                                                                None if top_down_language_activation else target_lang)
+            if switch_type:
                 for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
                     if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
-                        self.code_switched_type_cache[out_idx] = insertion_type
-                        return insertion_type
+                        cache = switch_type, switch_pos
+                        self.code_switched_type_cache[out_idx] = cache
+                        return cache
             # Now check for alternational switching - compare with target sentence
             for translated_sentence_idx in translated_sentence_candidates:
-                cs_type = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx,
-                                                             trg_sentence_idx)
-                if cs_type:  # if not False no need to look further
-                    self.code_switched_type_cache[out_idx] = cs_type
-                    return cs_type
+                switch_pos = self.examine_sentences_for_cs_type(translated_sentence_idx, out_sentence_idx, out_pos,
+                                                                trg_sentence_idx)
+                if switch_pos:  # if not False no need to look further
+                    cache = "alternational", switch_pos
+                    self.code_switched_type_cache[out_idx] = cache
+                    return cache
             # no CS type found. Either the meaning was incorrect or the produced lang was different than the target one
-            cache = False
+            cache = False, False
             self.code_switched_type_cache[out_idx] = cache
         return cache
 
-    def check_for_insertions(self, out_sentence_idx, target_lang):
+    def check_for_insertions(self, out_sentence_idx, out_pos, target_lang):
         non_shared_idx = list(filter(lambda i: i not in self.shared_idx, out_sentence_idx))
         l2_words = sum([1 for i in non_shared_idx if i >= self.code_switched_idx])
         l1_words = sum([1 for i in non_shared_idx if i < self.code_switched_idx])
         filter_idx = lt if target_lang == self.L[2] or l2_words > l1_words else ge
         check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
         if target_lang and not check_idx:
-            # all words were in the "non-target" language. Doesn't really count as inter-sentential as
+            # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
-            return "inter-sentential"
+            return "inter-sentential", False
 
-        check_idx_pos = list(map(self.pos_lookup, check_idx))
+        check_idx_pos = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
         if len(set(check_idx_pos)) == 1:
-            return check_idx_pos[0]
-        return False
+            pos = check_idx_pos[0]
+            if check_idx[0] == out_sentence_idx[-2] and pos in ['verb', 'participle']:
+                return "alternational", pos    # mark as alternational (with intransitive verbs)
+            elif check_idx[0] == out_sentence_idx[0]:  # if first word, also count as alternation but from the next POS
+                return "alternational", out_pos[1]
+            else:
+                return "insertional", pos
+        return False, False
 
     @staticmethod
     def query_cache(out_idx, cache):
@@ -276,24 +283,21 @@ class InputFormatter:
             self.translation_cache[out_idx] = cache
         return cache
 
-    def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, trg_sentence_idx):
+    def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, out_pos, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
         check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx), out_sentence_idx))
         if len(check_idx) == 0:
             return False  # it was either a cognate or a false friend
 
-        if len(check_idx) == sum(1 for _ in filter(lambda i: i not in self.shared_idx, out_sentence_idx)):
-            return "inter-sentential"  # whole sentence in the non-target language
-
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        check_idx_pos = list(map(self.pos_lookup, check_idx))
-        if len(set(check_idx_pos)) > 1 and set(check_idx).issubset(out_sentence_idx):
-            cs_type = f"alt. ({check_idx_pos[0]})"
+        check_idx_pos = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
+        if len(set(check_idx_pos)) > 0 and set(check_idx).issubset(out_sentence_idx):
+            starting_switch_point = check_idx_pos[0]
         else:
             print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
             sys.exit()
-        return cs_type
+        return starting_switch_point
 
     def is_code_switched(self, sentence_indices, target_lang_idx):
         """ This function only checks whether words from different languages were used.
@@ -309,7 +313,7 @@ class InputFormatter:
             return False
         return True
 
-    def check_switch_points(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
+    def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
         out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.switch_points_cache)
         if not cache:
@@ -439,6 +443,11 @@ class InputFormatter:
         """
         return self.pos[word_idx]
 
+    @staticmethod
+    def map_to_sentence_pos(word_idx_list, sentence_idx, sentence_pos):
+        idx = [sentence_idx.index(v) for v in word_idx_list]
+        return list(map(lambda x: sentence_pos[x], idx))
+
     def sentence_from_indices(self, sentence_idx):
         """
         :param sentence_idx: list with sentence indices
@@ -488,8 +497,9 @@ class InputFormatter:
                     if what in self.target_lang:
                         target_language = what
                         target_lang_activations[self.language_index[what]] = activation
-                    elif what == 'enes':
+                    elif len(what) > 2:
                         target_language = what
+                        print('Target lang:', target_language)
                         target_lang_activations = [0.5, 0.5]
                 else:
                     # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
@@ -504,10 +514,6 @@ class InputFormatter:
                             sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
                 weights_role_identif, event_sem_message)
-
-    def cosine_similarity(self, first_word, second_word):
-        """ Cosine similarity between words when using word2vec """
-        pass
 
     def df_query_to_idx(self, query, lang=None):
         if lang:
@@ -542,74 +548,5 @@ def copy_files(src, dest, ends_with=None):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def get_np_mean_and_std_err(x, squared_num_simulations):
-    """if not isinstance(x, torch.Tensor):
-        if len(x) > 1:
-            x = np.array(x)
-            return x.mean(axis=0), np.true_divide(x.std(axis=0), squared_num_simulations)
-        x = torch.tensor(x).float()
-    return x.mean(0), torch.div(x.std(0), squared_num_simulations)  # mean of lists (per column), standard error"""
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
-        squared_num_simulations = np.array(squared_num_simulations)
-    return x.mean(axis=0), x.std(axis=0) / squared_num_simulations
-
-
-def extract_cs_keys(sim_with_type_code_switches, set_names, strip_language_info=True):
-    cs_keys = []
-    for sim in sim_with_type_code_switches:
-        for set_type in set_names:
-            cs_keys += sim['type_code_switches'][set_type].keys()
-    res = cs_keys
-    if strip_language_info:
-        res = strip_language_info_and_std_err(res)
-    return res
-
-
-def compute_mean_and_std(valid_results, epochs, evaluated_sets):
-    """
-    :param valid_results: list of dicts (simulations).  e.g., for 2 simulations and 4 epochs:
-                [{'correct_meaning': {'test': [0, 324, 725, 822]}, 'correct_pos': {'test': [0, 864, 944, 962, 952]}},
-                {'correct_meaning': {'test': [0, 424, 825, 922]}, 'correct_pos': {'test': [0, 964, 984, 982, 989]}}]
-    :param epochs: number of epochs per simulation that will be analyzed. We might want to restrict to a
-                   lower number than the one in the simulations
-    :param evaluated_sets: the sets that have been evaluated (test, training)
-    :return:
-    """
-    # convert lists of dicts to a single dictionary of lists
-    results_sum = {}
-    all_simulation_keys = list(valid_results[0].keys())  # e.g., 'correct_code_switches', 'correct_sentences'
-    all_simulation_keys.remove('type_code_switches')
-    all_cs_types = extract_cs_keys(valid_results, set_names=evaluated_sets, strip_language_info=False)
-    for key in all_simulation_keys + all_cs_types:
-        results_sum[key] = {set_name: [] for set_name in evaluated_sets}
-        for simulation in valid_results:  # go through all simulations
-            for set_name in evaluated_sets:
-                if key in all_cs_types:
-                    if key in simulation['type_code_switches'][set_name]:
-                        results_sum[key][set_name].append(simulation['type_code_switches'][set_name][key][:epochs])
-                    else:  # fill with 0
-                        results_sum[key][set_name].append([0] * epochs)
-                else:
-                    if key in simulation:
-                        results_sum[key][set_name].append(simulation[key][set_name][:epochs])
-                    else:
-                        results_sum[key][set_name].append([0] * epochs)
-    # now compute MEAN and STANDARD ERROR of all simulations
-    for key in results_sum.keys():
-        for set_name in evaluated_sets:
-            np_mean, np_std_err = get_np_mean_and_std_err(results_sum[key][set_name],
-                                                          squared_num_simulations=math.sqrt(len(valid_results)))
-            if np_mean is not False:
-                results_sum[key][f"{set_name}-std_error"] = np_std_err
-                results_sum[key][set_name] = np_mean
-    results_sum['all_cs_types'] = strip_language_info_and_std_err(all_cs_types)
-    return results_sum
-
-
 def training_is_successful(x, threshold, num_test):
     return torch.div(x[-1] * 100, num_test) >= threshold
-
-
-def strip_language_info_and_std_err(keyword_list):
-    return set([re.sub("en-|es-|-cog|-ff|-std_error", "", x) for x in keyword_list])

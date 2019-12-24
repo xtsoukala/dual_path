@@ -5,69 +5,60 @@ import sys
 
 sys.path.append('..')
 
-from modules import Plotter, plt, compute_mean_and_std, lz4, pd, os, pickle, training_is_successful, subprocess
+from modules import Plotter, plt, pd, os, str2bool
+
+# early_enes_sim40_h80_cNone_fw10_e30
+# late_enes_sim40_h80_cNone_fw10_e30
+# late_esen_sim40_h80_cNone_fw10_e30
 
 
-def re_plot(results_directory='2019-11-18/enes_sim60_h80_cNone_fw10_e30', num_sim=60, epochs=30,
-            performance_threshold=50, title=None, test_name='test.in', training_name='training.in'):
+def re_plot(results_directory='patterns/rerun/late_enes_sim40_h80_cNone_fw10_e30', num_sim=40, epochs=30,
+            performance_threshold=50, title=None):
     results_dir = '../../simulations/' + results_directory
-    simulation_range = range(1, num_sim + 1)
-    num_test_set = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{test_name}",
-                                               shell=True).split()[0])
-    num_train = int(subprocess.check_output(f"wc -l {results_dir}/{simulation_range[0]}/{training_name}",
-                                            shell=True).split()[0])
-    evaluated_sets = ('test',)
-    # tener + haber + synonyms
     excluded_list = []
     num_excluded = len(excluded_list)
     edited_dir = (f'{results_dir}/edited_t{performance_threshold}_e{epochs}_sim{num_sim}'
                   f'{f"_excluded{num_excluded}" if excluded_list else ""}')
     os.makedirs(edited_dir, exist_ok=True)
 
-    cognate_experiment = False
-    test_sentences_with_pronoun = pronoun_experiment = False
-    auxiliary_experiment = False if 'aux' not in test_name else True
+    if os.path.exists(f'{edited_dir}/performance.csv'):
+        df_meaning_grammaticality_cs = pd.read_csv(f'{edited_dir}/performance.csv', index_col=None,
+                                                   header=0, skipinitialspace=True)
+        df = pd.read_csv(f'{edited_dir}/all_results.csv', index_col=None, header=0, skipinitialspace=True)
+    else:
+        all_dfs = []
+        for network_num in range(1, num_sim+1):
+            temp_df = pd.read_csv(f'{results_dir}/{network_num}/test.csv', index_col=None, header=0,
+                                  skipinitialspace=True, dtype={'is_code_switched': str, 'meaning': str})
+            temp_df['network_num'] = network_num
+            all_dfs.append(temp_df)
+        df = pd.concat(all_dfs, axis=0, ignore_index=True)
+        df.to_csv(f'{edited_dir}/all_results.csv', index=False)
 
-    all_results = []
-    for sim in simulation_range:  # read results from all simulations
-        if os.path.isfile(f'{results_dir}/{sim}/results.pickled'):
-            with lz4.open(f'{results_dir}/{sim}/results.pickled', 'rb') as f:
-                all_results.append(pickle.load(f))
-        else:
-            print(f"No results file found for {sim}")
+        df.meaning = df.meaning.apply(lambda x: str2bool(x))
+        df.is_code_switched = df.is_code_switched.apply(lambda x: str2bool(x))
+        df_meaning_grammaticality_cs = df.groupby(['epoch', 'network_num']).apply(lambda dft: pd.Series(
+            {'meaning': dft.meaning.sum(),
+             'code_switched': dft[dft.meaning == 1].is_code_switched.sum(),
+             'intersentential': len(dft[dft.switched_type == 'inter-sentential']),
+             'alternational': len(dft[dft.switched_type == 'alternational']),
+             'insertional': len(dft[dft.switched_type == 'insertional']),
+             'is_grammatical': dft.is_grammatical.sum()
+             }))
+        df_meaning_grammaticality_cs.to_csv(f'{edited_dir}/performance.csv')
+        df_meaning_grammaticality_cs = pd.read_csv(f'{edited_dir}/performance.csv')
 
-    if all_results:
-        valid_results = []
-        failed_simulations = []
-        for i, simulation in enumerate(all_results):
-            if i not in excluded_list and training_is_successful(simulation['correct_meaning']['test'],
-                                                                 threshold=performance_threshold,
-                                                                 num_test=num_test_set):
-                valid_results.append(simulation)
-                if not training_is_successful(simulation['correct_meaning']['test'], threshold=80,
-                                              num_test=num_test_set):
-                    failed_simulations.append(f"[{i+1}]")  # flag it, even if it's included in the final analysis
-            else:
-                failed_simulations.append(str(i+1))
+        df['switch_from'] = df.message.str[-2:]
+        gb = df[(df.epoch == 30) & (df.switched_type != 'False')].groupby(
+            ['switched_type', 'pos_of_switch_point', 'switch_from']).apply(
+            lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum()}))
+        gb.to_csv(f'{edited_dir}/group_switches.csv')
 
-        if failed_simulations:
-            print("Failed simulations: ", ' '.join(failed_simulations))
-
-        num_valid_simulations = len(valid_results)  # some might have been discarded
-
-        if num_valid_simulations:  # take the average of results and plot
-            results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=evaluated_sets, epochs=epochs)
-            with open(f"{edited_dir}/summary_edited_results.pickled", 'wb') as pckl:
-                pickle.dump(results_mean_and_std, pckl)
-            # print(results_mean_and_std)
-            plot = Plotter(results_dir=edited_dir, summary_sim=num_valid_simulations, title=title, epochs=epochs,
-                           num_training=num_train, num_test=num_test_set)
-            test_df = pd.read_csv(os.path.join(results_dir, f"{simulation_range[0]}/{test_name}"),
-                                  names=['target_sentence', 'message'], sep='## ', engine='python')
-
-            plot.plot_results(results_mean_and_std, cognate_experiment=cognate_experiment,
-                              test_sentences_with_pronoun=test_sentences_with_pronoun,
-                              auxiliary_experiment=auxiliary_experiment, evaluated_datasets=evaluated_sets)
+    group_switches = pd.read_csv(f'{edited_dir}/group_switches.csv')
+    plot = Plotter(results_dir=edited_dir)
+    plot.plot_performance(df_meaning_grammaticality_cs, num_sentences=500)
+    plot.plot_code_switches(df_meaning_grammaticality_cs)
+    plot.barplot_code_switches(df, group_switches)
 
 
 if __name__ == "__main__":

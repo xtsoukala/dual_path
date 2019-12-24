@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from . import lz4, pickle, defaultdict, logging, SimpleRecurrentNetwork, ones, os, copy_files, time
-import threading
+from . import logging, SimpleRecurrentNetwork, ones, os, copy_files, time
 import random
 
 
@@ -54,7 +53,6 @@ class DualPath:
         self.auxiliary_experiment = auxiliary_experiment
         self.training_logger = None
         self.test_logger = None
-        self.set_level_logger = None
         self.only_evaluate = only_evaluate
         self.continue_training = continue_training
         self.randomize = randomize
@@ -89,10 +87,11 @@ class DualPath:
         logger.propagate = False  # no stdout to console
         logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
         if name in ['test', 'training']:
-            header = "epoch,produced_sentence,target_sentence,is_grammatical,meaning,is_code_switched,switched_type"
+            header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
+                      "is_code_switched,switched_type,pos_of_switch_point")
             if self.auxiliary_experiment:
-                header += (",switched_at,switched_participle,switched_right_after,switched_after,switched_at_es_en,"
-                           "switched_participle_es_en,switched_right_after_es_en, switched_after_es_en")
+                header += (",switched_before,switched_at,switched_right_after,switched_after,switched_before_es_en,"
+                           "switched_at_es_en,switched_right_after_es_en, switched_after_es_en")
             if self.pronoun_experiment:
                 header += ",pronoun_error,pronoun_error_flex"
             header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message"
@@ -168,13 +167,14 @@ class DualPath:
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   simulation_num=self.simulation_num)
 
-    def feed_line(self, target_sentence_idx, target_lang_act, lang, weights_role_concept, weights_concept_role,
+    def feed_line(self, target_sentence_idx, target_lang_act, weights_role_concept, weights_concept_role,
                   weights_role_identif, weights_identif_role, event_semantics, backpropagate=False,
-                  activate_target_lang=False):
+                  activate_target_lang=False, include_entropy=False):
         produced_sent_ids = []
         sentence_entropy = []
         append_to_produced = produced_sent_ids.append
         append_to_entropy = sentence_entropy.append
+
         self.srn.set_message_reset_context(weights_role_concept=weights_role_concept,
                                            weights_concept_role=weights_concept_role,
                                            weights_role_identif=weights_role_identif,
@@ -195,7 +195,7 @@ class DualPath:
                     # TODO: play with activations, e.g. activate the target language slightly more
                     # ones or: [1, 0.9] if self.inputs.target_lang.index(lang) == 0 else [0.9, 1]
                     self.srn.set_layer_activation("target_lang", activation=ones(2))
-                if False:  # include entropy
+                if include_entropy:
                     prod_idx, entropy_idx = self.srn.get_max_output_activation_and_entropy()
                     append_to_entropy(entropy_idx)
                 else:
@@ -232,7 +232,8 @@ class DualPath:
             if self.set_weights_epoch:
                 self.set_weights_epoch = random.randint(self.set_weights_epoch-2, self.set_weights_epoch+2)
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.srn.fw}, starting weight epoch: {self.set_weights_epoch}")
+                  f"fw: {self.srn.fw}",
+                  f"starting weight epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
             self.initialize_srn()
 
         if set_existing_weights:
@@ -258,22 +259,23 @@ class DualPath:
             epoch_range = range(self.starting_epoch, self.epochs+1)
             for epoch in epoch_range:
                 self.srn.save_weights(directory, epoch)
-                # threading.Thread(target=self.srn.save_weights, args=(directory, epoch), daemon=True).start()
                 # times = time.time()
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
                     line_idx = line.Index
-                    self.feed_line(line.target_sentence_idx, target_lang_act[line_idx], line.lang,
-                                   weights_role_concept[line_idx], weights_concept_role[line_idx],
-                                   weights_role_identif[line_idx],
-                                   weights_identif_role[line_idx],
-                                   event_semantics[line_idx], backpropagate=True, activate_target_lang=True)
+                    self.feed_line(target_sentence_idx=line.target_sentence_idx,
+                                   target_lang_act=target_lang_act[line_idx],
+                                   weights_role_concept=weights_role_concept[line_idx],
+                                   weights_concept_role=weights_concept_role[line_idx],
+                                   weights_role_identif=weights_role_identif[line_idx],
+                                   weights_identif_role=weights_identif_role[line_idx],
+                                   event_semantics=event_semantics[line_idx], backpropagate=True,
+                                   activate_target_lang=True)
                     if self.srn.learn_rate > self.final_lrate:  # decrease lrate linearly
                         self.srn.learn_rate -= self.lrate_decrease_step
                     elif self.srn.learn_rate != self.final_lrate:
                         self.srn.learn_rate = self.final_lrate
                 # print('loop', time.time() - times, self.srn.learn_rate)
             self.srn.save_weights(directory, epoch_range[-1])
-            #threading.Thread(target=self.srn.save_weights, args=(directory, epoch_range[-1]), daemon=True).start()
 
         set_names = set()
         if self.evaluate_training_set:
@@ -284,7 +286,6 @@ class DualPath:
             set_names.add('test')
 
         if set_names:
-            self.set_level_logger = self.init_logger('set_level')
             self.evaluate_network(set_names=set_names)
 
     def evaluate_network(self, set_names, top_down_language_activation=False):
@@ -293,42 +294,13 @@ class DualPath:
         :param top_down_language_activation: activates both languages during the whole test duration
         (not just after the production of the first word)
         """
-        results = {
-            'correct_meaning': {
-                set_name: [] for set_name in set_names
-            }, 'correct_pos': {
-                set_name: [] for set_name in set_names
-            }, 'correct_code_switches': {
-                set_name: [] for set_name in set_names
-            }, 'all_code_switches': {
-                set_name: [] for set_name in set_names
-            }, 'type_code_switches': {
-                set_name: [] for set_name in set_names
-            }
-        }
-
-        if self.auxiliary_experiment:
-            for aux in ['is', 'has']:
-                for point in ['participle', 'aux', 'after', 'right_after']:
-                    results['%s_%s' % (aux, point)] = {set_name: [] for set_name in set_names}
-                    results['%s_%s_es_en' % (aux, point)] = {set_name: [] for set_name in set_names}
-                for lang in ['es', 'en']:
-                    for cs_ in ["cs_", ""]:
-                        results['correct_%s%s_%s' % (cs_, aux, lang)] = {set_name: [] for set_name in set_names}
-        if self.pronoun_experiment:
-            results['pronoun_errors_flex'] = {set_name: [] for set_name in set_names}
-            results['pronoun_errors'] = {set_name: [] for set_name in set_names}
-
         if top_down_language_activation:
             self.srn.set_layer_activation("target_lang", activation=ones(2))
 
+        pos_interest = 'aux' if self.auxiliary_experiment else None
+
         for set_name in set_names:
-            if set_name == 'test':
-                set_lines = self.inputs.testlines_df
-                num_sentences = self.inputs.num_test
-            else:
-                set_lines = self.inputs.trainlines_df
-                num_sentences = self.inputs.num_training
+            set_lines = self.inputs.testlines_df if set_name == 'test' else self.inputs.trainlines_df
             weights_role_concept = self.inputs.weights_role_concept[set_name]
             weights_concept_role = self.inputs.weights_concept_role[set_name]
             weights_role_identif = self.inputs.weights_role_identif[set_name]
@@ -336,21 +308,15 @@ class DualPath:
             event_semantics = self.inputs.event_sem_activations[set_name]
             target_lang_act = self.inputs.target_lang_act[set_name]
             directory = self.inputs.directory
-
-            for i in set_lines.event_sem_message.unique():
-                results[i] = {set_name: [] for set_name in set_names}
-                results["%s_cs" % i] = {set_name: [] for set_name in set_names}
             logger = self.test_logger if 'test' in set_name else self.training_logger
             buffer_to_produce = [None] * 2
             for epoch in range(self.epochs+1):
-                counter = defaultdict(int)
-                counter['type_code_switches'] = defaultdict(int)
                 self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     line_idx = line.Index
                     target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
                     produced_idx, entropy_idx = self.feed_line(line.target_sentence_idx + buffer_to_produce,
-                                                               target_lang_act[line_idx], line.lang,
+                                                               target_lang_act[line_idx],
                                                                weights_role_concept[line_idx],
                                                                weights_concept_role[line_idx],
                                                                weights_role_identif[line_idx],
@@ -369,132 +335,78 @@ class DualPath:
                     produced_sentence = self.inputs.sentence_from_indices(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
 
-                    if False:  # debug specific sentence
+                    debug_specific_sentence = False
+                    if debug_specific_sentence:
                         logger.warning('Debugging sentence pair')
-                        produced_sentence = 'él tiene comido .'
-                        target_sentence = 'él ha comido .'
+                        produced_sentence = 'el padre has sneezed .'
+                        target_sentence = 'el padre ha estornudado .'
                         target_lang = 'es'
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indices(target_sentence)
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
-                    has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
-                                                                                                 False, None)
-                    (switched_at, switched_participle, switched_right_after, switched_after, switched_at_es_en,
-                     switched_participle_es_en, switched_right_after_es_en,
-                     switched_after_es_en) = (False, False, False, False, False, False, False, False)
-                    has_pronoun_error, has_pronoun_error_flex = False, False
+                    (has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type, cs_pos_point,
+                     switched_before, switched_at, switched_right_after, switched_after, switched_before_es_en,
+                     switched_at_es_en, switched_right_after_es_en, switched_after_es_en, has_pronoun_error,
+                     has_pronoun_error_flex) = (False, False, False, False, False, False, False, False, False, False,
+                                                False, False, False, False, False, False)
+
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
                                                                                                 target_pos,
                                                                                                 produced_idx)
                     code_switched = self.inputs.is_code_switched(produced_idx, target_lang_idx=target_sentence_idx[0])
-                    if code_switched:
-                        counter['all_code_switches'] += 1
-                        if self.cognate_experiment:
-                            if ',COG' in line.message:
-                                counter['cs_cog'] += 1
-                            else:
-                                counter['cs_nongcog'] += 1
                     if is_grammatical:
-                        counter['correct_pos'] += 1
                         has_correct_pos = True
                         if not code_switched:
                             correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
                         else:  # only count grammatically correct CS sentences -- determine CS type here
-                            cs_type = self.inputs.get_code_switched_type(produced_idx, target_sentence_idx, target_lang,
-                                                                         top_down_language_activation)
+                            cs_type, cs_pos_point = self.inputs.get_code_switched_type(produced_idx, produced_pos,
+                                                                                       target_sentence_idx, target_lang,
+                                                                                       top_down_language_activation)
                             if top_down_language_activation and cs_type == "inter-sentential":  # don't count it as CS
                                 correct_meaning = True
                                 code_switched = False
                             elif cs_type:  # TODO: check the failed sentences too
-                                counter["%s_cs" % line.event_sem_message] += 1  # counts code-switched types
                                 correct_meaning = True
-                                counter['correct_code_switches'] += 1
-                                counter['type_code_switches'][f"{target_lang}-{cs_type}"] += 1
-                                if self.cognate_experiment:  # check for cognates vs FFs vs regular (no lang)
-                                    if ',COG' in line.message:
-                                        cs_type_with_cognate_status = f"{cs_type}-cog"
-                                    elif ',FF' in line.message:
-                                        cs_type_with_cognate_status = f"{cs_type}-ff"
-                                    else:  # no cognates or false friends
-                                        cs_type_with_cognate_status = cs_type
-                                    counter['type_code_switches'][cs_type_with_cognate_status] += 1
-                                elif self.auxiliary_experiment:
-                                    if ',PERFECT' in line.message or ',PROG' in line.message:
-                                        (switched_at, switched_participle, switched_right_after, switched_after,
-                                         switched_at_es_en, switched_participle_es_en, switched_right_after_es_en,
-                                         switched_after_es_en) = self.inputs.check_switch_points(produced_idx,
-                                                                                                 produced_pos)
-                                        aux = 'has' if ',PERFECT' in line.message else 'is'
-                                        if switched_participle:
-                                            counter[f'{aux}_participle'] += 1
-                                            if switched_participle_es_en:
-                                                counter[f'{aux}_participle_es_en'] += 1
-                                        if switched_at:
-                                            counter[f'{aux}_aux'] += 1
-                                            if switched_at_es_en:
-                                                counter[f'{aux}_aux_es_en'] += 1
-                                        if switched_after:  # anywhere after
-                                            counter[f'{aux}_after'] += 1
-                                            if switched_after_es_en:
-                                                counter[f'{aux}_after_es_en'] += 1
-                                            if switched_right_after:  # right after the participle
-                                                counter[f'{aux}_right_after'] += 1
-                                                if switched_after_es_en:
-                                                    counter[f'{aux}_right_after_es_en'] += 1
+                                if pos_interest and pos_interest in produced_pos:
+                                    (switched_before, switched_at, switched_right_after, switched_after,
+                                     switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
+                                     switched_after_es_en) = self.inputs.check_cs_around_pos_of_interest(produced_idx,
+                                                                                                         produced_pos,
+                                                                                                         pos_interest)
 
-                                        counter[f"correct_cs_{aux}_{target_lang}"] += 1
-                        if correct_meaning:
-                            counter['correct_meaning'] += 1
-                            # this contains number of ALL correct progressive/perfect sentences, even the CS ones
-                            counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message else 'is', target_lang)] += 1
-                            counter[line.event_sem_message] += 1
-                        else:
+                        if not correct_meaning:
                             has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                              feature="determiners")
                             has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                feature="tense")
                             if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
-                                counter['correct_meaning'] += 1  # count determiner mistake as (otherwise) correct
-                                print(produced_sentence, "correct meaning,FIXME")  # FIXME
-                                correct_meaning += 1
-                                counter["correct_%s_%s" % ('has' if ',PERFECT' in line.message
-                                                           else 'is', target_lang)] += 1
-                        if self.pronoun_experiment and epoch > 0:  # only check the grammatical sentences
+                                print(produced_sentence, "should be correct meaning,FIXME")  # FIXME
+
+                        if self.pronoun_experiment:
                             if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
                                 if self.inputs.test_meaning_without_pronouns(produced_idx, line.target_sentence_idx):
-                                    counter['pronoun_errors'] += 1
                                     has_pronoun_error = True
                                 else:  # flex: grammatically correct sentences / gender error + wrong meaning
-                                    counter['pronoun_errors_flex'] += 1
                                     has_pronoun_error_flex = True
-                    if epoch > 0:
-                        # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
-                        meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
-                        pos = f'{"flex-" if flexible_order else ""}{has_correct_pos or flexible_order}'
-                        log_info = (epoch, produced_sentence, line.target_sentence,
-                                    pos, meaning, code_switched, cs_type)
-                        if self.auxiliary_experiment:
-                            log_info += (switched_at, switched_participle, switched_right_after, switched_after,
-                                         switched_at_es_en, switched_participle_es_en, switched_right_after_es_en,
-                                         switched_after_es_en)
-                        if self.pronoun_experiment:
-                            log_info += (has_pronoun_error, has_pronoun_error_flex)
-                        log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
-                                     not has_wrong_det, f'"{line.message}"',)
-                        log_info += (' '.join(entropy_idx),)
-                        logger.info(",".join(str(x) for x in log_info))
-                self.set_level_logger.info(",".join(str(x) for x in (epoch, set_name, counter['correct_meaning'],
-                                                                     counter['correct_pos'], num_sentences)))
-                for key in results.keys():
-                    results[key][set_name].append(counter[key])
 
-            results['type_code_switches'][set_name] = self.aggregate_dict(self.epochs,
-                                                                          results['type_code_switches'][set_name])
-        # write (single) simulation results to a pickled file
-        with lz4.open(f"{self.inputs.directory}/results.pickled", 'wb') as pckl:
-            pickle.dump(results, pckl, protocol=-1)
+                    # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
+                    meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
+                    # count it as correct even if it hasn't produced the target POS -- as long as it's grammatical
+                    pos = has_correct_pos or flexible_order
+                    log_info = (epoch, produced_sentence, line.target_sentence, pos, meaning,
+                                code_switched, cs_type, cs_pos_point)
+                    if pos_interest:
+                        log_info += (switched_before, switched_at, switched_right_after, switched_after,
+                                     switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
+                                     switched_after_es_en)
+                    if self.pronoun_experiment:
+                        log_info += (has_pronoun_error, has_pronoun_error_flex)
+                    log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
+                                 not has_wrong_det, f'"{line.message}"',)
+                    log_info += (' '.join(entropy_idx),)
+                    logger.info(",".join(str(x) for x in log_info))
 
     @staticmethod
     def aggregate_dict(epochs, results_type_code_switches):

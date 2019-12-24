@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import json
 import argparse
-from modules import (os, lz4, pickle, sys, logging, InputFormatter, compute_mean_and_std, DualPath, Plotter,
-                     copy_files, datetime, training_is_successful, Process, cpu_count, round, re)
+from modules import (os, sys, logging, InputFormatter, DualPath, Plotter, copy_files, datetime,
+                     Process, cpu_count, round, pd, str2bool)
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     parser.add_argument('--trainingset', '--training', default="training.in",
                         help='File name that contains the message-sentence pair for training.')
     parser.add_argument('--testset', help='Test set file name')
-    parser.add_argument('--languages', help='To generate a new set, specify the language (en, es or any combination '
-                                            '[enes, esen] for bilingual)', nargs='*', default='es en', type=str.lower)
+    parser.add_argument('--languages', help='To generate a new set, specify the languages (e.g., en, es)', nargs='*',
+                        default=['en', 'es'], type=str.lower)
     parser.add_argument('--target_lang', nargs='*', help='Values for the target language node. It may differ from the '
                                                          'input languages (e.g., lang=en but target_lang=en es)')
     parser.add_argument('--lrate', help='Learning rate', type=float, default=0.10)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                         type=float, default=0.9)
     parser.add_argument('--set_weights', '--sw', default=None,
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
-    parser.add_argument('--set_weights_epoch', '--swe', type=positive_int,
+    parser.add_argument('--set_weights_epoch', '--swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
     parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 10-20
                         help='Fixed weight value for concept-role connections')
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
 
-    if args.config_file:  # read params from file; I used the json format instead of pickle to make it readable
+    if args.config_file:  # read params from file; I used the json format to make it readable
         with open(args.config_file, 'r') as f:
             args.__dict__ = json.load(f)
 
@@ -257,16 +257,13 @@ if __name__ == "__main__":
                                    cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
                                    structures_csv=args.structures, allow_free_structure_production=args.free_pos)
 
-        # I had issues with joblib installation on Ubuntu 16.04.6 LTS
-        # If prefer="threads", deepcopy input sets. -1 means that all CPUs will be used
-        # Parallel(n_jobs=-1)(delayed(create_input_for_simulation)(sim) for sim in simulation_range)
         parallel_jobs = []
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
                                                num_test, l2_decimal, auxiliary_experiment, sim, args.randomize)))
             parallel_jobs[-1].start()
-            # if number of simulations is larger than number of cores or it is the last simulation, start multiproc.
+            # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
                 for p in parallel_jobs:
                     p.join()
@@ -322,58 +319,30 @@ if __name__ == "__main__":
     dualp.inputs.update_sets(f"{dualp.inputs.root_directory}/{simulation_range[0]}")  # needed to update num_test
     num_test = dualp.inputs.num_test
 
-    test_sentences_with_pronoun = dualp.inputs.test_sentences_with_pronoun
-    layers_with_softmax = ', '.join([layer.name for layer in dualp.srn.backpropagated_layers
-                                     if layer.activation_function == 'softmax'])
     del dualp
 
-    if args.eval_test:  # aggregate and plot results
-        num_valid_simulations = 0
-        simulations_with_pron_err = 0
-        failed_sim_id = []
-        valid_results = []
-        for sim in simulation_range:  # read results from all simulations
-            if os.path.isfile(f'{results_dir}/{sim}/results.pickled'):
-                with lz4.open(f'{results_dir}/{sim}/results.pickled', 'rb') as f:
-                    simulation = pickle.load(f)
-                if training_is_successful(simulation['correct_meaning']['test'], args.threshold, num_test=num_test):
-                    valid_results.append(simulation)
-                    if not training_is_successful(simulation['correct_meaning']['test'], 80, num_test=num_test):
-                        failed_sim_id.append(f"[{sim}]")  # flag it, even if it's included in the final analysis
-                else:
-                    failed_sim_id.append(str(sim))  # keep track of simulations that failed
-            else:  # this would mean "missing data", we could raise a message
-                logging.warning(f'Simulation #{sim} was problematic')
+    if args.eval_test:  # plot results
+        all_dfs = []
+        for network_num in simulation_range:
+            temp_df = pd.read_csv(f'{results_dir}/{network_num}/test.csv', index_col=None, header=0,
+                                  skipinitialspace=True, dtype={'is_code_switched': bool, 'meaning': str})
+            temp_df['network_num'] = network_num
+            all_dfs.append(temp_df)
+        df = pd.concat(all_dfs, axis=0, ignore_index=True)
+        df.meaning = df.meaning.apply(lambda x: str2bool(x))
+        num_test_sentences = len(df[(df.epoch == args.epochs) & (df.network_num == simulation_range[0])])
 
-        num_valid_simulations = len(valid_results)  # some might have been discarded
-        if num_valid_simulations:  # take the average of results and plot
-            if not args.pronoun_experiment:
-                simulations_with_pron_err = 0
-            else:
-                simulations_with_pron_err = len([simulation for simulation in valid_results
-                                                 if sum(simulation['pronoun_errors_flex']['test']) > 0])
-            eval_sets = set()
-            if args.eval_test:
-                eval_sets.add('test')
-            if args.eval_training:
-                eval_sets.add('training')
-            results_mean_and_std = compute_mean_and_std(valid_results, evaluated_sets=eval_sets, epochs=args.epochs)
+        df_meaning_grammaticality_cs = df.groupby(['epoch', 'network_num']).apply(lambda dft: pd.Series(
+            {'meaning': dft.meaning.sum(),
+             'code_switched': dft[dft.meaning == 1].is_code_switched.sum(),
+             'intersentential': dft[dft.switched_type == 'inter-sentential'].is_code_switched.sum(),
+             'alternational': dft[dft.switched_type == 'alternational'].is_code_switched.sum(),
+             'insertional': dft[dft.switched_type == 'insertional'].is_code_switched.sum(),
+             'is_grammatical': dft.is_grammatical.sum()
+             }))
+        df_meaning_grammaticality_cs.to_csv(f'{results_dir}/performance.csv')
 
-            with lz4.open(f"{results_dir}/summary_results.pickled", 'wb') as pckl:
-                pickle.dump(results_mean_and_std, pckl, protocol=-1)
-
-            plot = Plotter(results_dir=results_dir, summary_sim=num_valid_simulations, title=args.title,
-                           epochs=args.epochs, num_training=num_training, num_test=num_test)
-            plot.plot_results(results_mean_and_std, cognate_experiment=args.cognate_experiment,
-                              test_sentences_with_pronoun=test_sentences_with_pronoun,
-                              auxiliary_experiment=args.auxiliary_experiment, evaluated_datasets=eval_sets)
-            if not isinstance(results_mean_and_std['correct_code_switches']['test'], int):
-                with open(f"{results_dir}/results.log", 'w') as f:
-                    f.write(f"Code-switched percentage (test set): "
-                            f"{Plotter.percentage(results_mean_and_std['correct_code_switches']['test'], num_test)}")
-
-        with open(f"{results_dir}/results.log", 'w') as f:
-            f.write(f"Layers with softmax activation function: "
-                    f"{layers_with_softmax}\nSimulations with pronoun errors:{simulations_with_pron_err}/"
-                    f"{num_simulations}\nSuccessful simulations: {num_valid_simulations}/{args.sim}\n"
-                    f"Indices of (almost) failed simulations: {', '.join(failed_sim_id) if failed_sim_id else ''}")
+        df = pd.read_csv(f'{results_dir}/performance.csv')
+        plot = Plotter(results_dir=results_dir)
+        plot.plot_performance(df, num_sentences=num_test_sentences)
+        plot.plot_code_switches(df)

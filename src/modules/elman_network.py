@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from scipy.stats import entropy
-from . import os, sys, torch, zeros, cat, stack, empty, pickle, lz4, defaultdict
+import pickle
+from . import os, sys, torch, zeros, cat, stack, empty, lz4, defaultdict
 
 # remove
 from functools import wraps
@@ -63,11 +64,9 @@ class SimpleRecurrentNetwork:
 
     def load_weights(self, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
-            if simulation_num is not None:
-                weights_fname = os.path.join(set_weights_folder, str(simulation_num),
-                                             "weights", f"w{set_weights_epoch}.lz4")
-            else:
-                weights_fname = os.path.join(set_weights_folder, "weights", f"w{set_weights_epoch}.lz4")
+            weights_fname = os.path.join(set_weights_folder,
+                                         "%sweights" % (str(simulation_num) if simulation_num is not None else ''),
+                                         f"w{set_weights_epoch}.lz4")
             with lz4.open(weights_fname, 'rb') as f:
                 self.layers = pickle.load(f)
         else:
