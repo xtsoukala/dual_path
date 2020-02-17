@@ -21,7 +21,8 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, randomize, simulation_num=None):
+                 starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, fixed_weights, 
+                 simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -56,6 +57,10 @@ class DualPath:
         self.only_evaluate = only_evaluate
         self.continue_training = continue_training
         self.randomize = randomize
+        self.hidden_deviation = hidden_deviation
+        self.compress_deviation = compress_deviation
+        self.fw_deviation = fw_deviation
+        self.fixed_weights = fixed_weights
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -79,6 +84,7 @@ class DualPath:
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
                                           debug_messages=srn_debug, include_role_copy=role_copy,
                                           include_input_copy=input_copy, separate_hidden_layers=separate_hidden_layers)
+        self.srn.fw = fixed_weights
         self.initialize_srn()
 
     def init_logger(self, name):
@@ -225,10 +231,11 @@ class DualPath:
 
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
-            self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
-            self.compress_size = (random.randint(self.compress_size-10, self.compress_size+10)
+            self.hidden_size = random.randint(self.hidden_size-self.hidden_deviation, self.hidden_size+self.hidden_deviation)
+            self.compress_size = (random.randint(self.compress_size-self.compress_deviation, 
+                                                 self.compress_size+self.compress_deviation)
                                   if self.compress_size else int(self.hidden_size // 1.3))
-            self.srn.fw = random.randint(10, 20)
+            self.srn.fw = random.randint(self.fixed_weights, self.fixed_weights+self.fw_deviation)
             if self.set_weights_epoch:
                 self.set_weights_epoch = random.randint(self.set_weights_epoch-2, self.set_weights_epoch+2)
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
