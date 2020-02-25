@@ -21,8 +21,7 @@ def measure(func):
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, rdir, separate_hidden_layers=False,
-                 debug_messages=True, include_role_copy=False, include_input_copy=False):
+    def __init__(self, learn_rate, momentum, rdir, debug_messages, separate_hidden_layers, role_copy, input_copy):
         self.layers = {}
         self.backpropagated_layers = []
         self.feedforward_layers = []
@@ -31,8 +30,8 @@ class SimpleRecurrentNetwork:
         self.context_value = 0.5
         self.initialization_completed = False  # needs to be set to True for the model to start training
         self.debug_messages = debug_messages
-        self.include_role_copy = include_role_copy
-        self.include_input_copy = include_input_copy
+        self.include_role_copy = role_copy
+        self.include_input_copy = input_copy
         self.separate_hidden_layers = separate_hidden_layers
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
         self.lesion_syntax = False
@@ -65,8 +64,8 @@ class SimpleRecurrentNetwork:
     def load_weights(self, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
             weights_fname = os.path.join(set_weights_folder,
-                                         "%sweights" % (str(simulation_num) if simulation_num is not None else ''),
-                                         f"w{set_weights_epoch}.lz4")
+                                         str(simulation_num) if simulation_num is not None else '',
+                                         "weights", f"w{set_weights_epoch}.lz4")
             with lz4.open(weights_fname, 'rb') as f:
                 self.layers = pickle.load(f)
         else:

@@ -26,6 +26,19 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
                                                          l2_decimal=l2_decimal)
 
 
+def get_epoch(sim):
+    l2_epoch = {13: [2, 15, 25, 33],
+                14: [1, 10, 11, 16, 19, 21, 22, 26, 28, 29, 30, 34, 35, 36, 38, 39],
+                15: [3, 4, 6, 9, 13, 18, 24, 31, 40],
+                16: [5, 7, 8, 12, 14, 17, 20, 23, 27, 32, 37]}
+    epoch = None
+    for v in l2_epoch.keys():
+        if sim in l2_epoch[v]:
+            epoch = v
+            break
+    return epoch
+
+
 def calculate_testset_size(num_training, test_set_decimal=0.2):
     """
     :param num_training: Number of training sentences
@@ -239,7 +252,7 @@ if __name__ == "__main__":
 
         if args.target_lang:  # replace with given target language
             with open(f'{given_input_path}/target_lang.in', 'w') as f:
-                f.write("%s" % "\n".join(args.target_lang))
+                f.write(f"%s" % "\n".join(args.target_lang))
 
     else:  # generate a new set
         from modules import SetsGenerator
@@ -308,7 +321,8 @@ if __name__ == "__main__":
 
     parallel_jobs = []
     for sim in simulation_range:  # first create all input files
-        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
+        epoch = None if len(args.languages) == 2 else get_epoch(sim)
+        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights, epoch)))
         parallel_jobs[-1].start()
         # if number of simulations is larger than number of cores or if it's the last simulation, start multiprocessing
         if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -330,19 +344,31 @@ if __name__ == "__main__":
             all_dfs.append(temp_df)
         df = pd.concat(all_dfs, axis=0, ignore_index=True)
         df.meaning = df.meaning.apply(lambda x: str2bool(x))
+        df.is_code_switched = df.is_code_switched.apply(lambda x: str2bool(x))
+        df['switch_from'] = df.message.str[-2:]
+        df.to_csv(f'{results_dir}/all_results.csv', index=False)
         num_test_sentences = len(df[(df.epoch == args.epochs) & (df.network_num == simulation_range[0])])
 
         df_meaning_grammaticality_cs = df.groupby(['epoch', 'network_num']).apply(lambda dft: pd.Series(
             {'meaning': dft.meaning.sum(),
              'code_switched': dft[dft.meaning == 1].is_code_switched.sum(),
              'intersentential': dft[dft.switched_type == 'inter-sentential'].is_code_switched.sum(),
+             'ambiguous': dft[dft.switched_type == 'ambiguous'].is_code_switched.sum(),
              'alternational': dft[dft.switched_type == 'alternational'].is_code_switched.sum(),
              'insertional': dft[dft.switched_type == 'insertional'].is_code_switched.sum(),
              'is_grammatical': dft.is_grammatical.sum()
              }))
         df_meaning_grammaticality_cs.to_csv(f'{results_dir}/performance.csv')
 
-        df = pd.read_csv(f'{results_dir}/performance.csv')
+        gb = df[(df.epoch == 30) & (df.switched_type != 'False')].groupby(
+            ['switched_type', 'pos_of_switch_point', 'switch_from']).apply(
+            lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum()}))
+        gb.to_csv(f'{results_dir}/code_switch_types.csv')
+
+        df_meaning_grammaticality_cs = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
-        plot.plot_performance(df, num_sentences=num_test_sentences)
-        plot.plot_code_switches(df)
+        plot.plot_performance(df_meaning_grammaticality_cs, num_sentences=num_test_sentences)
+        plot.plot_code_switches(df_meaning_grammaticality_cs)
+
+        group_switches = pd.read_csv(f'{results_dir}/code_switch_types.csv')
+        plot.barplot_code_switches(df, group_switches)

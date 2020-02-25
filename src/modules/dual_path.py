@@ -5,12 +5,11 @@ import random
 
 class DualPath:
     """
-    Dual-path is based on the SRN architecture and has the following layers (plus hidden & context):
+    Dual-path is based on the SRN architecture and has the following layers (plus the recurrent hidden one):
     input, (predicted) compress, (predicted) concept, (predicted) identifiability & (predicted) role,
     target language, event-semantics and output.
 
     The event-semantics unit is the only unit that provides information about the target sentence order.
-    E.g. for the dative sentence "A man bakes a cake for the cafe" there are 3 event-sem units: CAUSE, CREATE, TRANSFER
 
     role-concept and pred_role-pred_concept links are used to store the message
 
@@ -77,8 +76,8 @@ class DualPath:
         self.evaluate_training_set = evaluate_training_set
         self.starting_epoch = starting_epoch
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
-                                          debug_messages=srn_debug, include_role_copy=role_copy,
-                                          include_input_copy=input_copy, separate_hidden_layers=separate_hidden_layers)
+                                          debug_messages=srn_debug, role_copy=role_copy, input_copy=input_copy,
+                                          separate_hidden_layers=separate_hidden_layers)
         self.initialize_srn()
 
     def init_logger(self, name):
@@ -110,7 +109,7 @@ class DualPath:
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")  # tried softmax with fw == 1, it didn't work.
+        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")
         self.srn.add_layer("compress", compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", self.inputs.num_languages)
@@ -169,7 +168,7 @@ class DualPath:
 
     def feed_line(self, target_sentence_idx, target_lang_act, weights_role_concept, weights_concept_role,
                   weights_role_identif, weights_identif_role, event_semantics, backpropagate=False,
-                  activate_target_lang=False, include_entropy=False):
+                  activate_target_lang=False, include_entropy=True):
         produced_sent_ids = []
         sentence_entropy = []
         append_to_produced = produced_sent_ids.append
@@ -207,7 +206,20 @@ class DualPath:
         if not backpropagate:
             return produced_sent_ids, sentence_entropy
 
-    def start_network(self, simulation_num, set_existing_weights):
+    @staticmethod
+    def get_epoch(sim):
+        l2_epoch = {13: [2, 15, 25, 33],
+                    14: [1, 10, 11, 16, 19, 21, 22, 26, 28, 29, 30, 34, 35, 36, 38, 39],
+                    15: [3, 4, 6, 9, 13, 18, 24, 31, 40],
+                    16: [5, 7, 8, 12, 14, 17, 20, 23, 27, 32, 37]}
+        epoch = None
+        for v in l2_epoch.keys():
+            if sim in l2_epoch[v]:
+                epoch = v
+                break
+        return epoch
+
+    def start_network(self, simulation_num, set_existing_weights, epochs=None):
         """
         :param simulation_num: unique number (integer) of simulation
         Training: for each word of input sentence:
@@ -218,22 +230,26 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
-        :set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
+        :param set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
+        :param epochs: We may want to modify the number of epochs per simulation
         """
         self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
         self.simulation_num = simulation_num
-
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
-            self.hidden_size = random.randint(self.hidden_size-10, self.hidden_size+10)
-            self.compress_size = (random.randint(self.compress_size-10, self.compress_size+10)
+            self.hidden_size = random.randint(self.hidden_size - 10, self.hidden_size + 10)
+            self.compress_size = (random.randint(self.compress_size - 10, self.compress_size + 10)
                                   if self.compress_size else int(self.hidden_size // 1.3))
             self.srn.fw = random.randint(10, 20)
             if self.set_weights_epoch:
-                self.set_weights_epoch = random.randint(self.set_weights_epoch-2, self.set_weights_epoch+2)
+                ep = self.get_epoch(simulation_num)
+                if not ep:
+                    ep = random.randint(self.set_weights_epoch - 2, self.set_weights_epoch + 2)
+                self.set_weights_epoch = ep
+                self.starting_epoch = self.set_weights_epoch
+
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.srn.fw}",
-                  f"starting weight epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
+                  f"fw: {self.srn.fw}, starting epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
             self.initialize_srn()
 
         if set_existing_weights:
@@ -247,6 +263,7 @@ class DualPath:
                 if self.set_weights_epoch != 0:  # rename them all to epoch 0
                     os.system(f"rename s/_{self.set_weights_epoch}/_0/ {self.inputs.directory}/weights/*")
 
+        epoch_range = range(self.starting_epoch, (self.epochs if not epochs else epochs) + 1)
         if not self.only_evaluate:
             weights_role_concept = self.inputs.weights_role_concept['training']
             weights_concept_role = self.inputs.weights_concept_role['training']
@@ -256,11 +273,10 @@ class DualPath:
             target_lang_act = self.inputs.target_lang_act['training']
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
-            epoch_range = range(self.starting_epoch, self.epochs+1)
             for epoch in epoch_range:
                 self.srn.save_weights(directory, epoch)
                 # times = time.time()
-                for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
+                for line in set_lines.sample(frac=1, random_state=epoch).itertuples():  # random_state is the seed
                     line_idx = line.Index
                     self.feed_line(target_sentence_idx=line.target_sentence_idx,
                                    target_lang_act=target_lang_act[line_idx],
@@ -310,7 +326,7 @@ class DualPath:
             directory = self.inputs.directory
             logger = self.test_logger if 'test' in set_name else self.training_logger
             buffer_to_produce = [None] * 2
-            for epoch in range(self.epochs+1):
+            for epoch in range(self.epochs + 1):
                 self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     line_idx = line.Index
@@ -334,13 +350,12 @@ class DualPath:
 
                     produced_sentence = self.inputs.sentence_from_indices(produced_idx)
                     produced_pos = self.inputs.sentence_pos(produced_idx)
-
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        logger.warning('Debugging sentence pair')
-                        produced_sentence = 'el padre has sneezed .'
-                        target_sentence = 'el padre ha estornudado .'
-                        target_lang = 'es'
+                        logger.info('Debugging sentence pair')
+                        produced_sentence = 'he come .'
+                        target_sentence = 'he eats .'
+                        target_lang = 'en'
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indices(target_sentence)
@@ -364,9 +379,8 @@ class DualPath:
                             cs_type, cs_pos_point = self.inputs.get_code_switched_type(produced_idx, produced_pos,
                                                                                        target_sentence_idx, target_lang,
                                                                                        top_down_language_activation)
-                            if top_down_language_activation and cs_type == "inter-sentential":  # don't count it as CS
+                            if top_down_language_activation and cs_type == "inter-sentential":
                                 correct_meaning = True
-                                code_switched = False
                             elif cs_type:  # TODO: check the failed sentences too
                                 correct_meaning = True
                                 if pos_interest and pos_interest in produced_pos:
@@ -391,34 +405,16 @@ class DualPath:
                                 else:  # flex: grammatically correct sentences / gender error + wrong meaning
                                     has_pronoun_error_flex = True
 
-                    # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
-                    meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
-                    # count it as correct even if it hasn't produced the target POS -- as long as it's grammatical
+                    meaning = f"{'flex-' if has_wrong_det or has_wrong_tense else ''}{correct_meaning}"
                     pos = has_correct_pos or flexible_order
-                    log_info = (epoch, produced_sentence, line.target_sentence, pos, meaning,
-                                code_switched, cs_type, cs_pos_point)
+                    log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning,
+                                code_switched, cs_type, cs_pos_point]
                     if pos_interest:
-                        log_info += (switched_before, switched_at, switched_right_after, switched_after,
-                                     switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                     switched_after_es_en)
+                        log_info = [switched_before, switched_at, switched_right_after, switched_after,
+                                    switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
+                                    switched_after_es_en]
                     if self.pronoun_experiment:
-                        log_info += (has_pronoun_error, has_pronoun_error_flex)
-                    log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
-                                 not has_wrong_det, f'"{line.message}"',)
-                    log_info += (' '.join(entropy_idx),)
+                        log_info.extend([has_pronoun_error, has_pronoun_error_flex])
+                    log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
+                                     not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx)])
                     logger.info(",".join(str(x) for x in log_info))
-
-    @staticmethod
-    def aggregate_dict(epochs, results_type_code_switches):
-        # convert "type_code_switches" from list of dicts
-        # (e.g, [[{'es-noun': 4, 'en-alternational': 1}][{'es-noun': 6, 'en-alternational': 8}]])
-        # to a single dict of list (e.g., {'en-alternational': [1, 6, 14], 'es-noun': [4, 8, 22]}
-        types_dict = {}
-        all_keys = sorted(set().union(*(d.keys() for d in results_type_code_switches)))
-        for key in all_keys:
-            val = []
-            for epoch in range(epochs+1):
-                v = results_type_code_switches[epoch][key] if key in results_type_code_switches[epoch] else 0
-                val.append(v)
-            types_dict[key] = val
-        return types_dict

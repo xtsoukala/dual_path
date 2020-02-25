@@ -16,9 +16,5 @@ from datetime import datetime
 from .formatter import InputFormatter, is_not_nan, copy_files, training_is_successful
 from .elman_network import SimpleRecurrentNetwork
 from .dual_path import DualPath
-from .plotter import Plotter, plt
+from .plotter import Plotter, plt, str2bool
 from .corpus_generator import SetsGenerator
-
-
-def str2bool(v):
-    return int(v.lower() in ("yes", "true", "t", "1", "flex-true"))

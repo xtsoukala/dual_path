@@ -247,12 +247,17 @@ class InputFormatter:
         return cache
 
     def check_for_insertions(self, out_sentence_idx, out_pos, target_lang):
+        is_from_lang_filter = {'en': lt, 'es': ge}
         non_shared_idx = list(filter(lambda i: i not in self.shared_idx, out_sentence_idx))
         l2_words = sum([1 for i in non_shared_idx if i >= self.code_switched_idx])
         l1_words = sum([1 for i in non_shared_idx if i < self.code_switched_idx])
-        filter_idx = lt if target_lang == self.L[2] or l2_words > l1_words else ge
-        check_idx = [i for i in non_shared_idx if filter_idx(i, self.code_switched_idx)]
-        if target_lang and not check_idx:
+        if (((target_lang == self.L[1] and l1_words == 1 and l2_words > 1) or
+             (target_lang == self.L[2] and l2_words == 1 and l1_words > 1)) and
+                is_from_lang_filter[target_lang](out_sentence_idx[0], self.code_switched_idx)):
+            return "alternational", out_pos[1]
+
+        check_idx = [i for i in non_shared_idx if not is_from_lang_filter[target_lang](i, self.code_switched_idx)]
+        if target_lang and (not check_idx or check_idx == non_shared_idx):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
             return "inter-sentential", False
@@ -260,10 +265,8 @@ class InputFormatter:
         check_idx_pos = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
         if len(set(check_idx_pos)) == 1:
             pos = check_idx_pos[0]
-            if check_idx[0] == out_sentence_idx[-2] and pos in ['verb', 'participle']:
-                return "alternational", pos    # mark as alternational (with intransitive verbs)
-            elif check_idx[0] == out_sentence_idx[0]:  # if first word, also count as alternation but from the next POS
-                return "alternational", out_pos[1]
+            if check_idx[0] == out_sentence_idx[-2]:
+                return "ambiguous", pos    # if last word: it could be either an alternation or an insertion
             else:
                 return "insertional", pos
         return False, False
@@ -291,13 +294,10 @@ class InputFormatter:
             return False  # it was either a cognate or a false friend
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
-        check_idx_pos = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
-        if len(set(check_idx_pos)) > 0 and set(check_idx).issubset(out_sentence_idx):
-            starting_switch_point = check_idx_pos[0]
-        else:
-            print(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
-            sys.exit()
-        return starting_switch_point
+        starting_switch_point = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
+        if len(set(starting_switch_point)) > 0 and set(check_idx).issubset(out_sentence_idx):
+            return starting_switch_point[0]
+        sys.exit(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
 
     def is_code_switched(self, sentence_indices, target_lang_idx):
         """ This function only checks whether words from different languages were used.
@@ -416,15 +416,18 @@ class InputFormatter:
         return allowed
 
     @staticmethod
-    def correct_auxiliary_phrase(pos):
-        if 'verb' in pos and 'participle' in pos:
+    def correct_participle_and_adverb(pos):
+        if 'participle' in pos and 'verb' in pos:
             pos = list([i.replace('verb', 'aux') for i in pos])
         elif 'aux' in pos and 'verb' in pos:
             pos = list([i.replace('verb', 'participle') for i in pos])
-        elif pos.count('verb') == 2:
+        elif sublist_in_list(['verb', 'verb'], pos):
             p_idx = pos.index('verb')
             pos[p_idx] = 'aux'
             pos[p_idx + 1] = 'participle'
+        elif sublist_in_list(['verb', 'adj'], pos):
+            p_idx = pos.index('verb')
+            pos[p_idx + 1] = 'adverb'
         return pos
 
     def _read_file_to_list(self, fname):
@@ -468,7 +471,7 @@ class InputFormatter:
         or the words (in that case, convert_to_idx should be set to True)
         :return: returns a list with the POS tags of a sentence
         """
-        return self.correct_auxiliary_phrase(list(map(self.pos_lookup, sentence_idx_lst)))
+        return self.correct_participle_and_adverb(list(map(self.pos_lookup, sentence_idx_lst)))
 
     def get_message_info(self, message):
         """ :param message: string, e.g. "ACTION=CARRY;AGENT=FATHER,DEF;PATIENT=STICK,INDEF
@@ -533,6 +536,10 @@ class InputFormatter:
 
 def get_minimum_and_maximum_idx(clean_sentence):
     return min(clean_sentence), max(clean_sentence)  # set with 2 indices, min and max
+
+
+def sublist_in_list(sublist, main):
+    return sublist in [main[i:len(sublist) + i] for i in range(len(main))]
 
 
 def is_not_nan(x):
