@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from . import logging, SimpleRecurrentNetwork, ones, os, copy_files, time
+from . import logging, SimpleRecurrentNetwork, ones, os, copy_files
 import random
 
 
@@ -21,8 +21,7 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, fixed_weights, 
-                 simulation_num=None):
+                 starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -59,8 +58,7 @@ class DualPath:
         self.randomize = randomize
         self.hidden_deviation = hidden_deviation
         self.compress_deviation = compress_deviation
-        self.fw_deviation = fw_deviation
-        self.fixed_weights = fixed_weights
+        self.fw_deviation = fw_deviation  # the fixed weights are set at the InputFormatter class
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -84,7 +82,6 @@ class DualPath:
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
                                           debug_messages=srn_debug, include_role_copy=role_copy,
                                           include_input_copy=input_copy, separate_hidden_layers=separate_hidden_layers)
-        self.srn.fw = fixed_weights
         self.initialize_srn()
 
     def init_logger(self, name):
@@ -108,15 +105,13 @@ class DualPath:
         return logger
 
     def initialize_srn(self):
-        if not self.compress_size:
-            compress_size = int(self.hidden_size // 1.3)
-        else:
-            compress_size = self.compress_size
+        compress_size = self.compress_size if self.compress_size is not None else int(self.hidden_size // 1.3)
         # Chang: The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
         self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")  # tried softmax with fw == 1, it didn't work.
+        self.srn.add_layer("role", self.inputs.roles_size,
+                           activation_function="softmax")  # tried softmax with fw == 1, it didn't work.
         self.srn.add_layer("compress", compress_size)
         self.srn.add_layer("eventsem", self.inputs.event_sem_size)
         self.srn.add_layer("target_lang", self.inputs.num_languages)
@@ -169,7 +164,7 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        if not self.only_evaluate and self.simulation_num:  # else they will be loaded again at the next phase
+        if not self.randomize or (not self.only_evaluate and self.simulation_num):  # else they will be loaded again
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   simulation_num=self.simulation_num)
 
@@ -226,22 +221,25 @@ class DualPath:
         The authors created 20 sets x 8k for 20 subjects
         :set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
         """
-        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
         self.simulation_num = simulation_num
 
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
-            self.hidden_size = random.randint(self.hidden_size-self.hidden_deviation, self.hidden_size+self.hidden_deviation)
-            self.compress_size = (random.randint(self.compress_size-self.compress_deviation, 
-                                                 self.compress_size+self.compress_deviation)
+            self.hidden_size = random.randint(self.hidden_size - self.hidden_deviation,
+                                              self.hidden_size + self.hidden_deviation)
+            self.compress_size = (random.randint(self.compress_size - self.compress_deviation,
+                                                 self.compress_size + self.compress_deviation)
                                   if self.compress_size else int(self.hidden_size // 1.3))
-            self.srn.fw = random.randint(self.fixed_weights, self.fixed_weights+self.fw_deviation)
+            self.inputs.fixed_weights = random.randint(self.inputs.fixed_weights - self.fw_deviation,
+                                                       self.inputs.fixed_weights + self.fw_deviation)
             if self.set_weights_epoch:
-                self.set_weights_epoch = random.randint(self.set_weights_epoch-2, self.set_weights_epoch+2)
+                self.set_weights_epoch = random.randint(self.set_weights_epoch - 2, self.set_weights_epoch + 2)
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.srn.fw}",
+                  f"fw: {self.inputs.fixed_weights}",
                   f"starting weight epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
             self.initialize_srn()
+
+        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
 
         if set_existing_weights:
             destination_folder = f'{self.inputs.directory}/weights'
@@ -263,11 +261,10 @@ class DualPath:
             target_lang_act = self.inputs.target_lang_act['training']
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
-            epoch_range = range(self.starting_epoch, self.epochs+1)
+            epoch_range = range(self.starting_epoch, self.epochs + 1)
             for epoch in epoch_range:
                 self.srn.save_weights(directory, epoch)
-                # times = time.time()
-                for line in set_lines.sample(frac=1, random_state=epoch).itertuples():   # random_state is the seed
+                for line in set_lines.sample(frac=1, random_state=epoch).itertuples():  # random_state is the seed
                     line_idx = line.Index
                     self.feed_line(target_sentence_idx=line.target_sentence_idx,
                                    target_lang_act=target_lang_act[line_idx],
@@ -281,7 +278,6 @@ class DualPath:
                         self.srn.learn_rate -= self.lrate_decrease_step
                     elif self.srn.learn_rate != self.final_lrate:
                         self.srn.learn_rate = self.final_lrate
-                # print('loop', time.time() - times, self.srn.learn_rate)
             self.srn.save_weights(directory, epoch_range[-1])
 
         set_names = set()
@@ -317,7 +313,7 @@ class DualPath:
             directory = self.inputs.directory
             logger = self.test_logger if 'test' in set_name else self.training_logger
             buffer_to_produce = [None] * 2
-            for epoch in range(self.epochs+1):
+            for epoch in range(self.epochs + 1):
                 self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)
                 for line in set_lines.itertuples():
                     line_idx = line.Index
@@ -424,7 +420,7 @@ class DualPath:
         all_keys = sorted(set().union(*(d.keys() for d in results_type_code_switches)))
         for key in all_keys:
             val = []
-            for epoch in range(epochs+1):
+            for epoch in range(epochs + 1):
                 v = results_type_code_switches[epoch][key] if key in results_type_code_switches[epoch] else 0
                 val.append(v)
             types_dict[key] = val

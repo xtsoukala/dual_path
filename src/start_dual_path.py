@@ -53,7 +53,7 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
-    def non_negative_int(x): # includes zero
+    def non_negative_int(x):  # includes zero
         non_neg_int = int(x)
         if non_neg_int < 0:
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use non negative int value")
@@ -95,7 +95,7 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('--set_weights_epoch', '--swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 10-20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=15,
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
@@ -126,9 +126,9 @@ if __name__ == "__main__":
     parser.add_argument('--compress_dev', type=non_negative_int, default=10,
                         help='Maximum deviation for the number of compress layer units when randomization is used. '
                              'Defaults to 10.')
-    parser.add_argument('--fw_dev', type=non_negative_int, default=10,
+    parser.add_argument('--fw_dev', type=non_negative_int, default=5,
                         help='Maximum positive deviation for the fixed weight value for concept-role connections '
-                             'when randomization is used. Defaults to 10.')
+                             'when randomization is used. Defaults to 5.')
     parser.add_argument('--l2_decimal_dev', type=decimal_fraction, default=0.08,
                         help='Standard deviation for the decimal fraction of L2 input '
                              'when randomization is used. Defaults to 0.08.')
@@ -191,8 +191,8 @@ if __name__ == "__main__":
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
     parser.add_argument('--norandomization', dest='randomize', action='store_false',
-                        help='By default, we sample the free parameters (fixed weight, hidden/compress size, l2 decimal) '
-                             'within a certain standard deviation. Using this flag deactivates this setting.')
+                        help='By default, we sample the free parameters (fixed weight, hidden/compress size, l2 decimal'
+                             ') within a certain standard deviation. Using this flag deactivates this setting.')
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
 
@@ -319,7 +319,7 @@ if __name__ == "__main__":
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
-                     evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training, fixed_weights=args.fw,
+                     evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
                      starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
 
