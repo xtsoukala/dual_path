@@ -69,7 +69,8 @@ class SimpleRecurrentNetwork:
             with lz4.open(weights_fname, 'rb') as f:
                 self.layers = pickle.load(f)
         else:
-            torch.manual_seed(simulation_num)  # set number of simulation as the seed
+            if simulation_num:
+                torch.manual_seed(simulation_num)  # set number of simulation as the seed
             for layer in self.layers.values():
                 layer.in_weights = torch.nn.init.xavier_normal_(torch.empty([layer.in_size + int(layer.has_bias),
                                                                              layer.size]))

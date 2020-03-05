@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from . import pd, os, sys, is_not_nan, time, re, datetime, np
+from . import pd, os, sys, is_not_nan, time, datetime, np
+import re
 
 
 class SetsGenerator:

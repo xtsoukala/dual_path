@@ -2,16 +2,17 @@
 # -*- coding: utf-8 -*-
 import json
 import argparse
+from numpy import around as round
 from modules import (os, sys, logging, InputFormatter, DualPath, Plotter, copy_files, datetime,
-                     Process, cpu_count, round, pd, str2bool)
+                     Process, cpu_count, pd, create_dataframes_for_plots)
 
 
 def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
-                                auxiliary_experiment, simulation_number, randomize):
+                                auxiliary_experiment, simulation_number, randomize, l2_decimal_dev):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize and l2_decimal:
-        l2_decimal = round(sets.random.normal(l2_decimal, 0.08), decimals=2)
+        l2_decimal = round(sets.random.normal(l2_decimal, l2_decimal_dev), decimals=2)
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
@@ -24,19 +25,6 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
             sets.aux_experiment = True
             sets.generate_auxiliary_experiment_sentences(training_set=training_set,
                                                          l2_decimal=l2_decimal)
-
-
-def get_epoch(sim):
-    l2_epoch = {13: [2, 15, 25, 33],
-                14: [1, 10, 11, 16, 19, 21, 22, 26, 28, 29, 30, 34, 35, 36, 38, 39],
-                15: [3, 4, 6, 9, 13, 18, 24, 31, 40],
-                16: [5, 7, 8, 12, 14, 17, 20, 23, 27, 32, 37]}
-    epoch = None
-    for v in l2_epoch.keys():
-        if sim in l2_epoch[v]:
-            epoch = v
-            break
-    return epoch
 
 
 def calculate_testset_size(num_training, test_set_decimal=0.2):
@@ -66,6 +54,11 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
+    def non_negative_int(x):  # includes zero
+        non_neg_int = int(x)
+        if non_neg_int < 0:
+            raise argparse.ArgumentTypeError(f"{x} is invalid: only use non negative int value")
+        return non_neg_int
 
     def decimal_fraction(x):
         x = float(x)
@@ -80,7 +73,7 @@ if __name__ == "__main__":
                                                  'of the hidden one', type=positive_int)
     parser.add_argument('--epochs', type=positive_int, default=20,
                         help='Number of total training set iterations during (full) training.')
-    parser.add_argument('--l2_epochs', help='# of epoch when L2 input gets introduced', type=positive_int)
+    parser.add_argument('--l2_epoch', help='# of epoch when L2 input gets introduced', type=positive_int)
     parser.add_argument('--l2_decimal_fraction', help='Decimal fraction of L2 input (0.0-1.0)', type=decimal_fraction,
                         default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
@@ -103,7 +96,7 @@ if __name__ == "__main__":
                         help='Set a folder that contains pre-trained weights as initial weights for simulations')
     parser.add_argument('--set_weights_epoch', '--swe', type=int,
                         help='In case of pre-trained weights we can also specify num of epochs (stage of training)')
-    parser.add_argument('--fw', '--fixed_weights', type=int, default=10,  # 10-20
+    parser.add_argument('--fw', '--fixed_weights', type=int, default=15,
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
@@ -128,6 +121,20 @@ if __name__ == "__main__":
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
     parser.add_argument('--generator_timeout', type=positive_int, default=60,
                         help="Number of seconds before the sentence generation process times out")
+    parser.add_argument('--hidden_dev', type=non_negative_int, default=10,
+                        help='Maximum deviation for the number of hidden layer units when randomization is used. '
+                             'Defaults to 10.')
+    parser.add_argument('--compress_dev', type=non_negative_int, default=10,
+                        help='Maximum deviation for the number of compress layer units when randomization is used. '
+                             'Defaults to 10.')
+    parser.add_argument('--fw_dev', type=non_negative_int, default=5,
+                        help='Maximum deviation for the fixed weight value for concept-role connections '
+                             'when randomization is used. Defaults to 5.')
+    parser.add_argument('--epoch_dev', type=non_negative_int, default=2,
+                        help='Maximum deviation for the starting epoch/l2_epoch value. Defaults to 2.')
+    parser.add_argument('--l2_decimal_dev', type=decimal_fraction, default=0.08,
+                        help='Standard deviation for the decimal fraction of L2 input '
+                             'when randomization is used. Defaults to 0.08.')
     """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument('--prodrop', dest='prodrop', action='store_true', help='Indicates that it is a pro-drop lang')
     parser.set_defaults(prodrop=False)
@@ -187,8 +194,8 @@ if __name__ == "__main__":
                         help='Two hidden layers instead of one; separate hidden layer of semantic and syntactic path')
     parser.set_defaults(separate_hidden_layers=False)
     parser.add_argument('--norandomization', dest='randomize', action='store_false',
-                        help='By default, we sample the free parameters (fixed weight, hidden size, l2 decimal) '
-                             'within a certain standard deviation. Using this flag deactivates this setting.')
+                        help='By default, we sample the free parameters (fixed weight, hidden/compress size, l2 decimal'
+                             ') within a certain standard deviation. Using this flag deactivates this setting.')
     parser.set_defaults(randomize=True)
     args = parser.parse_args()
 
@@ -218,7 +225,7 @@ if __name__ == "__main__":
 
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
     results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
-                   f"{datetime.now().strftime('%H.%M.%S')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
+                   f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
                    f"c{args.compress}_fw{args.fw}_e{args.epochs}")
     os.makedirs(results_dir)
 
@@ -274,7 +281,8 @@ if __name__ == "__main__":
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
                                          args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_decimal, auxiliary_experiment, sim, args.randomize)))
+                                               num_test, l2_decimal, auxiliary_experiment, sim, args.randomize, 
+                                               args.l2_decimal_dev)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -305,8 +313,9 @@ if __name__ == "__main__":
                                      prodrop=args.prodrop,
                                      messageless_decimal_fraction=args.messageless_decimal_fraction)
 
+    starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                     epochs=args.epochs, role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
+                     role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
                      cognate_experiment=args.cognate_experiment, momentum=args.momentum, randomize=args.randomize,
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
@@ -315,14 +324,15 @@ if __name__ == "__main__":
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
-                     starting_epoch=0 if not args.continue_training else args.set_weights_epoch)
+                     hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
+                     epoch_deviation=args.epoch_dev, l2_epoch=args.l2_epoch,
+                     starting_epoch=starting_epoch, epochs=args.epochs)
 
     del formatted_input
 
     parallel_jobs = []
     for sim in simulation_range:  # first create all input files
-        epoch = None if len(args.languages) == 2 else get_epoch(sim)
-        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights, epoch)))
+        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
         parallel_jobs[-1].start()
         # if number of simulations is larger than number of cores or if it's the last simulation, start multiprocessing
         if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
@@ -330,45 +340,10 @@ if __name__ == "__main__":
                 p.join()
             parallel_jobs = []
 
-    dualp.inputs.update_sets(f"{dualp.inputs.root_directory}/{simulation_range[0]}")  # needed to update num_test
-    num_test = dualp.inputs.num_test
-
     del dualp
 
     if args.eval_test:  # plot results
-        all_dfs = []
-        for network_num in simulation_range:
-            temp_df = pd.read_csv(f'{results_dir}/{network_num}/test.csv', index_col=None, header=0,
-                                  skipinitialspace=True, dtype={'is_code_switched': bool, 'meaning': str})
-            temp_df['network_num'] = network_num
-            all_dfs.append(temp_df)
-        df = pd.concat(all_dfs, axis=0, ignore_index=True)
-        df.meaning = df.meaning.apply(lambda x: str2bool(x))
-        df.is_code_switched = df.is_code_switched.apply(lambda x: str2bool(x))
-        df['switch_from'] = df.message.str[-2:]
-        df.to_csv(f'{results_dir}/all_results.csv', index=False)
-        num_test_sentences = len(df[(df.epoch == args.epochs) & (df.network_num == simulation_range[0])])
-
-        df_meaning_grammaticality_cs = df.groupby(['epoch', 'network_num']).apply(lambda dft: pd.Series(
-            {'meaning': dft.meaning.sum(),
-             'code_switched': dft[dft.meaning == 1].is_code_switched.sum(),
-             'intersentential': dft[dft.switched_type == 'inter-sentential'].is_code_switched.sum(),
-             'ambiguous': dft[dft.switched_type == 'ambiguous'].is_code_switched.sum(),
-             'alternational': dft[dft.switched_type == 'alternational'].is_code_switched.sum(),
-             'insertional': dft[dft.switched_type == 'insertional'].is_code_switched.sum(),
-             'is_grammatical': dft.is_grammatical.sum()
-             }))
-        df_meaning_grammaticality_cs.to_csv(f'{results_dir}/performance.csv')
-
-        gb = df[(df.epoch == 30) & (df.switched_type != 'False')].groupby(
-            ['switched_type', 'pos_of_switch_point', 'switch_from']).apply(
-            lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum()}))
-        gb.to_csv(f'{results_dir}/code_switch_types.csv')
-
-        df_meaning_grammaticality_cs = pd.read_csv(f'{results_dir}/performance.csv')
+        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs)
+        df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
-        plot.plot_performance(df_meaning_grammaticality_cs, num_sentences=num_test_sentences)
-        plot.plot_code_switches(df_meaning_grammaticality_cs)
-
-        group_switches = pd.read_csv(f'{results_dir}/code_switch_types.csv')
-        plot.barplot_code_switches(df, group_switches)
+        plot.performance(df)

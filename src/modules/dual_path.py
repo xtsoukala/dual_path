@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from . import logging, SimpleRecurrentNetwork, ones, os, copy_files, time
+from . import logging, SimpleRecurrentNetwork, ones, os, copy_files
 import random
 
 
@@ -20,7 +20,8 @@ class DualPath:
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
                  input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
-                 starting_epoch, randomize, simulation_num=None):
+                 starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, l2_epoch,
+                 epoch_deviation, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -55,6 +56,9 @@ class DualPath:
         self.only_evaluate = only_evaluate
         self.continue_training = continue_training
         self.randomize = randomize
+        self.hidden_deviation = hidden_deviation
+        self.compress_deviation = compress_deviation
+        self.fw_deviation = fw_deviation  # the fixed weights are set at the InputFormatter class
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)
@@ -75,6 +79,8 @@ class DualPath:
         self.evaluate_test_set = evaluate_test_set
         self.evaluate_training_set = evaluate_training_set
         self.starting_epoch = starting_epoch
+        self.l2_epoch = l2_epoch
+        self.epoch_deviation = epoch_deviation
         self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
                                           debug_messages=srn_debug, role_copy=role_copy, input_copy=input_copy,
                                           separate_hidden_layers=separate_hidden_layers)
@@ -85,26 +91,19 @@ class DualPath:
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # no stdout to console
         logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
-        if name in ['test', 'training']:
-            header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
-                      "is_code_switched,switched_type,pos_of_switch_point")
-            if self.auxiliary_experiment:
-                header += (",switched_before,switched_at,switched_right_after,switched_after,switched_before_es_en,"
-                           "switched_at_es_en,switched_right_after_es_en, switched_after_es_en")
-            if self.pronoun_experiment:
-                header += ",pronoun_error,pronoun_error_flex"
-            header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message"
-        else:
-            header = "epoch,set_name,correct_meaning,correct_pos,total_sentences"
-        header += ",entropy"
+        header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
+                  "is_code_switched,switched_type,pos_of_switch_point")
+        if self.auxiliary_experiment:
+            header += (",switched_before,switched_at,switched_right_after,switched_after,switched_before_es_en,"
+                       "switched_at_es_en,switched_right_after_es_en, switched_after_es_en")
+        if self.pronoun_experiment:
+            header += ",pronoun_error,pronoun_error_flex"
+        header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch"
         logger.info(header)
         return logger
 
     def initialize_srn(self):
-        if not self.compress_size:
-            compress_size = int(self.hidden_size // 1.3)
-        else:
-            compress_size = self.compress_size
+        compress_size = self.compress_size if self.compress_size is not None else int(self.hidden_size // 1.3)
         # Chang: The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
         self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
@@ -162,7 +161,7 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        if not self.only_evaluate and self.simulation_num:  # else they will be loaded again at the next phase
+        if not self.randomize or (not self.only_evaluate and self.simulation_num):  # else they will be loaded again
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   simulation_num=self.simulation_num)
 
@@ -208,6 +207,7 @@ class DualPath:
 
     @staticmethod
     def get_epoch(sim):
+        return None
         l2_epoch = {13: [2, 15, 25, 33],
                     14: [1, 10, 11, 16, 19, 21, 22, 26, 28, 29, 30, 34, 35, 36, 38, 39],
                     15: [3, 4, 6, 9, 13, 18, 24, 31, 40],
@@ -219,7 +219,7 @@ class DualPath:
                 break
         return epoch
 
-    def start_network(self, simulation_num, set_existing_weights, epochs=None):
+    def start_network(self, simulation_num, set_existing_weights):
         """
         :param simulation_num: unique number (integer) of simulation
         Training: for each word of input sentence:
@@ -231,26 +231,31 @@ class DualPath:
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
         :param set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
-        :param epochs: We may want to modify the number of epochs per simulation
         """
-        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
         self.simulation_num = simulation_num
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
-            self.hidden_size = random.randint(self.hidden_size - 10, self.hidden_size + 10)
-            self.compress_size = (random.randint(self.compress_size - 10, self.compress_size + 10)
+            self.hidden_size = random.randint(self.hidden_size - self.hidden_deviation,
+                                              self.hidden_size + self.hidden_deviation)
+            self.compress_size = (random.randint(self.compress_size - self.compress_deviation,
+                                                 self.compress_size + self.compress_deviation)
                                   if self.compress_size else int(self.hidden_size // 1.3))
-            self.srn.fw = random.randint(10, 20)
-            if self.set_weights_epoch:
-                ep = self.get_epoch(simulation_num)
-                if not ep:
-                    ep = random.randint(self.set_weights_epoch - 2, self.set_weights_epoch + 2)
-                self.set_weights_epoch = ep
-                self.starting_epoch = self.set_weights_epoch
+            self.inputs.fixed_weights = random.randint(self.inputs.fixed_weights - self.fw_deviation,
+                                                       self.inputs.fixed_weights + self.fw_deviation)
 
+            if self.l2_epoch:
+                self.epochs = random.randint(self.l2_epoch - self.epoch_deviation,
+                                             self.l2_epoch + self.epoch_deviation)
+            elif self.set_weights_epoch:
+                self.set_weights_epoch = random.randint(self.set_weights_epoch - self.epoch_deviation,
+                                                        self.set_weights_epoch + self.epoch_deviation)
+                self.starting_epoch = self.set_weights_epoch
             print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.srn.fw}, starting epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
+                  f"fw: {self.inputs.fixed_weights}, epochs: {self.epochs}, ",
+                  f"starting weight epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
             self.initialize_srn()
+
+        self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
 
         if set_existing_weights:
             destination_folder = f'{self.inputs.directory}/weights'
@@ -263,7 +268,6 @@ class DualPath:
                 if self.set_weights_epoch != 0:  # rename them all to epoch 0
                     os.system(f"rename s/_{self.set_weights_epoch}/_0/ {self.inputs.directory}/weights/*")
 
-        epoch_range = range(self.starting_epoch, (self.epochs if not epochs else epochs) + 1)
         if not self.only_evaluate:
             weights_role_concept = self.inputs.weights_role_concept['training']
             weights_concept_role = self.inputs.weights_concept_role['training']
@@ -273,9 +277,10 @@ class DualPath:
             target_lang_act = self.inputs.target_lang_act['training']
             set_lines = self.inputs.trainlines_df
             directory = self.inputs.directory
+
+            epoch_range = range(self.starting_epoch, self.epochs + 1)
             for epoch in epoch_range:
                 self.srn.save_weights(directory, epoch)
-                # times = time.time()
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():  # random_state is the seed
                     line_idx = line.Index
                     self.feed_line(target_sentence_idx=line.target_sentence_idx,
@@ -290,7 +295,6 @@ class DualPath:
                         self.srn.learn_rate -= self.lrate_decrease_step
                     elif self.srn.learn_rate != self.final_lrate:
                         self.srn.learn_rate = self.final_lrate
-                # print('loop', time.time() - times, self.srn.learn_rate)
             self.srn.save_weights(directory, epoch_range[-1])
 
         set_names = set()
@@ -352,7 +356,7 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        logger.info('Debugging sentence pair')
+                        print('Debugging sentence pair')
                         produced_sentence = 'he come .'
                         target_sentence = 'he eats .'
                         target_lang = 'en'
@@ -416,5 +420,5 @@ class DualPath:
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
-                                     not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx)])
+                                     not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx), self.starting_epoch])
                     logger.info(",".join(str(x) for x in log_info))
