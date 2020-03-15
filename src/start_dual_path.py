@@ -113,8 +113,9 @@ if __name__ == "__main__":
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
     parser.add_argument('--sim_from', type=positive_int, help='To train several simulations with range other than '
                                                               '(0, number_of_simulations) you need to set the '
-                                                              'sim_from and sim_to values')
-    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
+                                                              'sim_from and sim_to values (the simulations include '
+                                                              'sim_from and sim_to)')
+    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations include sim_to)')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
@@ -343,7 +344,7 @@ if __name__ == "__main__":
     del dualp
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs)
+        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs, simulation_range)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
         plot.performance(df)

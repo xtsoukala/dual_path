@@ -24,12 +24,12 @@ def str2bool(v):
     return int(v.lower() in ("yes", "true", "t", "1", "flex-true", "flex-false"))
 
 
-def create_dataframes_for_plots(results_dir, num_sim, epoch_from, epoch_to):
+def create_dataframes_for_plots(results_dir, num_sim, epoch_from, epoch_to, simulation_range):
     if not os.path.exists(results_dir):
         sys.exit(f"{results_dir} is not an existing path.")
 
     all_dfs = []
-    for network_num in range(1, num_sim + 1):
+    for network_num in simulation_range:
         temp_df = pd.read_csv(f'{results_dir}/{network_num}/test.csv', index_col=None, header=0,
                               skipinitialspace=True, dtype={'is_code_switched': str, 'meaning': str})
         temp_df['network_num'] = network_num
