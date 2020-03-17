@@ -16,8 +16,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
-        sets.generate_for_cognate_experiment(num_training_sentences=training_num,
-                                             l2_decimal=l2_decimal)
+        sets.generate_for_cognate_experiment(num_training_sentences=training_num, l2_decimal=l2_decimal)
     else:
         test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
                                                        l2_decimal=l2_decimal)
@@ -344,7 +343,7 @@ if __name__ == "__main__":
     del dualp
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs, simulation_range)
+        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
         plot.performance(df)

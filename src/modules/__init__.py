@@ -24,7 +24,7 @@ def str2bool(v):
     return int(v.lower() in ("yes", "true", "t", "1", "flex-true", "flex-false"))
 
 
-def create_dataframes_for_plots(results_dir, num_sim, epoch_from, epoch_to, simulation_range):
+def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_range):
     if not os.path.exists(results_dir):
         sys.exit(f"{results_dir} is not an existing path.")
 

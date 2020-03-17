@@ -414,9 +414,9 @@ class DualPath:
                     log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning,
                                 code_switched, cs_type, cs_pos_point]
                     if pos_interest:
-                        log_info = [switched_before, switched_at, switched_right_after, switched_after,
-                                    switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                    switched_after_es_en]
+                        log_info.extend([switched_before, switched_at, switched_right_after, switched_after,
+                                         switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
+                                         switched_after_es_en])
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
