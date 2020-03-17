@@ -16,8 +16,7 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
-        sets.generate_for_cognate_experiment(num_training_sentences=training_num,
-                                             l2_decimal=l2_decimal)
+        sets.generate_for_cognate_experiment(num_training_sentences=training_num, l2_decimal=l2_decimal)
     else:
         test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
                                                        l2_decimal=l2_decimal)
@@ -113,8 +112,9 @@ if __name__ == "__main__":
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
     parser.add_argument('--sim_from', type=positive_int, help='To train several simulations with range other than '
                                                               '(0, number_of_simulations) you need to set the '
-                                                              'sim_from and sim_to values')
-    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
+                                                              'sim_from and sim_to values (the simulations include '
+                                                              'sim_from and sim_to)')
+    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations include sim_to)')
     parser.add_argument('--threshold', type=int, default=0,
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
@@ -343,7 +343,7 @@ if __name__ == "__main__":
     del dualp
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs)
+        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
         plot.performance(df)

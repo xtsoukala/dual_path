@@ -9,14 +9,13 @@ from modules import Plotter, pd, create_dataframes_for_plots
 
 if __name__ == "__main__":
     results_dir = '../../simulations/'
-    for m in ['esen', 'enes', 'esen']:
-        create_dataframes_for_plots(results_dir=f'{results_dir}/{m}', num_sim=40, epoch_from=0, epoch_to=40)
+    num_sim = 2
+    epoch_from = 0
+    epoch_to = 40
+    simulation_range = range(1, num_sim + 1)
+    create_dataframes_for_plots(results_dir=results_dir, epoch_from=epoch_from, epoch_to=epoch_to,
+                                simulation_range=simulation_range)
 
     df = pd.read_csv(f'{results_dir}/performance.csv')
     plt = Plotter(results_dir=results_dir)
-    plt.lineplot_code_switches(df)
-    plt.l1_performance_all_models()
-    plt.plot_code_switch_types_per_model()
-    plt.plot_code_switche_types_per_pos_for_all_models()
-    plt.l2_performance_all_models()
-    plt.print_switches_per_model(models=('early', 'esen'))
+    plt.performance(df)
