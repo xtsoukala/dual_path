@@ -227,6 +227,8 @@ if __name__ == "__main__":
     results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
                    f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
                    f"c{args.compress}_fw{args.fw}_e{args.epochs}")
+    if os.path.exists(results_dir):
+        results_dir += datetime.now().strftime('%M.%S')
     os.makedirs(results_dir)
 
     if args.replace_haber or args.test_haber_frequency:

@@ -230,7 +230,8 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
-        :param set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
+        :param set_existing_weights: folder containing trained weights (in case we want to continue training
+        or evaluate only)
         """
         self.simulation_num = simulation_num
         if self.randomize:

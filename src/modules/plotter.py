@@ -49,7 +49,7 @@ class Plotter:
         correct_sentences = []
         for switch_point in all_labels:
             correct_sentences.append(df[(df.epoch == df.epoch.max())
-                                        & df.meaning == 1].target_pos.str.contains(switch_point).sum() /
+                                        & df.meaning == 1].produced_pos.str.contains(switch_point).sum() /
                                      df.network_num.max())
 
         for switch_type in ['insertional', 'alternational', 'ambiguous']:  # one plot per switch_type
@@ -77,7 +77,7 @@ class Plotter:
             plt.savefig(self.get_plot_path(df.network_num.max(), f'{switch_type}_barplot'))
             plt.close()
 
-    def plot_code_switche_types_per_pos_for_all_models(self, models=('early', 'enes', 'esen'), l2_epoch=25, ylim=8):
+    def plot_code_switche_types_per_pos_for_all_models(self, models=('early', 'enes', 'esen'), l2_epoch=25, ylim=7):
         code_switch_types = ['insertional', 'alternational', 'ambiguous']
         labels = {'insertional': ['adj', 'aux', 'det', 'noun', 'participle', 'prep', 'verb'],
                   'alternational': ['adj', 'aux', 'det', 'noun', 'participle', 'prep', 'verb'],
@@ -96,7 +96,7 @@ class Plotter:
                 correct_sentences[m][switch_type] = []
                 for switch_point in labels[switch_type]:
                     pos = f"{switch_point} ." if switch_type == 'ambiguous' else switch_point
-                    correct_sentences[m][switch_type].append(df.target_pos.str.contains(pos).sum())
+                    correct_sentences[m][switch_type].append(df.produced_pos.str.contains(pos).sum())
 
                 code_switches[m][switch_type] = {}
                 for lang in self.languages:
@@ -258,7 +258,8 @@ class Plotter:
     def get_plot_path(self, num_simulations, fname):
         return f"{self.results_dir}/{num_simulations}_{fname}.png"
 
-    def print_switches_per_model(self, models=('early', 'enes', 'esen'), l2_epoch=25):
+    def print_switches_per_model(self, models=('early', 'enes', 'esen'), l2_epoch=25, print_total=False,
+                                 switch_type=('alternational', 'insertional', 'ambiguous')):
         lang_sum = {}
         for m in models:
             lang_sum[m] = {'en': [], 'es': []}
@@ -267,16 +268,17 @@ class Plotter:
             print('----------------------\n', m)
             df = df[df.epoch == (l2_epoch if m == 'early' else df.epoch.max())]
             correct_sentences = df.meaning.sum()
-            sm = []
-            for stype in ['alternational', 'insertional', 'ambiguous']:
-                print(stype, round(df[df.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences, 1))
-                sm.append(round(df[df.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences, 1))
-            print('Total:', round(sum(sm), 1))
+            if print_total:
+                sm = []
+                for stype in switch_type:
+                    print(stype, round(df[df.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences, 1))
+                    sm.append(round(df[df.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences, 1))
+                print('Total:', round(sum(sm), 1))
 
             for lang in self.languages:
                 ll = df[df.switch_from == lang]
                 print(lang, '->')
-                for stype in ['alternational', 'insertional', 'ambiguous']:
+                for stype in switch_type:
                     percentage = round(ll[ll.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences,
                                        1)
                     for pos in ll[ll.switched_type == stype].pos_of_switch_point.unique():
