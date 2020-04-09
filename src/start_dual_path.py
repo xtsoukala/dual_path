@@ -7,8 +7,8 @@ from modules import (os, sys, logging, InputFormatter, DualPath, Plotter, copy_f
                      Process, cpu_count, pd, create_dataframes_for_plots)
 
 
-def create_input_for_simulation(results_directory, sets, cognate_experiment, training_num, num_test, l2_decimal,
-                                auxiliary_experiment, simulation_number, randomize, l2_decimal_dev):
+def create_input_for_simulation(results_directory, sets, cognate_experiment, cognate_decimal, training_num, num_test,
+                                l2_decimal, auxiliary_experiment, simulation_number, randomize, l2_decimal_dev):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize and l2_decimal:
@@ -16,15 +16,14 @@ def create_input_for_simulation(results_directory, sets, cognate_experiment, tra
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
     if cognate_experiment:
-        sets.generate_for_cognate_experiment(num_training_sentences=training_num,
-                                             l2_decimal=l2_decimal)
-    else:
-        test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test,
-                                                       l2_decimal=l2_decimal)
-        if auxiliary_experiment:
-            sets.aux_experiment = True
-            sets.generate_auxiliary_experiment_sentences(training_set=training_set,
-                                                         l2_decimal=l2_decimal)
+        sets.convert_nouns_to_cognates(cognate_decimal)
+        #sets.generate_for_cognate_experiment_OLD(num_training=training_num, num_test=num_test, l2_decimal=l2_decimal,
+        #                                     cognate_decimal=cognate_decimal)
+    #else:
+    test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test, l2_decimal=l2_decimal)
+    if auxiliary_experiment:
+        sets.aux_experiment = True
+        sets.generate_auxiliary_experiment_sentences(training_set=training_set, l2_decimal=l2_decimal)
 
 
 def calculate_testset_size(num_training, test_set_decimal=0.2):
@@ -100,8 +99,8 @@ if __name__ == "__main__":
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
-                        type=float, default=0.35)
+    parser.add_argument('--cog_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
+                        type=float, default=0.35, dest='cognate_decimal_fraction')
     parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
                         help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
@@ -113,11 +112,9 @@ if __name__ == "__main__":
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
     parser.add_argument('--sim_from', type=positive_int, help='To train several simulations with range other than '
                                                               '(0, number_of_simulations) you need to set the '
-                                                              'sim_from and sim_to values')
-    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations includes sim_to)')
-    parser.add_argument('--threshold', type=int, default=0,
-                        help='Threshold for performance of simulations. Any simulations that performs has a percentage '
-                             'of correct sentences < threshold are discarded')
+                                                              'sim_from and sim_to values (the simulations include '
+                                                              'sim_from and sim_to)')
+    parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations include sim_to)')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
     parser.add_argument('--generator_timeout', type=positive_int, default=60,
                         help="Number of seconds before the sentence generation process times out")
@@ -237,12 +234,10 @@ if __name__ == "__main__":
     if args.auxiliary_experiment:
         args.cognate_decimal_fraction = 0
         args.activate_both_lang = True
-        args.threshold = 30
         if not args.testset:
             args.testset = 'test_aux.in'
     elif cognate_experiment:
         args.activate_both_lang = True
-
     if not args.testset:
         args.testset = 'test.in'
 
@@ -267,7 +262,8 @@ if __name__ == "__main__":
         from modules import SetsGenerator
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment
-                          else "code-switching/" if args.activate_both_lang else "")
+                          else "code-switching/" if args.activate_both_lang
+                          else "cognate/" if cognate_experiment else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
@@ -276,14 +272,15 @@ if __name__ == "__main__":
                      f"and {args.structures} (structures)")
 
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.languages, generator_timeout=args.generator_timeout,
-                                   cognate_decimal=args.cognate_decimal_fraction, lexicon_csv=args.lexicon,
-                                   structures_csv=args.structures, allow_free_structure_production=args.free_pos)
+                                   lexicon_csv=args.lexicon, structures_csv=args.structures,
+                                   allow_free_structure_production=args.free_pos)
 
         parallel_jobs = []
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
-                                         args=(results_dir, input_sets, cognate_experiment, training_num,
-                                               num_test, l2_decimal, auxiliary_experiment, sim, args.randomize, 
+                                         args=(results_dir, input_sets, cognate_experiment,
+                                               args.cognate_decimal_fraction, training_num, num_test,
+                                               l2_decimal, auxiliary_experiment, sim, args.randomize,
                                                args.l2_decimal_dev)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
@@ -345,7 +342,7 @@ if __name__ == "__main__":
     del dualp
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, num_simulations, starting_epoch, args.epochs)
+        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
         plot.performance(df)
