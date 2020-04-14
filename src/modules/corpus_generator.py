@@ -204,15 +204,15 @@ class SetsGenerator:
             pos_list = pos_full.split()
             for i, pos in enumerate(pos_list):
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender)
-                gender = self.get_df_gender(morpheme_df, prev_gender=gender)
-                sentence.append(morpheme_df['morpheme_{%s}' % (lang if not morpheme_df.is_cognate else 'en')])
+                morpheme_df = morpheme_df
+                gender = self.get_syntactic_gender(morpheme_df, prev_gender=gender)
+                sentence.append(morpheme_df[f'morpheme_{(lang if morpheme_df.is_cognate != True else "en")}'])
                 if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender)
                 concept = self.get_df_concept(morpheme_df)
                 if concept:
                     semantic_gender = self.get_df_semantic_gender(morpheme_df, syntactic_gender=gender)
-                    message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender,
-                                                                        morpheme_df.is_cognate)
+                    message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i + 1] if i + 1 < len(pos_list) else None
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
             sentence = u'%s .' % ' '.join(sentence)
@@ -274,13 +274,7 @@ class SetsGenerator:
         cache_size = len(cache.index)
         if not cache_size:
             sys.exit(f"Error: Empty cache. {params} {cache} {query if query else ''}")
-        #idx = self.get_random_row_idx(cache_size)
-        #selected = cache[[f'morpheme_{lang}', 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
-        #                  'is_cognate', 'is_false_friend']].iloc[idx]
-        #selected = cache[[f'morpheme_{lang}', 'pos', 'type', 'syntactic_gender_es', 'semantic_gender', 'concept',
-        #                  'is_cognate', 'is_false_friend']].iloc[idx]
-        selected = cache.sample(n=1)
-        return selected
+        return cache.iloc[self.get_random_row_idx(cache_size)]
 
     def save_lexicon_and_structures_to_csv(self):
         """
@@ -288,21 +282,21 @@ class SetsGenerator:
         "?" is necessary for multiple matches
         :return: e.g., 'PROGRESSIVE', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
         """
-        if not os.listdir(self.input_dir):
-            # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
-            event_semantics = []
-            for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
-                for evsem in event_semantic_str.split("EVENT-SEM=")[1].split(','):
-                    if ':' in evsem:
-                        evsem = evsem.split(':')[0]  # remove activation
-                    if evsem and evsem not in event_semantics:
-                        event_semantics.append(evsem)
-            self.list_to_file("event_semantics", event_semantics)
-            self.list_to_file("identifiability", self.identifiability)
-            self.list_to_file("roles", self.roles)
-            self.list_to_file("concepts", self.concepts)
-            self.lexicon_df.to_csv(f'{self.input_dir}/lexicon.csv', encoding='utf-8', index=False)
-            self.structures_df.to_csv(f'{self.input_dir}/structures.csv', encoding='utf-8', index=False)
+        #if not os.listdir(self.input_dir): mght have to bring back
+        # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
+        event_semantics = []
+        for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
+            for evsem in event_semantic_str.split("EVENT-SEM=")[1].split(','):
+                if ':' in evsem:
+                    evsem = evsem.split(':')[0]  # remove activation
+                if evsem and evsem not in event_semantics:
+                    event_semantics.append(evsem)
+        self.list_to_file("event_semantics", event_semantics)
+        self.list_to_file("identifiability", self.identifiability)
+        self.list_to_file("roles", self.roles)
+        self.list_to_file("concepts", self.concepts)
+        self.lexicon_df.to_csv(f'{self.input_dir}/lexicon.csv', encoding='utf-8', index=False)
+        self.structures_df.to_csv(f'{self.input_dir}/structures.csv', encoding='utf-8', index=False)
 
     def list_to_file(self, fname, content):
         with open('%s/%s.in' % (self.input_dir, fname), 'w') as f:
@@ -345,11 +339,18 @@ class SetsGenerator:
         lex = df.query(' '.join(query))
         return lex
 
-    def convert_nouns_to_cognates(self, cognate_decimal_percentage):
-        a = self.lexicon_df.loc[self.lexicon_df.pos == 'noun', 'is_cognate']
-        self.lexicon_df.loc[a.sample(frac=cognate_decimal_percentage).index, 'is_cognate'] = True
-        cognates = self.lexicon_df[self.lexicon_df.is_cognate == True]
-        cognates.to_csv(f'{self.input_dir}/cognates.csv', encoding='utf-8', index=False)
+    def convert_nouns_to_cognates(self, cognate_decimal_percentage, excluded_concepts=[], seed=18):
+        if seed:
+            self.random.seed(seed)  # Option to set a seed for consistency
+        all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
+        all_nouns_count = len(all_nouns.index)
+        num_cognates = round(all_nouns_count * cognate_decimal_percentage)
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
+                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
+        random_idx = self.random.choice(a.index, num_cognates, replace=False)
+        self.lexicon_df.loc[random_idx, 'is_cognate'] = True
+        cognate_concepts = self.lexicon_df[self.lexicon_df.is_cognate == True].concept.unique()
+        self.list_to_file("cognates", cognate_concepts)
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
         """
@@ -447,12 +448,10 @@ class SetsGenerator:
         return True
 
     @staticmethod
-    def add_concept_and_gender_info(message, concept, semantic_gender, is_cognate):
+    def add_concept_and_gender_info(message, concept, semantic_gender):
         msg = "%s%s%s" % (message, "," if message[-1] != '=' else "", concept)
         if semantic_gender:
             msg += ",%s" % semantic_gender
-        if is_cognate:
-            msg += ",COG"
         return msg
 
     @staticmethod
@@ -460,8 +459,7 @@ class SetsGenerator:
         concept = False
         if not pd.isnull(morpheme_df['concept']):
             concept = morpheme_df['concept']
-            if morpheme_df['is_cognate'] == 'True':
-                print('ADDDD')
+            if morpheme_df['is_cognate'] is True:
                 concept += ",COG"
             elif str(morpheme_df['is_false_friend']) == u'1':
                 concept += ",FF"
@@ -470,10 +468,7 @@ class SetsGenerator:
         return concept
 
     @staticmethod
-    def get_df_gender(morpheme_df, prev_gender=None):
-        morpheme_df=morpheme_df.value
-        print(morpheme_df)
-        print(morpheme_df.syntactic_gender_es)
+    def get_syntactic_gender(morpheme_df, prev_gender=None):
         if not pd.isnull(morpheme_df['syntactic_gender_es']) and morpheme_df['syntactic_gender_es'] != 'M-F':
             return morpheme_df['syntactic_gender_es']
         return prev_gender

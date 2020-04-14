@@ -7,19 +7,14 @@ from modules import (os, sys, logging, InputFormatter, DualPath, Plotter, copy_f
                      Process, cpu_count, pd, create_dataframes_for_plots)
 
 
-def create_input_for_simulation(results_directory, sets, cognate_experiment, cognate_decimal, training_num, num_test,
-                                l2_decimal, auxiliary_experiment, simulation_number, randomize, l2_decimal_dev):
+def create_input_for_simulation(results_directory, sets, training_num, num_test, l2_decimal, auxiliary_experiment,
+                                simulation_number, randomize, l2_decimal_dev):
     sets.set_new_results_dir(f"{results_directory}/{simulation_number}")
     sets.random.seed(simulation_number)  # set new seed each time we run a new simulation
     if randomize and l2_decimal:
         l2_decimal = round(sets.random.normal(l2_decimal, l2_decimal_dev), decimals=2)
         print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - l2_decimal:.2}, "
               f"L2 decimal fraction: {l2_decimal}")
-    if cognate_experiment:
-        sets.convert_nouns_to_cognates(cognate_decimal)
-        #sets.generate_for_cognate_experiment_OLD(num_training=training_num, num_test=num_test, l2_decimal=l2_decimal,
-        #                                     cognate_decimal=cognate_decimal)
-    #else:
     test_set, training_set = sets.generate_general(num_training=training_num, num_test=num_test, l2_decimal=l2_decimal)
     if auxiliary_experiment:
         sets.aux_experiment = True
@@ -53,11 +48,13 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use positive int value")
         return pos_int
 
+
     def non_negative_int(x):  # includes zero
         non_neg_int = int(x)
         if non_neg_int < 0:
             raise argparse.ArgumentTypeError(f"{x} is invalid: only use non negative int value")
         return non_neg_int
+
 
     def decimal_fraction(x):
         x = float(x)
@@ -65,6 +62,10 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError(f"{x} is not allowed: the range is between 0.0 and 1.0")
         return x
 
+    """class LoadFromFile(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            with values as f:
+                parser.parse_args(f.read().split(), namespace)"""
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--hidden', help='Number of hidden layer units.', type=positive_int, default=80)
@@ -100,7 +101,9 @@ if __name__ == "__main__":
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
     parser.add_argument('--cog_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
-                        type=float, default=0.35, dest='cognate_decimal_fraction')
+                        type=float, default=0.3, dest='cognate_decimal_fraction')
+    parser.add_argument('--exclude_cognates', help="Filename with concepts; exclude from cognate selection the "
+                                                   "concepts of this list")
     parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
                         help='Decimal_fraction of overt Spanish pronouns')
     parser.add_argument('--messageless_decimal_fraction', help='Fraction of messageless sentences in training set',
@@ -261,9 +264,9 @@ if __name__ == "__main__":
     else:  # generate a new set
         from modules import SetsGenerator
 
-        experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment
-                          else "code-switching/" if args.activate_both_lang
-                          else "cognate/" if cognate_experiment else "")
+        experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
+                          "cognate/" if cognate_experiment else
+                          "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
@@ -274,14 +277,19 @@ if __name__ == "__main__":
         input_sets = SetsGenerator(input_dir=input_dir, lang=args.languages, generator_timeout=args.generator_timeout,
                                    lexicon_csv=args.lexicon, structures_csv=args.structures,
                                    allow_free_structure_production=args.free_pos)
+        if cognate_experiment:
+            excluded_concepts = []
+            if args.exclude_cognates:
+                if not os.path.exists(args.exclude_cognates):
+                    sys.exit(f"Wrong path for excluded cognates file: {args.exclude_cognates}")
+                excluded_concepts = [line.rstrip('\n') for line in open(args.exclude_cognates)]
+            input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, excluded_concepts)
 
         parallel_jobs = []
         for sim in simulation_range:  # first create all input files
             parallel_jobs.append(Process(target=create_input_for_simulation,
-                                         args=(results_dir, input_sets, cognate_experiment,
-                                               args.cognate_decimal_fraction, training_num, num_test,
-                                               l2_decimal, auxiliary_experiment, sim, args.randomize,
-                                               args.l2_decimal_dev)))
+                                         args=(results_dir, input_sets, training_num, num_test, l2_decimal,
+                                               auxiliary_experiment, sim, args.randomize, args.l2_decimal_dev)))
             parallel_jobs[-1].start()
             # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
             if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
