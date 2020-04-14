@@ -118,6 +118,9 @@ if __name__ == "__main__":
                                                               'sim_from and sim_to values (the simulations include '
                                                               'sim_from and sim_to)')
     parser.add_argument('--sim_to', type=positive_int, help='See sim_from (the simulations include sim_to)')
+    parser.add_argument('--threshold', type=int, default=0,
+                        help='Threshold for performance of simulations. Any simulations that performs has a percentage '
+                             'of correct sentences < threshold are discarded')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
     parser.add_argument('--generator_timeout', type=positive_int, default=60,
                         help="Number of seconds before the sentence generation process times out")

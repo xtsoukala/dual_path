@@ -21,6 +21,6 @@ if __name__ == "__main__":
     if plot_code_switches:
         plt.l1_performance_all_models()
         plt.l2_performance_all_models()
-        #plt.print_switches_per_model(models=('early', 'esen', 'enes'))
+        # plt.print_switches_per_model(models=('early', 'esen', 'enes'))
         plt.plot_code_switch_types_per_model()
-        #plt.plot_code_switche_types_per_pos_for_all_models()
+        # plt.plot_code_switche_types_per_pos_for_all_models()
