@@ -63,8 +63,9 @@ class InputFormatter:
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
-        self.cognate_idx = self.df_query_to_idx("is_cognate == 'Y'", lang=self.L[1]) if cognate_experiment else []
-        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == 'Y'", lang=self.L[1])
+        self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1]) if cognate_experiment else []
+        print(self.cognate_idx)
+        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
                                  if cognate_experiment else [])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)

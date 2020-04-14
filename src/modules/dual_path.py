@@ -205,20 +205,6 @@ class DualPath:
         if not backpropagate:
             return produced_sent_ids, sentence_entropy
 
-    @staticmethod
-    def get_epoch(sim):
-        return None
-        l2_epoch = {13: [2, 15, 25, 33],
-                    14: [1, 10, 11, 16, 19, 21, 22, 26, 28, 29, 30, 34, 35, 36, 38, 39],
-                    15: [3, 4, 6, 9, 13, 18, 24, 31, 40],
-                    16: [5, 7, 8, 12, 14, 17, 20, 23, 27, 32, 37]}
-        epoch = None
-        for v in l2_epoch.keys():
-            if sim in l2_epoch[v]:
-                epoch = v
-                break
-        return epoch
-
     def start_network(self, simulation_num, set_existing_weights):
         """
         :param simulation_num: unique number (integer) of simulation
@@ -230,7 +216,8 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
-        :param set_existing_weights: folder containing trained weights (in case we want to continue training or evaluate only)
+        :param set_existing_weights: folder containing trained weights (in case we want to continue training
+        or evaluate only)
         """
         self.simulation_num = simulation_num
         if self.randomize:
@@ -420,5 +407,6 @@ class DualPath:
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
-                                     not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx), self.starting_epoch])
+                                     not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx),
+                                     self.starting_epoch])
                     logger.info(",".join(str(x) for x in log_info))
