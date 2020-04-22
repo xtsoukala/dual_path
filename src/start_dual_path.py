@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 import json
 import argparse
+from joblib import Parallel, delayed
 from modules import (os, sys, logging, InputFormatter, DualPath, Plotter, copy_files, datetime,
-                     Process, cpu_count, pd, create_dataframes_for_plots)
+                     pd, create_dataframes_for_plots)
 
 
 def check_given_input_path(input_path):
@@ -264,7 +265,8 @@ if __name__ == "__main__":
         if cognate_experiment:
             input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))
 
-        input_sets.create_input_for_all_simulations(simulation_range)
+        Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
+
         del input_sets  # we no longer need it
 
         if not args.target_lang:
@@ -303,19 +305,8 @@ if __name__ == "__main__":
                      epoch_deviation=args.epoch_dev, l2_epoch=args.l2_epoch,
                      starting_epoch=starting_epoch, epochs=args.epochs)
 
-    del formatted_input
+    Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, args.set_weights) for sim in simulation_range)
 
-    parallel_jobs = []
-    available_cpu = cpu_count()
-    for sim in simulation_range:  # first create all input files
-        parallel_jobs.append(Process(target=dualp.start_network, args=(sim, args.set_weights)))
-        parallel_jobs[-1].start()
-        # if number of simulations is larger than number of cores or if it's the last simulation, start multiprocessing
-        if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
-            for p in parallel_jobs:
-                p.join()
-            parallel_jobs = []
-    del dualp
     if args.eval_test:  # plot results
         create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
         df = pd.read_csv(f'{results_dir}/performance.csv')

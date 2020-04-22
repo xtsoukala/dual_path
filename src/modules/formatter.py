@@ -34,7 +34,6 @@ class InputFormatter:
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
-
         if concepts_to_evaluate:
             self.concepts_to_evaluate = self.df_query_to_idx(f"concept.isin({concepts_to_evaluate})")
         else:

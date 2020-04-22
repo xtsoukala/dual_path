@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from . import pd, os, sys, is_not_nan, time, datetime, np, Process, cpu_count
+from . import pd, os, sys, is_not_nan, time, datetime, np
+from joblib import Parallel, delayed
 from numpy import around
 import re
 
@@ -52,22 +53,6 @@ class SetsGenerator:
                 results_dir += datetime.now().strftime(".%S")
             os.makedirs(results_dir)
         self.results_dir = results_dir
-
-    def create_input_for_all_simulations(self, simulation_range, cognate_test_set=False):
-        available_cpu = cpu_count()
-        parallel_jobs = []
-        for sim in simulation_range:  # first create all input files
-            if cognate_test_set:
-                parallel_jobs.append(Process(target=self.generate_cognate_test_set, args=(sim,)))
-            else:
-                parallel_jobs.append(Process(target=self.create_input_for_simulation, args=(sim,)))
-
-            parallel_jobs[-1].start()
-            # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
-            if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
-                for p in parallel_jobs:
-                    p.join()
-                parallel_jobs = []
 
     def create_input_for_simulation(self, simulation_number):
         self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}")
@@ -554,7 +539,7 @@ class SetsGenerator:
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
         self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
-        self.create_input_for_all_simulations(simulation_range, cognate_test_set=True)
+        Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim,) for sim in simulation_range)
 
     def generate_cognate_test_set(self, simulation_number, num_test_sentences=600):
         self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}", mk_new_dir=False)
