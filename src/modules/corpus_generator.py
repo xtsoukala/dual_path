@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
-from . import pd, os, sys, is_not_nan, time, datetime, np
+from . import pd, os, sys, is_not_nan, time, datetime, np, Process, cpu_count
+from numpy import around
 import re
 
 
 class SetsGenerator:
-    def __init__(self, allow_free_structure_production, lang, lexicon_csv, structures_csv,
-                 input_dir=None, sim_results_dir=None, generator_timeout=60):
+    def __init__(self, allow_free_structure_production, lang, lexicon_csv, structures_csv, num_training,
+                 randomize, l2_decimal, l2_decimal_dev, root_simulations_path, auxiliary_experiment=False,
+                 cognate_experiment=False, input_dir=None, sim_results_dir=None, generator_timeout=60):
         """
         :param allow_free_structure_production:
         """
+        self.root_simulations_path = root_simulations_path
+        self.auxiliary_experiment = auxiliary_experiment
+        self.cognate_experiment = cognate_experiment
+        self.unique_cognate_per_sentence = False
+        self.randomize = randomize
+        self.l2_decimal = l2_decimal
+        self.l2_decimal_dev = l2_decimal_dev
         self.allow_free_structure_production = allow_free_structure_production
         self.L = self.get_languages_with_idx(lang)
         self.random = np.random
@@ -18,6 +27,8 @@ class SetsGenerator:
         if input_dir and not os.path.exists(input_dir):
             os.mkdir(input_dir)
         self.input_dir_empty = True
+        self.num_training = num_training
+        self.num_test = self.calculate_testset_size(num_training)
         self.genders = [x for x in self.lexicon_df.semantic_gender.dropna().unique() if '-' not in x]
         self.determiners = self.get_determiners_from_lexicon()
         self.concepts = self.lexicon_df.concept.dropna().unique()
@@ -35,24 +46,61 @@ class SetsGenerator:
     def get_languages_with_idx(languages):
         return {k + 1: v for k, v in enumerate(languages)}
 
-    def set_new_results_dir(self, results_dir):
-        if os.path.isdir(results_dir):  # if this folder name exists already add a timestamp at the end
-            results_dir += datetime.now().strftime(".%S")
-        os.makedirs(results_dir)
+    def set_new_results_dir(self, results_dir, mk_new_dir=True):
+        if mk_new_dir:
+            if os.path.isdir(results_dir):  # if this folder name exists already add a timestamp at the end
+                results_dir += datetime.now().strftime(".%S")
+            os.makedirs(results_dir)
         self.results_dir = results_dir
 
-    def generate_general(self, num_training, num_test, l2_decimal):
+    def create_input_for_all_simulations(self, simulation_range, cognate_test_set=False):
+        available_cpu = cpu_count()
+        parallel_jobs = []
+        for sim in simulation_range:  # first create all input files
+            if cognate_test_set:
+                parallel_jobs.append(Process(target=self.generate_cognate_test_set, args=(sim,)))
+            else:
+                parallel_jobs.append(Process(target=self.create_input_for_simulation, args=(sim,)))
+
+            parallel_jobs[-1].start()
+            # if number of simulations is larger than number of cores or it is the last simulation, start multiprocess
+            if len(parallel_jobs) == available_cpu or sim == simulation_range[-1]:
+                for p in parallel_jobs:
+                    p.join()
+                parallel_jobs = []
+
+    def create_input_for_simulation(self, simulation_number):
+        self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}")
+        self.random.seed(simulation_number)  # set new seed each time we run a new simulation
+        if self.randomize and self.l2_decimal:
+            self.l2_decimal = around(self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2)
+            print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                  f"L2 decimal fraction: {self.l2_decimal}")
+        test_set, training_set = self.generate_general()
+        if self.auxiliary_experiment:
+            self.generate_auxiliary_experiment_sentences(excluded_sentences=training_set)
+
+    @staticmethod
+    def calculate_testset_size(num_training, test_set_decimal=0.2):
+        """
+        :param num_training: Number of training sentences
+        :param test_set_decimal: default: 0.2 (20%) of sentences are set aside for testing. (80%: training)
+        :return: Number of sentences for training and test sets
+        """
+        return int((num_training * 100 / 80) * test_set_decimal)
+
+    def generate_general(self, num_training=None, num_test=None):
         """
         :param num_training: number of training sentences to be generated
         :param num_test: number of test sentences
-        :param l2_decimal: percentage of L2 (e.g., English) vs L1
-        :param cognates_experiment: (if True) include cognates and ff only in training sets
         """
-        if len(self.L) == 1 and l2_decimal != 0:  # correct L2 percentage in monolingual setting
-            l2_decimal = 0
+        if not num_training:
+            num_training = self.num_training
+        if not num_test:
+            num_test = self.num_test
 
-        sentence_structures_train = self.generate_sentence_structures(num_training, l2_decimal=l2_decimal)
-        sentence_structures_test = self.generate_sentence_structures(num_test, l2_decimal=l2_decimal)
+        sentence_structures_train = self.generate_sentence_structures(num_training)
+        sentence_structures_test = self.generate_sentence_structures(num_test)
         # save only training set if we're selecting sentences for the cognate experiment
         test_set = self.generate_sentences(sentence_structures_test, fname="test.in")
         training_set = self.generate_sentences(sentence_structures_train, fname="training.in",
@@ -63,13 +111,12 @@ class SetsGenerator:
             self.save_lexicon_and_structures_to_csv()
         return test_set, training_set
 
-    def generate_auxiliary_experiment_sentences(self, training_set, l2_decimal, test_spanish_only=True,
+    def generate_auxiliary_experiment_sentences(self, excluded_sentences, test_spanish_only=True,
                                                 num_test_sentences=750):
         if test_spanish_only:
-            l2_decimal = 1.0 if self.L[2] == 'es' else 0.0
-        perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2,
-                                                                           l2_decimal=l2_decimal)
-        self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=training_set)
+            self.l2_decimal = 1.0 if self.L[2] == 'es' else 0.0
+        perfect_structures = self.generate_aux_perfect_sentence_structures(num_test_sentences // 2)
+        self.generate_sentences(perfect_structures, fname="test_aux.in", exclude_test_sentences=excluded_sentences)
 
     def replace_perfect_with_progressive(self, sentence, message):
         """
@@ -90,20 +137,19 @@ class SetsGenerator:
     def get_random_row_idx(self, data_len):
         return self.random.randint(0, data_len) if data_len > 1 else 0
 
-    def generate_sentence_structures(self, num_sentences, l2_decimal, filtered_structures=None):
+    def generate_sentence_structures(self, num_sentences, filtered_structures=None):
         """
         :param num_sentences: number of message/sentence pairs that need to be generated
-        :param l2_decimal: Decimal fraction (0.0-1.0) of L2 structures
         :param filtered_structures: use given structures (that have been filtered before)
         :return:
         """
-        num_l2 = int(l2_decimal * num_sentences)
+        num_l2 = int(self.l2_decimal * num_sentences)
         num_l1 = num_sentences - num_l2
 
         if filtered_structures is not None:
             pd.options.mode.chained_assignment = None  # it's otherwise impossible to get rid of SettingWithCopyWarning
             df = self.distribute_percentages_equally_if_not_set(filtered_structures)
-            percentage_l2 = l2_decimal * 100
+            percentage_l2 = self.l2_decimal * 100
             percentage_l1 = 100 - percentage_l2
             key = f'percentage_{self.L[1]}'
             existing_percentages = df[key].sum()
@@ -151,14 +197,13 @@ class SetsGenerator:
                 df.loc[:, key] = 100 / df.size
         return df
 
-    def generate_aux_perfect_sentence_structures(self, num_sentences, l2_decimal):
+    def generate_aux_perfect_sentence_structures(self, num_sentences):
         """
         :param num_sentences: number of message/sentence pairs that need to be generated
-        :param l2_decimal: decimal fraction of L2 structures
         :return:
         """
         aux_structures = self.structures_df[self.structures_df.message.str.contains("PERFECT")]
-        return self.generate_sentence_structures(num_sentences, l2_decimal, filtered_structures=aux_structures)
+        return self.generate_sentence_structures(num_sentences, filtered_structures=aux_structures)
 
     def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=None):
         """
@@ -203,10 +248,16 @@ class SetsGenerator:
             boost_next = False
             pos_list = pos_full.split()
             for i, pos in enumerate(pos_list):
-                morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender)
+                exclude_cognates = False
+                if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or i == len(pos_list)):
+                    exclude_cognates = True
+                morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
+                                                                   exclude_cognates=exclude_cognates)
                 morpheme_df = morpheme_df
                 gender = self.get_syntactic_gender(morpheme_df, prev_gender=gender)
-                sentence.append(morpheme_df[f'morpheme_{(lang if morpheme_df.is_cognate != True else "en")}'])
+                lang_code = ("en" if ((morpheme_df.is_cognate == True) and
+                                      (not self.unique_cognate_per_sentence)) else lang)
+                sentence.append(morpheme_df[f'morpheme_{lang_code}'])
                 if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender)
                 concept = self.get_df_concept(morpheme_df)
@@ -217,7 +268,10 @@ class SetsGenerator:
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
             sentence = u'%s .' % ' '.join(sentence)
             message = ";".join(message)
-            sentence_is_unique = self.sentence_is_unique(message, exclude_test_sentences, generated_pairs)
+            if self.unique_cognate_per_sentence and 'COG' not in message:
+                sentence_is_unique = False
+            else:
+                sentence_is_unique = self.sentence_is_unique(message, exclude_test_sentences, generated_pairs)
             if replace_aux_sentences and sentence_is_unique:
                 prog_sentence, prog_msg = self.replace_perfect_with_progressive(sentence=sentence, message=message)
                 if self.sentence_is_unique(prog_msg, exclude_test_sentences, generated_pairs):
@@ -238,7 +292,8 @@ class SetsGenerator:
             return self.df_cache[params]
         return False
 
-    def select_random_morpheme_for_lang(self, pos, lang, gender, only_get_cognate=False, only_get_false_friend=False):
+    def select_random_morpheme_for_lang(self, pos, lang, gender, only_get_cognate=False, only_get_false_friend=False,
+                                        exclude_cognates=False, exclude_false_friends=False):
         params = repr(locals().values())
         cache = self.get_query_cache(params)
         if cache is False:
@@ -265,10 +320,14 @@ class SetsGenerator:
             if gender:
                 query.append(f"and (syntactic_gender_es == '{gender}' or syntactic_gender_es == 'M-F')")
 
-            if only_get_cognate:
-                query.append("and is_cognate == 'Y'")
+            if exclude_cognates:
+                query.append("and is_cognate != True")
+            elif exclude_false_friends:
+                query.append("and is_false_friend != True")
+            elif only_get_cognate:
+                query.append("and is_cognate == True")
             elif only_get_false_friend:
-                query.append("and is_false_friend == '1'")
+                query.append("and is_false_friend == True")
             cache = self.lexicon_df.query(' '.join(query))
             self.df_cache[params] = cache
         cache_size = len(cache.index)
@@ -282,7 +341,7 @@ class SetsGenerator:
         "?" is necessary for multiple matches
         :return: e.g., 'PROGRESSIVE', 'SIMPLE', 'PRESENT', 'PAST', 'AGENT', 'PATIENT'
         """
-        #if not os.listdir(self.input_dir): mght have to bring back
+        # if not os.listdir(self.input_dir): mght have to bring back
         # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
         event_semantics = []
         for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
@@ -339,18 +398,22 @@ class SetsGenerator:
         lex = df.query(' '.join(query))
         return lex
 
-    def convert_nouns_to_cognates(self, cognate_decimal_percentage, excluded_concepts=[], seed=18):
+    def convert_nouns_to_cognates(self, cognate_decimal_fraction, excluded_concepts=[], seed=18,
+                                  only_report_values=False):
         if seed:
             self.random.seed(seed)  # Option to set a seed for consistency
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
-        num_cognates = round(all_nouns_count * cognate_decimal_percentage)
+        num_cognates = round(all_nouns_count * cognate_decimal_fraction)
         a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
-                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
+                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
-        self.lexicon_df.loc[random_idx, 'is_cognate'] = True
-        cognate_concepts = self.lexicon_df[self.lexicon_df.is_cognate == True].concept.unique()
-        self.list_to_file("cognates", cognate_concepts)
+        if not only_report_values:
+            self.lexicon_df.loc[random_idx, 'is_cognate'] = True
+            cognate_concepts = self.lexicon_df.loc[random_idx, 'concept'].unique()
+            self.list_to_file("cognates", cognate_concepts)
+        else:
+            return self.lexicon_df.loc[random_idx, 'concept'].unique()
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
         """
@@ -480,3 +543,36 @@ class SetsGenerator:
                 return syntactic_gender
             return morpheme_df['semantic_gender']
         return None
+
+    def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction):
+        cognate_list = []
+        for m in range(num_models):
+            cognate_list.extend(self.convert_nouns_to_cognates(cognate_decimal_fraction=cognate_decimal_fraction,
+                                                               excluded_concepts=cognate_list,
+                                                               only_report_values=True))
+        self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
+        self.list_to_file("all_cognates", cognate_list)
+        self.unique_cognate_per_sentence = True
+        self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
+        self.create_input_for_all_simulations(simulation_range, cognate_test_set=True)
+
+    def generate_cognate_test_set(self, simulation_number, num_test_sentences=600):
+        self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}", mk_new_dir=False)
+        self.random.seed(simulation_number)  # set new seed each time we run a new simulation
+        if self.randomize and self.l2_decimal:
+            self.l2_decimal = around(self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2)
+            print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                  f"L2 decimal fraction: {self.l2_decimal}")
+        sentence_structures_test = self.generate_sentence_structures(num_test_sentences)
+        existing_training_set_sentences = self.file_set_to_list(f"{self.root_simulations_path}/"
+                                                                f"{simulation_number}/training.in")
+        test_set = self.generate_sentences(sentence_structures_test, fname="test_cog.in",
+                                           exclude_test_sentences=existing_training_set_sentences)
+        assert num_test_sentences == len(test_set)
+
+    @staticmethod
+    def file_set_to_list(fname):
+        """ split fname lines by sentence## message """
+        with open(fname) as file:
+            lines = [line.strip().split('## ') for line in file]
+        return lines

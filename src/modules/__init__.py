@@ -43,7 +43,7 @@ def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_ra
     df.to_csv(f'{results_dir}/all_results.csv', index=False)
     df = pd.read_csv(f'{results_dir}/all_results.csv')
 
-    df['strict_grammaticality'] = df.target_pos == df.produced_pos
+    df['strict_grammaticality'] = df.target_pos == df.produced_pos    # FIXME
 
     for idx, group in enumerate([['epoch', 'network_num'], ['epoch', 'network_num', 'switch_from']]):
         df_performance = df.groupby(group).apply(lambda dft: pd.Series(

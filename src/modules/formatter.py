@@ -9,7 +9,7 @@ class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_experiment):
+                 cognate_list, concepts_to_evaluate):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
@@ -24,9 +24,21 @@ class InputFormatter:
         self.num_languages = len(self.target_lang)
         self.language_index = dict(zip(self.target_lang, range(self.num_languages)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
+        self.cognate_list = cognate_list
+        if cognate_list:
+            self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
+            self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
+            with open(f'{self.directory}/cognates.in', 'w') as f:
+                f.write("%s" % "\n".join(cognate_list))
+
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
+
+        if concepts_to_evaluate:
+            self.concepts_to_evaluate = self.df_query_to_idx(f"concept.isin({concepts_to_evaluate})")
+        else:
+            self.concepts_to_evaluate = None
         self.replace_haber_tener = replace_haber_tener
         self.test_haber_frequency = test_haber_frequency
         self.messageless_decimal_fraction = messageless_decimal_fraction
@@ -48,6 +60,7 @@ class InputFormatter:
         self.translation_cache = {}
         self.code_switched_type_cache = {}
         self.switch_points_cache = {}
+        self.idx_points_cache = {}
         self.concept_to_morpheme_cache = {}
         # |----------PARAMS----------|
         # fixed_weight is the activation between roles-concepts and evsem. The value is rather arbitrary unfortunately.
@@ -63,10 +76,9 @@ class InputFormatter:
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
-        self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1]) if cognate_experiment else []
-        print(self.cognate_idx)
+        self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1]) if cognate_list else []
         self.false_friend_idx = (self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
-                                 if cognate_experiment else [])
+                                 if cognate_list else [])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
         self.initialized_weights_role_identif = zeros(self.roles_size, self.identif_size)
@@ -328,7 +340,7 @@ class InputFormatter:
                 # check switch before pos_of_interest
                 at = self.is_code_switched(sentence_indices[:pos_idx + 1], target_lang_idx=sentence_indices[0])
                 # check Spanish-to-English direction
-                at_esen = True if at and sentence_indices[pos_idx] >= self.code_switched_idx else False
+                at_esen = True if at and sentence_indices[pos_idx + 1] < self.code_switched_idx else False
                 # check switch right after (e.g. between aux and participle)
                 right_after = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
                                                     target_lang_idx=sentence_indices[pos_idx])
@@ -346,6 +358,35 @@ class InputFormatter:
             cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
                      after_esen, after_anywhere_esen)
             self.switch_points_cache[out_idx] = cache
+        return cache
+
+    def check_cs_around_idx_of_interest(self, sentence_indices, idx_of_interest, target_lang):
+        out_idx = repr(sentence_indices)
+        cache = self.query_cache(out_idx, self.idx_points_cache)
+        lang_idx = self.code_switched_idx + 2 if target_lang == "es" else self.code_switched_idx - 2
+        if not cache:
+            # FIXME: current assumption: lexicon contains first EN and then ES words
+            (at, right_after, after, at_esen, right_after_esen, after_esen, after_anywhere,
+             after_anywhere_esen) = (False, False, False, False, False, False, False, False)
+            target_idx = sentence_indices.index(idx_of_interest)
+
+            # check switch before pos_of_interest
+            at = self.is_code_switched(sentence_indices[:target_idx + 1], target_lang_idx=lang_idx)
+            # check Spanish-to-English direction
+            at_esen = True if at and target_lang == 'es' else False
+            # check switch right after (e.g. between aux and participle)
+            right_after = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
+                                                target_lang_idx=lang_idx)
+            right_after_esen = True if right_after and target_lang == 'es' else False
+            # check switch at the end (e.g. after aux and participle)
+            after = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
+                                          target_lang_idx=lang_idx)
+            after_esen = True if after and target_lang == 'es' else False
+            after_anywhere = self.is_code_switched(sentence_indices[target_idx + 1:],
+                                                   target_lang_idx=lang_idx)
+            after_anywhere_esen = (True if after_anywhere and target_lang == 'es' else False)
+            cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen, after_esen, after_anywhere_esen)
+            self.idx_points_cache[out_idx] = cache
         return cache
 
     def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
@@ -393,6 +434,12 @@ class InputFormatter:
         df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
                          sep='##', engine='python')
         df.message = df.message.str.strip()  # strip whitespace
+        if self.cognate_list:
+            cognate_translation = self.lexicon_df.loc[self.lexicon_df.is_cognate == True, 'morpheme_es'].unique()
+            cognate_word = self.lexicon_df.loc[self.lexicon_df.is_cognate == True, 'morpheme_en'].unique()
+            d = dict(zip(cognate_translation, cognate_word))
+            d = {r'\b{}\b'.format(k): v for k, v in d.items()}  # add word boundaries
+            df['target_sentence'] = df['target_sentence'].replace(to_replace=d, regex=True)
         if self.prodrop:  # TODO: make pro-drop
             if self.emphasis_decimal_fraction > 0:  # keep pronoun if emphasized
                 # find num of lines that are in ES. decide on num that will be emphasized:
