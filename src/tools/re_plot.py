@@ -8,27 +8,56 @@ sys.path.append('..')
 from modules import Plotter, pd, create_dataframes_for_plots
 
 
-def compare_cognate_models(results_dir='../../simulations/cognate', models=('cog1', 'cog2')):
+def create_cognate_model_csv_files(results_dir, models=('cog1', 'cog2')):
     for model_pair in [models, list(reversed(models))]:
+        model_pair += ('baseline',)  # also compare with baseline
         print(model_pair)
         cog_df = pd.read_csv(f'{results_dir}/{model_pair[0]}/all_results.csv')
         cog_df = cog_df[cog_df.epoch == cog_df.epoch.max()]  # only keep the last epoch
-    
+        cog_df.loc[:, 'model'] = 'cognate_model'
+
         no_cog_df = pd.read_csv(f'{results_dir}/{model_pair[1]}/all_results.csv')
         no_cog_df = no_cog_df[no_cog_df.epoch == no_cog_df.epoch.max()]  # only keep the last epoch
-    
-        cognate_concept_string = '|'.join([line.rstrip('\n') for line in
+        no_cog_df.loc[:, 'model'] = 'non_cognate_model'
+
+        baseline_df = pd.read_csv(f'{results_dir}/{model_pair[2]}/all_results.csv')
+        baseline_df = baseline_df[baseline_df.epoch == baseline_df.epoch.max()]  # only keep the last epoch
+        baseline_df.loc[:, 'model'] = 'baseline_model'
+
+        """cognate_concept_string = '|'.join([line.rstrip('\n') for line in
                                            open(f'{results_dir}/{model_pair[0]}/input/cognates.in')])
         cognate_words = cognate_concept_string.lower().split('|')
-        cognate_sentences = cog_df[cog_df.message.str.contains(cognate_concept_string)]
-        cognate_sentences['cognate_expressed'] = cognate_sentences.produced_sentence.apply(
-            lambda x: any(i in x for i in cognate_words))
-        cognate_sentences['num_cognates'] = cognate_sentences.message.apply(
-            lambda x: x.count(',COG'))
+        print(cognate_words)"""
+
+        cognate_sentences = cog_df[cog_df.target_has_cognate == True]
         print(len(cognate_sentences), "sentences with cognates")   # 12326
     
         no_cognate_sentences = no_cog_df[no_cog_df.index.isin(cognate_sentences.index)]
-        sentences_to_test = pd.concat([cognate_sentences.produced_sentence, cognate_sentences.meaning,
+        baseline_sentences = baseline_df[baseline_df.index.isin(cognate_sentences.index)]
+
+        cognate_sentences.reset_index(drop=True, inplace=True)
+
+        cognate_sentences.loc[:, 'sentence_idx'] = cognate_sentences.index
+        no_cognate_sentences.loc[:, 'sentence_idx'] = cognate_sentences.index
+        baseline_sentences.loc[:, 'sentence_idx'] = cognate_sentences.index
+
+        cognate_sentences = cognate_sentences[cognate_sentences.meaning == 1]
+        len(cognate_sentences)
+        no_cognate_sentences = no_cognate_sentences[no_cognate_sentences.meaning == 1]
+        len(no_cognate_sentences)
+        baseline_sentences = baseline_sentences[baseline_sentences.meaning == 1]
+        len(baseline_sentences)
+
+        sentences_to_test = pd.concat([cognate_sentences, no_cognate_sentences, baseline_sentences])
+        print('sent before:', sentences_to_test.size)
+        count_correct = sentences_to_test.groupby('sentence_idx').count()
+        sentences_to_test = sentences_to_test.loc[sentences_to_test['sentence_idx'].isin(
+            count_correct[count_correct['model'] == len(model_pair)].index)]
+        print('sent after:', sentences_to_test.size)
+
+        # sentences that are correctly produced among all 3 models
+        sentences_to_test.to_csv(f'{results_dir}/test_{"_".join(model_pair)}.csv')
+        """"sentences_to_test = pd.concat([cognate_sentences.produced_sentence, cognate_sentences.meaning,
                                        cognate_sentences[cognate_sentences.meaning == 1].is_code_switched,
                                        no_cognate_sentences.produced_sentence, no_cognate_sentences.meaning,
                                        no_cognate_sentences[no_cognate_sentences.meaning == 1
@@ -38,8 +67,8 @@ def compare_cognate_models(results_dir='../../simulations/cognate', models=('cog
         sentences_to_test.columns = ['cog_sentence', 'cog_correct_meaning', 'cog_correct_cs', 'no_cog_sentence',
                                      'no_cog_correct_meaning', 'no_cog_correct_cs', 'target_sentence', 'message',
                                      'cognate_expressed', 'num_cognates']
-
-        sentences_to_test.to_csv(f'test_{"_".join(model_pair)}')
+        """
+        """sentences_to_test.to_csv(f'test_{"_".join(model_pair)}')
         print("CS with cog:", sentences_to_test.cog_correct_cs.sum(),
               "CS no cog:", sentences_to_test.no_cog_correct_cs.sum())
 
@@ -56,11 +85,24 @@ def compare_cognate_models(results_dir='../../simulations/cognate', models=('cog
         print("Only with expressed cognate:", "CS with cog:",
               sentences_to_test[sentences_to_test.cognate_expressed == True].cog_correct_cs.sum(),
               "CS no cog:", sentences_to_test[sentences_to_test.cognate_expressed == True].no_cog_correct_cs.sum())
+        """
+
+
+def compare_cognate_models(results_dir, fname):
+    df = pd.read_csv(f'{results_dir}/{fname}')
+    df.groupby(['model', 'sentence_idx']).apply(lambda dft: pd.Series(
+            {'code_switched': dft.is_code_switched.sum(),
+             'intersentential': len(dft[dft.switched_type == 'inter-sentential']),
+             'ambiguous': len(dft[dft.switched_type == 'ambiguous']),
+             'alternational': len(dft[dft.switched_type == 'alternational']),
+             'insertional': len(dft[dft.switched_type == 'insertional']),
+             'total_sentences': len(dft.meaning),
+             }))
 
 
 if __name__ == "__main__":
-    results_dir = '../../simulations/cognate'
-    compare_cognate_models()
+    results_dir = '../../simulations/'
+    create_cognate_model_csv_files(results_dir)
     """plot_code_switches = True
     num_sim = 40
     epochs = 20
@@ -77,3 +119,4 @@ if __name__ == "__main__":
         # plt.print_switches_per_model(models=('early', 'esen', 'enes'))
         plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()"""
+

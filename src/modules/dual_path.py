@@ -93,9 +93,13 @@ class DualPath:
         logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
         header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
                   "is_code_switched,switched_type,pos_of_switch_point")
-        if self.auxiliary_experiment or self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_at,switched_right_after,switched_after,switched_before_es_en,"
-                       "switched_at_es_en,switched_right_after_es_en, switched_after_es_en")
+        if self.auxiliary_experiment:
+            header += (",switched_before,switched_right_before,switched_right_after,switched_after_anywhere,switched_before_es_en,"
+                       "switched_right_before_es_en,switched_right_after_es_en, switched_after_anywhere_es_en")
+        elif self.inputs.concepts_to_evaluate:
+            header += (",switched_before,switched_right_after,switched_one_after,"
+                       "switched_after_anywhere,switched_before_es_en,"
+                       "switched_right_after_es_en,switched_one_after_es_en,switched_after_anywhere_es_en")
         if self.pronoun_experiment:
             header += ",pronoun_error,pronoun_error_flex"
         header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch," \
@@ -353,11 +357,12 @@ class DualPath:
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
                     (has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type, cs_pos_point,
-                     switched_before, switched_at, switched_right_after, switched_after, switched_before_es_en,
-                     switched_at_es_en, switched_right_after_es_en, switched_after_es_en, has_pronoun_error,
+                     switched_before, switched_right_before, switched_right_after, switched_one_after, switched_after_anywhere, 
+                     switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en, 
+                     switched_one_after_es_en, switched_after_anywhere_es_en, has_pronoun_error,
                      has_pronoun_error_flex, has_cognate) = (False, False, False, False, False, False, False, False,
                                                              False, False, False, False, False, False, False, False,
-                                                             False)
+                                                             False, False, False)
                     if self.cognate_experiment:
                         has_cognate = any([x in self.inputs.cognate_idx for x in target_sentence_idx])
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
@@ -377,18 +382,20 @@ class DualPath:
                             elif cs_type:  # TODO: check the failed sentences too
                                 correct_meaning = True
                                 if pos_interest and pos_interest in produced_pos:
-                                    (switched_before, switched_at, switched_right_after, switched_after,
-                                     switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                     switched_after_es_en) = self.inputs.check_cs_around_pos_of_interest(produced_idx,
+                                    (switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
+                                     switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
+                                     switched_after_anywhere_es_en) = self.inputs.check_cs_around_pos_of_interest(produced_idx,
                                                                                                          produced_pos,
                                                                                                          pos_interest)
                                 elif self.inputs.concepts_to_evaluate:
                                     evaluated_concept_idx = [conc for conc in produced_idx if conc
                                                              in self.inputs.concepts_to_evaluate]
                                     if evaluated_concept_idx:
-                                        (switched_before, switched_at, switched_right_after, switched_after,
-                                         switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                         switched_after_es_en) = self.inputs.check_cs_around_idx_of_interest(
+                                        (switched_before, switched_right_after,
+                                         switched_one_after, switched_after_anywhere, switched_before_es_en,
+                                         switched_right_after_es_en, switched_one_after_es_en,
+                                         switched_after_anywhere_es_en
+                                         ) = self.inputs.check_cs_around_idx_of_interest(
                                             produced_idx, evaluated_concept_idx[0], target_lang)
 
                         if not correct_meaning:
@@ -410,10 +417,15 @@ class DualPath:
                     pos = has_correct_pos or flexible_order
                     log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning,
                                 code_switched, cs_type, cs_pos_point]
-                    if pos_interest or self.inputs.concepts_to_evaluate:
-                        log_info.extend([switched_before, switched_at, switched_right_after, switched_after,
-                                         switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                         switched_after_es_en])
+                    if pos_interest:
+                        log_info.extend([switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
+                                         switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
+                                         switched_after_anywhere_es_en])
+                    elif self.inputs.concepts_to_evaluate:
+                        log_info.extend([switched_before, switched_right_after,
+                                         switched_one_after, switched_after_anywhere,
+                                         switched_before_es_en, switched_right_after_es_en,
+                                         switched_one_after_es_en, switched_after_anywhere_es_en])
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,

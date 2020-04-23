@@ -116,18 +116,18 @@ class InputFormatter:
          self.event_sem_activations['test'], self.target_lang_act['test']) = self.read_set_to_df(test=True)
         self.weights_concept_role['test'] = [x.t() for x in self.weights_role_concept['test']]
         self.weights_identif_role['test'] = [x.t() for x in self.weights_role_identif['test']]
-        
+
         if self.messageless_decimal_fraction:
             # Create a backup of training data with all messages
             os.system(f"mv {new_directory}/training.in {new_directory}/training_full.in")
             # Remove messages from randomly sampled fraction of sentences in training set
-            messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values    
-            self.trainlines_df.loc[messageless_indices,'message'] = ''
+            messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values
+            self.trainlines_df.loc[messageless_indices, 'message'] = ''
             # Can't use df.to_csv, because separater must be a 1-character string
             with open(f'{new_directory}/training.in', 'w') as f:
                 for row in list(zip(self.trainlines_df['target_sentence'], self.trainlines_df['message'])):
                     f.write(f'{row[0]}## {row[1]}\n')
-        
+
         self.num_test = len(self.testlines_df)
         self.test_sentences_with_pronoun = self._number_of_test_pronouns()
         if not self.allowed_structures:
@@ -278,7 +278,7 @@ class InputFormatter:
         if len(set(check_idx_pos)) == 1:
             pos = check_idx_pos[0]
             if check_idx[0] == out_sentence_idx[-2]:
-                return "ambiguous", pos    # if last word: it could be either an alternation or an insertion
+                return "ambiguous", pos  # if last word: it could be either an alternation or an insertion
             else:
                 return "insertional", pos
         return False, False
@@ -365,26 +365,30 @@ class InputFormatter:
         lang_idx = self.code_switched_idx + 2 if target_lang == "es" else self.code_switched_idx - 2
         if not cache:
             # FIXME: current assumption: lexicon contains first EN and then ES words
-            (at, right_after, after, at_esen, right_after_esen, after_esen, after_anywhere,
-             after_anywhere_esen) = (False, False, False, False, False, False, False, False)
+            (switched_before, switched_right_after, switched_one_after, switched_after_anywhere, switched_before_es_en,
+             switched_right_after_es_en, switched_one_after_es_en, switched_after_anywhere_es_en) = \
+                (False, False, False, False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
 
-            # check switch before pos_of_interest
-            at = self.is_code_switched(sentence_indices[:target_idx + 1], target_lang_idx=lang_idx)
-            # check Spanish-to-English direction
-            at_esen = True if at and target_lang == 'es' else False
-            # check switch right after (e.g. between aux and participle)
-            right_after = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
-                                                target_lang_idx=lang_idx)
-            right_after_esen = True if right_after and target_lang == 'es' else False
-            # check switch at the end (e.g. after aux and participle)
-            after = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
-                                          target_lang_idx=lang_idx)
-            after_esen = True if after and target_lang == 'es' else False
-            after_anywhere = self.is_code_switched(sentence_indices[target_idx + 1:],
-                                                   target_lang_idx=lang_idx)
-            after_anywhere_esen = (True if after_anywhere and target_lang == 'es' else False)
-            cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen, after_esen, after_anywhere_esen)
+            switched_before = self.is_code_switched(sentence_indices[:target_idx + 1], target_lang_idx=lang_idx)
+            switched_before_es_en = False if switched_before and target_lang == 'es' else False
+
+            switched_right_after = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
+                                                         target_lang_idx=lang_idx)
+            switched_right_after_es_en = True if switched_right_after and target_lang == 'es' else False
+
+            switched_one_after = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
+                                                       target_lang_idx=lang_idx)
+            switched_one_after_es_en = True if switched_one_after and target_lang == 'es' else False
+
+
+            switched_after_anywhere = self.is_code_switched(sentence_indices[target_idx + 1:],
+                                                            target_lang_idx=lang_idx)
+            switched_after_anywhere_es_en = (True if switched_after_anywhere and target_lang == 'es' else False)
+
+            cache = (switched_before, switched_right_after, switched_one_after, switched_after_anywhere,
+                     switched_before_es_en, switched_right_after_es_en, switched_one_after_es_en,
+                     switched_after_anywhere_es_en)
             self.idx_points_cache[out_idx] = cache
         return cache
 

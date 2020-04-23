@@ -232,9 +232,11 @@ class SetsGenerator:
             gender = None
             boost_next = False
             pos_list = pos_full.split()
+            sentence_length = len(pos_list) - 1
             for i, pos in enumerate(pos_list):
                 exclude_cognates = False
-                if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or i == len(pos_list)):
+                # only one cognate per sentence and not at the end of the sentence
+                if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or i == sentence_length):
                     exclude_cognates = True
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
