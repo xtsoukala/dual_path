@@ -41,6 +41,23 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
+    def plot_cognate_effect_over_time(self, df_name):
+        df = pd.read_csv(f'{self.results_dir}/{df_name}')
+
+        #sns.lineplot(x='epoch', y='code_switched', hue='model', data=df)
+        sns.lineplot(x='epoch', y='switched_one_after', hue='model', data=df)
+
+        plt.xlim([df.epoch.min(), df.epoch.max()])
+        plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.11))
+        plt.tight_layout()  # make room for labels
+        networks = 40
+        plt.savefig(self.get_plot_path(40, df_name))
+        plt.close()
+
+
+
+
+
     def lineplot_code_switches(self, df, fname='code_switches_over_time', ylim=50, legend_loc='upper center'):
         sns.lineplot(x='epoch', y='alternational_percentage', data=df, ci=None, color='#0173b2',
                      label='alternational')

@@ -511,7 +511,7 @@ class SetsGenerator:
             concept = morpheme_df['concept']
             if morpheme_df['is_cognate'] is True:
                 concept += ",COG"
-            elif str(morpheme_df['is_false_friend']) == u'1':
+            elif morpheme_df['is_false_friend'] == True:
                 concept += ",FF"
         elif morpheme_df['pos'] == 'det':
             concept = morpheme_df['type']

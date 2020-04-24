@@ -13,15 +13,15 @@ def create_cognate_model_csv_files(results_dir, models=('cog1', 'cog2')):
         model_pair += ('baseline',)  # also compare with baseline
         print(model_pair)
         cog_df = pd.read_csv(f'{results_dir}/{model_pair[0]}/all_results.csv')
-        cog_df = cog_df[cog_df.epoch == cog_df.epoch.max()]  # only keep the last epoch
+        #cog_df = cog_df[cog_df.epoch == cog_df.epoch.max()]  # only keep the last epoch
         cog_df.loc[:, 'model'] = 'cognate_model'
 
         no_cog_df = pd.read_csv(f'{results_dir}/{model_pair[1]}/all_results.csv')
-        no_cog_df = no_cog_df[no_cog_df.epoch == no_cog_df.epoch.max()]  # only keep the last epoch
+        #no_cog_df = no_cog_df[no_cog_df.epoch == no_cog_df.epoch.max()]  # only keep the last epoch
         no_cog_df.loc[:, 'model'] = 'non_cognate_model'
 
         baseline_df = pd.read_csv(f'{results_dir}/{model_pair[2]}/all_results.csv')
-        baseline_df = baseline_df[baseline_df.epoch == baseline_df.epoch.max()]  # only keep the last epoch
+        #baseline_df = baseline_df[baseline_df.epoch == baseline_df.epoch.max()]  # only keep the last epoch
         baseline_df.loc[:, 'model'] = 'baseline_model'
 
         """cognate_concept_string = '|'.join([line.rstrip('\n') for line in
@@ -30,8 +30,8 @@ def create_cognate_model_csv_files(results_dir, models=('cog1', 'cog2')):
         print(cognate_words)"""
 
         cognate_sentences = cog_df[cog_df.target_has_cognate == True]
-        print(len(cognate_sentences), "sentences with cognates")   # 12326
-    
+        print(len(cognate_sentences), "sentences with cognates")  # 12326
+
         no_cognate_sentences = no_cog_df[no_cog_df.index.isin(cognate_sentences.index)]
         baseline_sentences = baseline_df[baseline_df.index.isin(cognate_sentences.index)]
 
@@ -56,7 +56,7 @@ def create_cognate_model_csv_files(results_dir, models=('cog1', 'cog2')):
         print('sent after:', sentences_to_test.size)
 
         # sentences that are correctly produced among all 3 models
-        sentences_to_test.to_csv(f'{results_dir}/test_{"_".join(model_pair)}.csv')
+        sentences_to_test.to_csv(f'{results_dir}/all_epochs_test_{"_".join(model_pair)}.csv')
         """"sentences_to_test = pd.concat([cognate_sentences.produced_sentence, cognate_sentences.meaning,
                                        cognate_sentences[cognate_sentences.meaning == 1].is_code_switched,
                                        no_cognate_sentences.produced_sentence, no_cognate_sentences.meaning,
@@ -89,20 +89,49 @@ def create_cognate_model_csv_files(results_dir, models=('cog1', 'cog2')):
 
 
 def compare_cognate_models(results_dir, fname):
-    df = pd.read_csv(f'{results_dir}/{fname}')
-    df.groupby(['model', 'sentence_idx']).apply(lambda dft: pd.Series(
-            {'code_switched': dft.is_code_switched.sum(),
-             'intersentential': len(dft[dft.switched_type == 'inter-sentential']),
-             'ambiguous': len(dft[dft.switched_type == 'ambiguous']),
-             'alternational': len(dft[dft.switched_type == 'alternational']),
-             'insertional': len(dft[dft.switched_type == 'insertional']),
-             'total_sentences': len(dft.meaning),
-             }))
+    df = pd.read_csv(f'{results_dir}/{fname}', dtype={'switched_before': int, 'switched_right_after': int,
+                                                      'switched_one_after': int, 'switched_after_anywhere': int,
+                                                      'switched_before_es_en': int, 'switched_right_after_es_en': int,
+                                                      'switched_one_after_es_en': int,
+                                                      'switched_after_anywhere_es_en': int})
+    gb = df.groupby(['epoch', 'network_num', 'model']).apply(lambda dft: pd.Series(
+        {'code_switched': dft.is_code_switched.sum(),
+         'total_sentences': len(dft.meaning),
+         'switched_before': dft.switched_before.sum(),
+         'switched_right_after': dft.switched_right_after.sum(),
+         'switched_one_after': dft.switched_one_after.sum(),
+         'switched_after_anywhere': dft.switched_after_anywhere.sum()
+         }))
+    """'switched_before_es_en': dft.switched_before_es_en.sum(),
+    'switched_right_after_es_en': dft.switched_right_after_es_en.sum(),
+    'switched_one_after_es_en': dft.switched_one_after_es_en.sum(),
+    'switched_after_anywhere_es_en': dft.switched_after_anywhere_es_en.sum(),
+    'ambiguous': len(dft[dft.switched_type == 'ambiguous']),
+    'alternational': len(dft[dft.switched_type == 'alternational']),
+    'insertional': len(dft[dft.switched_type == 'insertional']),"""
+    gb.to_csv(f'{results_dir}/count_network_all_epochs{fname}')
 
 
 if __name__ == "__main__":
-    results_dir = '../../simulations/'
-    create_cognate_model_csv_files(results_dir)
+    results_dir = '../../simulations/cognates/'
+    #create_cognate_model_csv_files(results_dir)
+
+    """compare_cognate_models(results_dir, 'all_epochs_test_cog1_cog2_baseline.csv')
+    compare_cognate_models(results_dir, 'all_epochs_test_cog2_cog1_baseline.csv')
+    df1 = pd.read_csv(f'{results_dir}/all_epochs_test_cog1_cog2_baseline.csv')
+    df2 = pd.read_csv(f'{results_dir}/all_epochs_test_cog2_cog1_baseline.csv')
+    merged_models = pd.concat([df1, df2])
+    merged_models.to_csv(f'{results_dir}/all_epochs_test_merged.csv')
+    compare_cognate_models(results_dir, 'all_epochs_test_merged.csv')"""
+
+    """compare_cognate_models(results_dir, 'test_cog1_cog2_baseline.csv')
+    compare_cognate_models(results_dir, 'test_cog2_cog1_baseline.csv')
+
+    df1 = pd.read_csv(f'{results_dir}/test_cog1_cog2_baseline.csv')
+    df2 = pd.read_csv(f'{results_dir}/test_cog2_cog1_baseline.csv')
+    merged_models = pd.concat([df1, df2])
+    merged_models.to_csv(f'{results_dir}/test_merged.csv')
+    compare_cognate_models(results_dir, 'test_merged.csv')"""
     """plot_code_switches = True
     num_sim = 40
     epochs = 20
@@ -120,3 +149,5 @@ if __name__ == "__main__":
         plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()"""
 
+    plt = Plotter(results_dir=results_dir)
+    plt.plot_cognate_effect_over_time(df_name='count_network_all_epochs_test_merged.csv')

@@ -152,7 +152,8 @@ if __name__ == "__main__":
                         help='Represent semantics using word embeddings instead of one-hot vectors.')
     parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment', default=False)
-
+    parser.add_argument('--false_friends', '--ff', dest='false_friends', action='store_true',
+                        help='Run false friends experiment', default=False)
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true', default=False,
                         help='Run auxiliary asymmetry experiment')
     parser.add_argument('--tener', dest='replace_haber', action='store_true', default=False,
