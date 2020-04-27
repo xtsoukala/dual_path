@@ -3,6 +3,7 @@ from . import pd, os, sys, is_not_nan, time, datetime, np
 from joblib import Parallel, delayed
 from numpy import around
 import re
+import itertools
 
 
 class SetsGenerator:
@@ -247,9 +248,9 @@ class SetsGenerator:
                 sentence.append(morpheme_df[f'morpheme_{lang_code}'])
                 if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender)
-                concept = self.get_df_concept(morpheme_df)
+                concept = self.get_concept(morpheme_df)
                 if concept:
-                    semantic_gender = self.get_df_semantic_gender(morpheme_df, syntactic_gender=gender)
+                    semantic_gender = self.get_semantic_gender(morpheme_df, syntactic_gender=gender)
                     message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
                     next_pos = pos_list[i + 1] if i + 1 < len(pos_list) else None
                     msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
@@ -402,6 +403,29 @@ class SetsGenerator:
         else:
             return self.lexicon_df.loc[random_idx, 'concept'].unique()
 
+    def convert_nouns_to_false_friends(self, cognate_decimal_fraction, excluded_concepts=[], seed=18):
+        """ Very similar to convert_nouns_to_cognates """
+        if seed:
+            self.random.seed(seed)  # Option to set a seed for consistency
+        all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
+        all_nouns_count = len(all_nouns.index)
+        num_cognates = round(all_nouns_count * cognate_decimal_fraction)
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
+                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
+        random_idx = self.random.choice(a.index, num_cognates, replace=False)
+
+        self.lexicon_df.loc[random_idx, 'is_false_friend'] = True
+        cognate_concepts = self.lexicon_df.loc[random_idx, 'concept'].unique()
+        original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
+        self.list_to_file("false_friends", cognate_concepts)
+        for current_idx, next_idx in self.pairwise_list_view_for_false_friends(random_idx):
+            self.lexicon_df.loc[current_idx, 'morpheme_es'] = original_morphemes.loc[next_idx]
+
+    @staticmethod
+    def pairwise_list_view_for_false_friends(row_idx):
+        return ((row_idx[i], row_idx[i+1] if i+1 < len(row_idx) else row_idx[0])
+                for i in range(len(row_idx)))
+
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
         """
         :param original_sets: the sentence/message pairs that need to be modified to include cognates or false friends
@@ -499,19 +523,19 @@ class SetsGenerator:
 
     @staticmethod
     def add_concept_and_gender_info(message, concept, semantic_gender):
-        msg = "%s%s%s" % (message, "," if message[-1] != '=' else "", concept)
-        if semantic_gender:
-            msg += ",%s" % semantic_gender
-        return msg
+        return (f'{message}'
+                f'{"," if message[-1] != "=" else ""}'
+                f'{concept}'
+                f'{f",{semantic_gender}" if semantic_gender else ""}')
 
     @staticmethod
-    def get_df_concept(morpheme_df):
+    def get_concept(morpheme_df):
         concept = False
         if not pd.isnull(morpheme_df['concept']):
             concept = morpheme_df['concept']
             if morpheme_df['is_cognate'] is True:
                 concept += ",COG"
-            elif morpheme_df['is_false_friend'] == True:
+            elif morpheme_df['is_false_friend'] is True:
                 concept += ",FF"
         elif morpheme_df['pos'] == 'det':
             concept = morpheme_df['type']
@@ -524,7 +548,7 @@ class SetsGenerator:
         return prev_gender
 
     @staticmethod
-    def get_df_semantic_gender(morpheme_df, syntactic_gender):
+    def get_semantic_gender(morpheme_df, syntactic_gender):
         if not pd.isnull(morpheme_df['semantic_gender']):
             if morpheme_df['semantic_gender'] == 'M-F' and syntactic_gender:
                 return syntactic_gender

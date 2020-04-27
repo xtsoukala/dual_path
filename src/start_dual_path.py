@@ -206,7 +206,7 @@ if __name__ == "__main__":
     if args.replace_haber or args.test_haber_frequency:
         auxiliary_experiment = True
 
-    if auxiliary_experiment or cognate_experiment:
+    if auxiliary_experiment or cognate_experiment or args.false_friends:
         args.activate_both_lang = True
 
     cognate_list = []
@@ -242,10 +242,10 @@ if __name__ == "__main__":
         from modules import SetsGenerator
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
-                          "cognate/" if (cognate_experiment or args.num_cognate_models_for_test_set > 0) else
+                          "cognate/" if (cognate_experiment or args.false_friends or
+                                         args.num_cognate_models_for_test_set > 0) else
                           "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
-            print(f'{root_folder}/data/{experiment_dir}lexicon.csv')
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
@@ -265,6 +265,9 @@ if __name__ == "__main__":
             quit()
         if cognate_experiment:
             input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))
+        elif args.false_friends:
+            input_sets.convert_nouns_to_false_friends(args.cognate_decimal_fraction,
+                                                      file_to_list(args.exclude_cognates))
 
         Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
 
@@ -289,7 +292,8 @@ if __name__ == "__main__":
                                      use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction,
+                                     false_friends_experiment=args.false_friends)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,

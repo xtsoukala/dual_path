@@ -9,7 +9,7 @@ class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_list, concepts_to_evaluate):
+                 cognate_list, concepts_to_evaluate, false_friends_experiment):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
@@ -24,6 +24,7 @@ class InputFormatter:
         self.num_languages = len(self.target_lang)
         self.language_index = dict(zip(self.target_lang, range(self.num_languages)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
+        self.false_friends_experiment = false_friends_experiment
         self.cognate_list = cognate_list
         if cognate_list:
             self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
@@ -77,7 +78,7 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1]) if cognate_list else []
         self.false_friend_idx = (self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
-                                 if cognate_list else [])
+                                 if false_friends_experiment else [])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
         self.initialized_weights_role_identif = zeros(self.roles_size, self.identif_size)
@@ -408,13 +409,14 @@ class InputFormatter:
         info = defaultdict(list)
         for lang in self.target_lang:
             if lang:
-                column = self.lexicon_df[[f'morpheme_{lang}', 'pos',
-                                          'concept', 'type']].dropna(subset=[f'morpheme_{lang}'])
-                pos_list = list(column['pos'])
-                for i, item in enumerate(list(column[f'morpheme_{lang}'])):
-                    if item not in info['lex']:  # only get unique items. set() would change the order, do this instead
-                        info['lex'].append(item)
-                        info['pos'].append(pos_list[i])
+                lexicon_of_lang = self.lexicon_df[[f'morpheme_{lang}', 'pos', 'concept',
+                                                   'is_false_friend']].dropna(subset=[f'morpheme_{lang}'])
+                for i, row in lexicon_of_lang.iterrows():
+                    if self.false_friends_experiment and lang == 'es' and row['is_false_friend'] == True:
+                        row[f'morpheme_{lang}'] += '_ff'
+                    if row[f'morpheme_{lang}'] not in info['lex']:
+                        info['lex'].append(row[f'morpheme_{lang}'])
+                        info['pos'].append(row['pos'])
             info['code_switched_idx'].append(len(info['lex']))
         with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
             f.writelines('\n'.join(info['lex']))
