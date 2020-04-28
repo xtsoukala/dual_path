@@ -2,14 +2,14 @@
 from operator import lt, ge, itemgetter
 import shutil
 from itertools import product, zip_longest
-from . import defaultdict, Counter, pd, os, torch, zeros, subprocess, sys
+from . import defaultdict, Counter, pd, os, zeros, subprocess, sys
 
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_list, concepts_to_evaluate, false_friends_experiment):
+                 cognate_list, false_friends_lexicon, concepts_to_evaluate):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
@@ -24,7 +24,6 @@ class InputFormatter:
         self.num_languages = len(self.target_lang)
         self.language_index = dict(zip(self.target_lang, range(self.num_languages)))
         self.lexicon_df = pd.read_csv(os.path.join(self.directory, 'lexicon.csv'), sep=',', header=0)  # 1st line:header
-        self.false_friends_experiment = false_friends_experiment
         self.cognate_list = cognate_list
         if cognate_list:
             self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
@@ -35,10 +34,31 @@ class InputFormatter:
         self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
         self.lexicon_size = len(self.lexicon)
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
+
+        self.false_friends_replacement_dict = None
+        if false_friends_lexicon:
+            shutil.copyfile(false_friends_lexicon, os.path.join(self.directory,
+                                                                "false_friends_lexicon.csv"))
+            # self.lexicon_df = pd.read_csv(false_friends_lexicon) if we don't need the replacement dict then all we
+            # have to do is replace the lexica (remove all other lines after "if")
+            self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
+            original_form = []
+            false_friends_form = []
+            ff_lexicon = pd.read_csv(false_friends_lexicon)
+            ff_concepts = ff_lexicon.loc[ff_lexicon.is_false_friend == True, 'concept'].unique()
+            self.lexicon_df.loc[self.lexicon_df.concept.isin(ff_concepts), 'is_false_friend'] = True
+            for concept in ff_concepts:
+                original_form.append(self.lexicon_df.loc[self.lexicon_df.concept == concept, 'morpheme_es'].iloc[0])
+                self.lexicon_df.loc[self.lexicon_df.concept == concept, 'morpheme_es'] = \
+                    ff_lexicon.loc[ff_lexicon.concept == concept, 'morpheme_es']
+                false_friends_form.append(self.lexicon_df.loc[self.lexicon_df.concept == concept,
+                                                              'morpheme_es'].iloc[0])
+            d = dict(zip(original_form, false_friends_form))
+            self.false_friends_replacement_dict = {r'\b{}\b'.format(k): v for k, v in d.items()}  # add word boundaries
+
+        self.concepts_to_evaluate = None
         if concepts_to_evaluate:
             self.concepts_to_evaluate = self.df_query_to_idx(f"concept.isin({concepts_to_evaluate})")
-        else:
-            self.concepts_to_evaluate = None
         self.replace_haber_tener = replace_haber_tener
         self.test_haber_frequency = test_haber_frequency
         self.messageless_decimal_fraction = messageless_decimal_fraction
@@ -76,10 +96,10 @@ class InputFormatter:
         self.idx_pronoun = self.df_query_to_idx("pos == 'pron'")
         self.determiners = self.df_query_to_idx("pos == 'det'")
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
-        self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1]) if cognate_list else []
-        self.false_friend_idx = (self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
-                                 if false_friends_experiment else [])
+        self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1])
+        self.false_friend_idx = self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
+        self.shared_idx_no_false_friends = set(list([self.period_idx]) + list(self.cognate_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
         self.initialized_weights_role_identif = zeros(self.roles_size, self.identif_size)
         self.weights_role_concept = {'training': [], 'test': []}
@@ -146,8 +166,13 @@ class InputFormatter:
     def has_correct_meaning(self, out_sentence_idx, trg_sentence_idx):
         if out_sentence_idx == trg_sentence_idx:
             return True
-        # flexible_order in the monolingual case means that the only difference is the preposition "to"
-        if (self.to_prepositions_idx in out_sentence_idx or self.to_prepositions_idx in trg_sentence_idx and
+
+        if self.same_unordered_lists(out_sentence_idx, trg_sentence_idx):
+            return True  # flexible order
+
+        # otherwise check whether the only difference is the preposition "to"
+        if ((set(out_sentence_idx).intersection(self.to_prepositions_idx) or
+             set(trg_sentence_idx).intersection(self.to_prepositions_idx)) and
                 self.same_unordered_lists(list(filter(lambda i: i not in self.to_prepositions_idx, out_sentence_idx)),
                                           list(filter(lambda i: i not in self.to_prepositions_idx, trg_sentence_idx)))):
             return True
@@ -236,10 +261,11 @@ class InputFormatter:
         if not cache:
             # "translate" message into the target language
             translated_sentence_candidates = self.translate_idx_into_monolingual_candidates(out_sentence_idx,
+                                                                                            trg_sentence_idx,
                                                                                             target_lang)
             # check for insertions (cases where only 1 idx is from the other language)
-            switch_type, switch_pos = self.check_for_insertions(out_sentence_idx, out_pos,
-                                                                None if top_down_language_activation else target_lang)
+            switch_type, switch_pos = self.check_for_switch_types(out_sentence_idx, out_pos, trg_sentence_idx,
+                                                                  None if top_down_language_activation else target_lang)
             if switch_type:
                 for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
                     if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
@@ -259,18 +285,17 @@ class InputFormatter:
             self.code_switched_type_cache[out_idx] = cache
         return cache
 
-    def check_for_insertions(self, out_sentence_idx, out_pos, target_lang):
+    def check_for_switch_types(self, out_sentence_idx, out_pos, trg_sentence_idx, target_lang):
         is_from_lang_filter = {'en': lt, 'es': ge}
-        non_shared_idx = list(filter(lambda i: i not in self.shared_idx, out_sentence_idx))
-        l2_words = sum([1 for i in non_shared_idx if i >= self.code_switched_idx])
-        l1_words = sum([1 for i in non_shared_idx if i < self.code_switched_idx])
-        if (((target_lang == self.L[1] and l1_words == 1 and l2_words > 1) or
-             (target_lang == self.L[2] and l2_words == 1 and l1_words > 1)) and
-                is_from_lang_filter[target_lang](out_sentence_idx[0], self.code_switched_idx)):
+        shared_idx = list(filter(lambda i: i in trg_sentence_idx, out_sentence_idx))
+        # Check if switch is after the first word:
+        if shared_idx == out_sentence_idx[0]:
             return "alternational", out_pos[1]
 
-        check_idx = [i for i in non_shared_idx if not is_from_lang_filter[target_lang](i, self.code_switched_idx)]
-        if target_lang and (not check_idx or check_idx == non_shared_idx):
+        non_shared_idx = list(filter(lambda i: i not in trg_sentence_idx, out_sentence_idx))
+        check_idx = [i for i in non_shared_idx if (i in self.false_friend_idx or
+                                                   not is_from_lang_filter[target_lang](i, self.code_switched_idx))]
+        if target_lang and (not check_idx or check_idx == out_sentence_idx):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
             return "inter-sentential", False
@@ -290,11 +315,12 @@ class InputFormatter:
             return cache[out_idx]
         return None
 
-    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_lang):
+    def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_sentence_idx, trg_lang):
         out_idx = repr(out_sentence_idx)
         cache = self.query_cache(out_idx, self.translation_cache)
         if not cache:
-            trans = [self.find_equivalent_translation_idx(idx, trg_lang) for i, idx in enumerate(out_sentence_idx)]
+            trans = [self.find_equivalent_translation_idx(idx, trg_sentence_idx, trg_lang)
+                     for idx in out_sentence_idx]
             cache = [list(x for x in tup) for tup in list(product(*trans))]
             self.translation_cache[out_idx] = cache
         return cache
@@ -302,9 +328,10 @@ class InputFormatter:
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, out_pos, trg_sentence_idx):
         if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
-        check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx), out_sentence_idx))
+        check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx_no_false_friends),
+                                out_sentence_idx))
         if len(check_idx) == 0:
-            return False  # it was either a cognate or a false friend
+            return False  # it was a cognate
 
         # check if sequence is a subset of the sentence (out instead of trg because target is monolingual)
         starting_switch_point = self.map_to_sentence_pos(check_idx, out_sentence_idx, out_pos)
@@ -312,17 +339,20 @@ class InputFormatter:
             return starting_switch_point[0]
         sys.exit(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
 
-    def is_code_switched(self, sentence_indices, target_lang_idx):
+    def is_code_switched(self, sentence_indices, target_lang_idx, target_sentence_idx=None):
         """ This function only checks whether words from different languages were used.
         It doesn't verify the validity of the expressed message """
         # skip indices that are common in all lang
         clean_sentence = list(filter(lambda i: i not in self.shared_idx, sentence_indices))
         if not clean_sentence:
             return False  # empty sentence
+        false_friend = set(sentence_indices).intersection(self.false_friend_idx)
+        if target_sentence_idx and false_friend and next(iter(false_friend)) in target_sentence_idx:
+            false_friend = False
         min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
-        if ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-             all(x < self.code_switched_idx for x in min_and_max_idx))
-                and self.morpheme_is_from_target_lang(clean_sentence[0], target_lang_idx)):
+        if not false_friend and ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
+                                  all(x < self.code_switched_idx for x in min_and_max_idx))
+                                 and self.morpheme_is_from_target_lang(clean_sentence[0], target_lang_idx)):
             return False
         return True
 
@@ -360,19 +390,22 @@ class InputFormatter:
             self.switch_points_cache[out_idx] = cache
         return cache
 
-    def check_cs_around_idx_of_interest(self, sentence_indices, idx_of_interest, target_lang):
+    def check_cs_around_idx_of_interest(self, sentence_indices, idx_of_interest, target_idx_of_interest, target_lang):
         out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.idx_points_cache)
         lang_idx = self.code_switched_idx + 2 if target_lang == "es" else self.code_switched_idx - 2
         if not cache:
             # FIXME: current assumption: lexicon contains first EN and then ES words
-            (switched_before, switched_right_after, switched_one_after, switched_after_anywhere, switched_before_es_en,
-             switched_right_after_es_en, switched_one_after_es_en, switched_after_anywhere_es_en) = \
-                (False, False, False, False, False, False, False, False)
+            (switched_before, switched_at, switched_right_after, switched_one_after, switched_after_anywhere,
+             switched_before_es_en, switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
+             switched_after_anywhere_es_en) = (False, False, False, False, False,
+                                               False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
 
-            switched_before = self.is_code_switched(sentence_indices[:target_idx + 1], target_lang_idx=lang_idx)
-            switched_before_es_en = False if switched_before and target_lang == 'es' else False
+            switched_before = self.is_code_switched(sentence_indices[:target_idx], target_lang_idx=lang_idx)
+            switched_before_es_en = True if switched_before and target_lang == 'es' else False
+            switched_at = (target_idx_of_interest != idx_of_interest)
+            switched_at_es_en = switched_at and target_lang == 'es'
 
             switched_right_after = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
                                                          target_lang_idx=lang_idx)
@@ -382,13 +415,13 @@ class InputFormatter:
                                                        target_lang_idx=lang_idx)
             switched_one_after_es_en = True if switched_one_after and target_lang == 'es' else False
 
-
+            # anywhere after point of interest
             switched_after_anywhere = self.is_code_switched(sentence_indices[target_idx + 1:],
                                                             target_lang_idx=lang_idx)
             switched_after_anywhere_es_en = (True if switched_after_anywhere and target_lang == 'es' else False)
 
-            cache = (switched_before, switched_right_after, switched_one_after, switched_after_anywhere,
-                     switched_before_es_en, switched_right_after_es_en, switched_one_after_es_en,
+            cache = (switched_before, switched_at, switched_right_after, switched_one_after, switched_after_anywhere,
+                     switched_before_es_en, switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
                      switched_after_anywhere_es_en)
             self.idx_points_cache[out_idx] = cache
         return cache
@@ -412,8 +445,6 @@ class InputFormatter:
                 lexicon_of_lang = self.lexicon_df[[f'morpheme_{lang}', 'pos', 'concept',
                                                    'is_false_friend']].dropna(subset=[f'morpheme_{lang}'])
                 for i, row in lexicon_of_lang.iterrows():
-                    if self.false_friends_experiment and lang == 'es' and row['is_false_friend'] == True:
-                        row[f'morpheme_{lang}'] += '_ff'
                     if row[f'morpheme_{lang}'] not in info['lex']:
                         info['lex'].append(row[f'morpheme_{lang}'])
                         info['pos'].append(row['pos'])
@@ -445,6 +476,10 @@ class InputFormatter:
             d = dict(zip(cognate_translation, cognate_word))
             d = {r'\b{}\b'.format(k): v for k, v in d.items()}  # add word boundaries
             df['target_sentence'] = df['target_sentence'].replace(to_replace=d, regex=True)
+        if self.false_friends_replacement_dict:
+            df['target_sentence'] = df['target_sentence'].replace(to_replace=self.false_friends_replacement_dict,
+                                                                  regex=True)
+
         if self.prodrop:  # TODO: make pro-drop
             if self.emphasis_decimal_fraction > 0:  # keep pronoun if emphasized
                 # find num of lines that are in ES. decide on num that will be emphasized:
@@ -579,10 +614,13 @@ class InputFormatter:
         q = self.lexicon_df.query(query)[languages].values.ravel()
         return list(self.lexicon_index[x] for x in list(q) if is_not_nan(x))
 
-    def find_equivalent_translation_idx(self, idx, lang):
-        # ignore shared indices (cognates/period)
-        if (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L[1]) or
-                                            (lang == self.L[2] and idx < self.code_switched_idx))):
+    def find_equivalent_translation_idx(self, idx, trg_sentence_idx, lang):
+        if idx in trg_sentence_idx:
+            return [idx]
+        # ignore shared indices (cognates/period, but not false friends as they *can* be code-switched)
+        if (idx in self.false_friend_idx or
+                (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L[1]) or
+                                                 (lang == self.L[2] and idx < self.code_switched_idx)))):
             return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
         return [idx]
 
@@ -608,5 +646,6 @@ def copy_files(src, dest, ends_with=None):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def training_is_successful(x, threshold, num_test):
-    return torch.div(x[-1] * 100, num_test) >= threshold
+def pairwise_list_view(row_idx):
+    return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0])
+            for i in range(len(row_idx)))

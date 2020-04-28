@@ -18,7 +18,7 @@ class DualPath:
 
     def __init__(self, hidden_size, learn_rate, final_learn_rate, momentum, epochs, compress_size,
                  role_copy, input_copy, activate_both_lang, srn_debug, set_weights_folder, set_weights_epoch,
-                 input_class, pronoun_experiment, cognate_experiment, auxiliary_experiment, ignore_tense_and_det,
+                 input_class, pronoun_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
                  starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, l2_epoch,
                  epoch_deviation, simulation_num=None):
@@ -49,7 +49,6 @@ class DualPath:
         self.hidden_size = hidden_size
         self.simulation_num = simulation_num
         self.pronoun_experiment = pronoun_experiment
-        self.cognate_experiment = cognate_experiment
         self.auxiliary_experiment = auxiliary_experiment
         self.training_logger = None
         self.test_logger = None
@@ -94,16 +93,17 @@ class DualPath:
         header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
                   "is_code_switched,switched_type,pos_of_switch_point")
         if self.auxiliary_experiment:
-            header += (",switched_before,switched_right_before,switched_right_after,switched_after_anywhere,switched_before_es_en,"
-                       "switched_right_before_es_en,switched_right_after_es_en, switched_after_anywhere_es_en")
+            header += (",switched_before,switched_right_before,switched_right_after,switched_after_anywhere,"
+                       "switched_before_es_en,switched_right_before_es_en,switched_right_after_es_en, "
+                       "switched_after_anywhere_es_en")
         elif self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_right_after,switched_one_after,"
-                       "switched_after_anywhere,switched_before_es_en,"
+            header += (",switched_before,switched_at,switched_right_after,switched_one_after,"
+                       "switched_after_anywhere,switched_before_es_en,switched_at_en_es,"
                        "switched_right_after_es_en,switched_one_after_es_en,switched_after_anywhere_es_en")
         if self.pronoun_experiment:
             header += ",pronoun_error,pronoun_error_flex"
         header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch," \
-                  "target_has_cognate"
+                  "target_has_cognate,target_has_false_friend"
         logger.info(header)
         return logger
 
@@ -347,88 +347,103 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = 'el dog pequeño lleva the pen .'
-                        target_sentence = 'el dog pequeño lleva el bolígrafo .'
+                        produced_sentence = 'la novia patea a chair .'
+                        target_sentence = 'la novia patea una silla .'
                         target_lang = 'es'
-                        print('Debugging sentence pair:', produced_sentence)
+                        print('Debugging sentence pair:', produced_sentence, 'target:', target_sentence)
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indices(target_sentence)
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
-                    (has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type, cs_pos_point,
-                     switched_before, switched_right_before, switched_right_after, switched_one_after, switched_after_anywhere, 
-                     switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en, 
-                     switched_one_after_es_en, switched_after_anywhere_es_en, has_pronoun_error,
-                     has_pronoun_error_flex, has_cognate) = (False, False, False, False, False, False, False, False,
-                                                             False, False, False, False, False, False, False, False,
-                                                             False, False, False)
-                    if self.cognate_experiment:
-                        has_cognate = any([x in self.inputs.cognate_idx for x in target_sentence_idx])
-                    is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
-                                                                                                target_pos,
-                                                                                                produced_idx)
-                    code_switched = self.inputs.is_code_switched(produced_idx, target_lang_idx=target_sentence_idx[0])
-                    if is_grammatical:
-                        has_correct_pos = True
-                        if not code_switched:
-                            correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
-                        else:  # only count grammatically correct CS sentences -- determine CS type here
-                            cs_type, cs_pos_point = self.inputs.get_code_switched_type(produced_idx, produced_pos,
-                                                                                       target_sentence_idx, target_lang,
-                                                                                       top_down_language_activation)
-                            if top_down_language_activation and cs_type == "inter-sentential":
-                                correct_meaning = True
-                            elif cs_type:  # TODO: check the failed sentences too
-                                correct_meaning = True
-                                if pos_interest and pos_interest in produced_pos:
-                                    (switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
-                                     switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
-                                     switched_after_anywhere_es_en) = self.inputs.check_cs_around_pos_of_interest(produced_idx,
-                                                                                                         produced_pos,
-                                                                                                         pos_interest)
-                                elif self.inputs.concepts_to_evaluate:
-                                    evaluated_concept_idx = [conc for conc in produced_idx if conc
-                                                             in self.inputs.concepts_to_evaluate]
-                                    if evaluated_concept_idx:
-                                        (switched_before, switched_right_after,
-                                         switched_one_after, switched_after_anywhere, switched_before_es_en,
-                                         switched_right_after_es_en, switched_one_after_es_en,
-                                         switched_after_anywhere_es_en
-                                         ) = self.inputs.check_cs_around_idx_of_interest(
-                                            produced_idx, evaluated_concept_idx[0], target_lang)
+                    (has_wrong_det, has_wrong_tense, correct_meaning, cs_type, cs_pos_point,
+                     switched_before, switched_right_before, switched_at, switched_right_after, switched_one_after,
+                     switched_after_anywhere, switched_before_es_en, switched_right_before_es_en, switched_at_es_en,
+                     switched_right_after_es_en, switched_one_after_es_en, switched_after_anywhere_es_en,
+                     has_pronoun_error, has_pronoun_error_flex,
+                     has_cognate, has_false_friend) = (False, False, False, False, False, False, False, False,
+                                                       False, False, False, False, False, False, False, False,
+                                                       False, False, False, False, False)
+                    if self.inputs.cognate_idx:
+                        has_cognate = bool(set(target_sentence_idx).intersection(self.inputs.cognate_idx))
+                    if self.inputs.false_friend_idx:
+                        has_false_friend = bool(set(target_sentence_idx).intersection(self.inputs.false_friend_idx))
 
-                        if not correct_meaning:
-                            has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
-                                                                             feature="determiners")
-                            has_wrong_tense = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
-                                                                               feature="tense")
-                            if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
-                                print(produced_sentence, "should be correct meaning,FIXME")  # FIXME
+                    if produced_idx == target_sentence_idx:  # if sentences are identical, no need to investigate
+                        pos, meaning, code_switched = True, True, False  # Assumption: input isn't code-switched
+                    else:
+                        is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos,
+                                                                                                    target_pos,
+                                                                                                    produced_idx)
+                        code_switched = self.inputs.is_code_switched(produced_idx,
+                                                                     target_sentence_idx=target_sentence_idx,
+                                                                     target_lang_idx=target_sentence_idx[0])
+                        if is_grammatical:
+                            if not code_switched:
+                                correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
+                            else:  # only count grammatically correct CS sentences -- determine CS type here
+                                cs_type, cs_pos_point = self.inputs.get_code_switched_type(produced_idx, produced_pos,
+                                                                                           target_sentence_idx,
+                                                                                           target_lang,
+                                                                                           top_down_language_activation)
+                                if top_down_language_activation and cs_type == "inter-sentential":
+                                    correct_meaning = True
+                                elif cs_type:  # TODO: check the failed sentences too
+                                    correct_meaning = True
+                                    if pos_interest and pos_interest in produced_pos:
+                                        (switched_before, switched_right_before, switched_right_after,
+                                         switched_after_anywhere, switched_before_es_en, switched_right_before_es_en,
+                                         switched_right_after_es_en, switched_after_anywhere_es_en
+                                         ) = self.inputs.check_cs_around_pos_of_interest(produced_idx, produced_pos,
+                                                                                         pos_interest)
+                                    elif self.inputs.concepts_to_evaluate:
+                                        evaluated_concept_idx = next(iter(set(produced_idx).intersection(
+                                            self.inputs.concepts_to_evaluate)))
+                                        if evaluated_concept_idx:
+                                            target_concept_idx = next(iter(set(target_sentence_idx).intersection(
+                                                self.inputs.concepts_to_evaluate)))
+                                            (switched_before, switched_at, switched_right_after,
+                                             switched_one_after, switched_after_anywhere, switched_before_es_en,
+                                             switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
+                                             switched_after_anywhere_es_en
+                                             ) = self.inputs.check_cs_around_idx_of_interest(
+                                                produced_idx, evaluated_concept_idx, target_concept_idx, target_lang)
 
-                        if self.pronoun_experiment:
-                            if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
-                                if self.inputs.test_meaning_without_pronouns(produced_idx, line.target_sentence_idx):
-                                    has_pronoun_error = True
-                                else:  # flex: grammatically correct sentences / gender error + wrong meaning
-                                    has_pronoun_error_flex = True
+                            if not correct_meaning:
+                                has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
+                                                                                 feature="determiners")
+                                has_wrong_tense = self.inputs.test_without_feature(produced_idx,
+                                                                                   line.target_sentence_idx,
+                                                                                   feature="tense")
+                                if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
+                                    print(produced_sentence, "should be correct meaning,FIXME")  # FIXME
 
-                    meaning = f"{'flex-' if has_wrong_det or has_wrong_tense else ''}{correct_meaning}"
-                    pos = has_correct_pos or flexible_order
-                    log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning,
-                                code_switched, cs_type, cs_pos_point]
+                            if self.pronoun_experiment:
+                                if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
+                                    if self.inputs.test_meaning_without_pronouns(produced_idx,
+                                                                                 line.target_sentence_idx):
+                                        has_pronoun_error = True
+                                    else:  # flex: grammatically correct sentences / gender error + wrong meaning
+                                        has_pronoun_error_flex = True
+
+                        meaning = f"{'flex-' if has_wrong_det or has_wrong_tense else ''}{correct_meaning}"
+                        pos = is_grammatical or flexible_order
+
+                    log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning, code_switched,
+                                cs_type, cs_pos_point]
                     if pos_interest:
-                        log_info.extend([switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
-                                         switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
-                                         switched_after_anywhere_es_en])
+                        log_info.extend(
+                            [switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
+                             switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
+                             switched_after_anywhere_es_en])
                     elif self.inputs.concepts_to_evaluate:
-                        log_info.extend([switched_before, switched_right_after,
+                        log_info.extend([switched_before, switched_at, switched_right_after,
                                          switched_one_after, switched_after_anywhere,
-                                         switched_before_es_en, switched_right_after_es_en,
+                                         switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
                                          switched_one_after_es_en, switched_after_anywhere_es_en])
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
                                      not has_wrong_det, f'"{line.message}"', ' '.join(entropy_idx),
-                                     self.starting_epoch, has_cognate])
+                                     self.starting_epoch, has_cognate, has_false_friend])
                     logger.info(",".join(str(x) for x in log_info))

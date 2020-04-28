@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from . import pd, os, sys, is_not_nan, time, datetime, np
+from . import pd, os, sys, is_not_nan, time, datetime, np, pairwise_list_view
 from joblib import Parallel, delayed
 from numpy import around
 import re
-import itertools
 
 
 class SetsGenerator:
@@ -418,13 +417,9 @@ class SetsGenerator:
         cognate_concepts = self.lexicon_df.loc[random_idx, 'concept'].unique()
         original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
         self.list_to_file("false_friends", cognate_concepts)
-        for current_idx, next_idx in self.pairwise_list_view_for_false_friends(random_idx):
+        for current_idx, next_idx in pairwise_list_view(random_idx):
             self.lexicon_df.loc[current_idx, 'morpheme_es'] = original_morphemes.loc[next_idx]
-
-    @staticmethod
-    def pairwise_list_view_for_false_friends(row_idx):
-        return ((row_idx[i], row_idx[i+1] if i+1 < len(row_idx) else row_idx[0])
-                for i in range(len(row_idx)))
+        self.lexicon_df.to_csv(f'{self.input_dir}/false_friends_lexicon.csv', encoding='utf-8', index=False)
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
         """

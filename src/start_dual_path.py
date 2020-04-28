@@ -87,6 +87,7 @@ if __name__ == "__main__":
     parser.add_argument('--exclude_cognates', help="Filename with concepts; exclude from cognate selection the "
                                                    "concepts of this list")
     parser.add_argument('--cognate_list', help="Filename with concepts; use these instead of ones in lexicon.csv")
+    parser.add_argument('--false_friends_lexicon', help="Csv file with false friends lexicon; use these in lexicon.csv")
     parser.add_argument('--concepts_to_evaluate', help="Filename with concepts of words that will become the focus "
                                                        "around code-switched points (e.g., cognates of all models)")
     parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
@@ -211,10 +212,11 @@ if __name__ == "__main__":
 
     cognate_list = []
     concepts_to_evaluate = []
-    if args.only_evaluate and args.cognate_list:
+    if args.only_evaluate and (args.cognate_list or args.false_friends):
         args.activate_both_lang = True
         cognate_experiment = True
-        cognate_list = file_to_list(args.cognate_list)
+        if args.cognate_list:
+            cognate_list = file_to_list(args.cognate_list)
         if args.concepts_to_evaluate:
             concepts_to_evaluate = file_to_list(args.concepts_to_evaluate)
         if not args.testset:
@@ -291,15 +293,15 @@ if __name__ == "__main__":
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
+                                     false_friends_lexicon=args.false_friends_lexicon,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction,
-                                     false_friends_experiment=args.false_friends)
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
                      role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
                      compress_size=args.compress, activate_both_lang=args.activate_both_lang,
-                     cognate_experiment=cognate_experiment, momentum=args.momentum, randomize=args.randomize,
+                     momentum=args.momentum, randomize=args.randomize,
                      set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
                      input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
                      set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,

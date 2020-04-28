@@ -11,7 +11,7 @@ import time
 import subprocess
 from collections import defaultdict, Counter
 from datetime import datetime
-from .formatter import InputFormatter, is_not_nan, copy_files, training_is_successful
+from .formatter import InputFormatter, is_not_nan, copy_files, pairwise_list_view
 from .elman_network import SimpleRecurrentNetwork
 from .dual_path import DualPath
 from .plotter import Plotter
