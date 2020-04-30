@@ -98,6 +98,7 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1])
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
+        #print(self.false_friend_idx, self.sentence_from_indices(self.false_friend_idx))
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.shared_idx_no_false_friends = set(list([self.period_idx]) + list(self.cognate_idx))
         self.initialized_weights_role_concept = zeros(self.roles_size, self.concept_size)
@@ -398,8 +399,9 @@ class InputFormatter:
             # FIXME: current assumption: lexicon contains first EN and then ES words
             (switched_before, switched_at, switched_right_after, switched_one_after, switched_after_anywhere,
              switched_before_es_en, switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
-             switched_after_anywhere_es_en) = (False, False, False, False, False,
-                                               False, False, False, False, False)
+             switched_after_anywhere_es_en,
+             point_of_interest_produced_last) = (False, False, False, False, False,
+                                                 False, False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
 
             switched_before = self.is_code_switched(sentence_indices[:target_idx], target_lang_idx=lang_idx)
@@ -420,9 +422,11 @@ class InputFormatter:
                                                             target_lang_idx=lang_idx)
             switched_after_anywhere_es_en = (True if switched_after_anywhere and target_lang == 'es' else False)
 
+            point_of_interest_produced_last = idx_of_interest == sentence_indices[-2]  # ignore period
+
             cache = (switched_before, switched_at, switched_right_after, switched_one_after, switched_after_anywhere,
                      switched_before_es_en, switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
-                     switched_after_anywhere_es_en)
+                     switched_after_anywhere_es_en, point_of_interest_produced_last)
             self.idx_points_cache[out_idx] = cache
         return cache
 
@@ -646,6 +650,9 @@ def copy_files(src, dest, ends_with=None):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def pairwise_list_view(row_idx):
-    return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0])
-            for i in range(len(row_idx)))
+def pairwise_list_view(row_idx, use_step=True):
+    if use_step:
+        step = int(len(row_idx) / 2)
+        return ((row_idx[i], row_idx[i+step]) for i in range(step))
+    return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0]) for i in range(len(row_idx)))
+

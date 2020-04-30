@@ -97,9 +97,9 @@ class DualPath:
                        "switched_before_es_en,switched_right_before_es_en,switched_right_after_es_en, "
                        "switched_after_anywhere_es_en")
         elif self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_at,switched_right_after,switched_one_after,"
-                       "switched_after_anywhere,switched_before_es_en,switched_at_en_es,"
-                       "switched_right_after_es_en,switched_one_after_es_en,switched_after_anywhere_es_en")
+            header += (",switched_before,switched_at,switched_right_after,switched_one_after,switched_after_anywhere,"
+                       "switched_before_es_en,switched_at_es_en,switched_right_after_es_en,switched_one_after_es_en,"
+                       "switched_after_anywhere_es_en,point_of_interest_produced_last")
         if self.pronoun_experiment:
             header += ",pronoun_error,pronoun_error_flex"
         header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch," \
@@ -360,10 +360,10 @@ class DualPath:
                      switched_before, switched_right_before, switched_at, switched_right_after, switched_one_after,
                      switched_after_anywhere, switched_before_es_en, switched_right_before_es_en, switched_at_es_en,
                      switched_right_after_es_en, switched_one_after_es_en, switched_after_anywhere_es_en,
-                     has_pronoun_error, has_pronoun_error_flex,
+                     has_pronoun_error, has_pronoun_error_flex, point_of_interest_produced_last,
                      has_cognate, has_false_friend) = (False, False, False, False, False, False, False, False,
                                                        False, False, False, False, False, False, False, False,
-                                                       False, False, False, False, False)
+                                                       False, False, False, False, False, False)
                     if self.inputs.cognate_idx:
                         has_cognate = bool(set(target_sentence_idx).intersection(self.inputs.cognate_idx))
                     if self.inputs.false_friend_idx:
@@ -405,7 +405,7 @@ class DualPath:
                                             (switched_before, switched_at, switched_right_after,
                                              switched_one_after, switched_after_anywhere, switched_before_es_en,
                                              switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
-                                             switched_after_anywhere_es_en
+                                             switched_after_anywhere_es_en, point_of_interest_produced_last
                                              ) = self.inputs.check_cs_around_idx_of_interest(
                                                 produced_idx, evaluated_concept_idx, target_concept_idx, target_lang)
 
@@ -438,9 +438,9 @@ class DualPath:
                              switched_after_anywhere_es_en])
                     elif self.inputs.concepts_to_evaluate:
                         log_info.extend([switched_before, switched_at, switched_right_after,
-                                         switched_one_after, switched_after_anywhere,
-                                         switched_before_es_en, switched_at_es_en, switched_right_after_es_en,
-                                         switched_one_after_es_en, switched_after_anywhere_es_en])
+                                         switched_one_after, switched_after_anywhere, switched_before_es_en,
+                                         switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
+                                         switched_after_anywhere_es_en, point_of_interest_produced_last])
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,

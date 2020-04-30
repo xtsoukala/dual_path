@@ -32,7 +32,7 @@ class Plotter:
         plt.ylabel('')
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim, step=1))
-        xticks = pd.np.arange(df.epoch.min(), df.epoch.max()+1, step=4)
+        xticks = pd.np.arange(df.epoch.min(), df.epoch.max() + 1, step=4)
         plt.xticks(xticks, xticks)
 
         plt.xlim([df.epoch.min(), df.epoch.max()])
@@ -41,22 +41,47 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
-    def plot_cognate_effect_over_time(self, df_name):
+    def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',
+                                                                   'switched_right_after', 'switched_one_after',
+                                                                   'switched_after_anywhere'),
+                                      ignore_baseline=False, ci=95):
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
+        if ignore_baseline:
+            df = df[df.model != 'baseline']
+        for label in info_to_plot:
+            ax = sns.lineplot(x='epoch', y=f'{label}_percentage', hue='model', ci=ci, n_boot=1000, data=df)
 
-        #sns.lineplot(x='epoch', y='code_switched', hue='model', data=df)
-        sns.lineplot(x='epoch', y='switched_one_after', hue='model', data=df)
+            plt.xlim([df.epoch.min(), df.epoch.max()])
 
-        plt.xlim([df.epoch.min(), df.epoch.max()])
-        plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.11))
-        plt.tight_layout()  # make room for labels
-        networks = 40
-        plt.savefig(self.get_plot_path(40, df_name))
-        plt.close()
+            handles, labels = ax.get_legend_handles_labels()
+            plt.legend(handles=handles[1:], labels=labels[1:], loc='upper center', fancybox=True, ncol=3, shadow=True,
+                       bbox_to_anchor=(0.5, 1.11))
+            plt.tight_layout()  # make room for labels
+            plt.ylim([0, 45])
+            fname = 'cog' if 'cog' in df_name else 'ff'
+            plt.savefig(self.get_plot_path(40, f'{label}_{fname}'))
+            plt.close()
 
-
-
-
+    def print_switches_around_switch_point(self, df_name, ci=95, info_to_plot=('code_switched', 'switched_before',
+                                                                               'switched_at', 'switched_right_after',
+                                                                               'switched_one_after',
+                                                                               'switched_after_anywhere')):
+        print(df_name)
+        false_friends = False
+        if 'ff' in df_name:
+            false_friends = True
+        df = pd.read_csv(f'{self.results_dir}/{df_name}')
+        df = df[df.epoch == df.epoch.max()]
+        df_baseline = df[df.model == 'baseline']
+        df_cog_or_ff = df[df.model == ('cognate' if not false_friends else 'false_friend')]
+        df_no_cog_or_ff = df[df.model == ('non_cognate' if not false_friends else 'non_false_friend')]
+        all_dfs = [df_baseline, df_cog_or_ff, df_no_cog_or_ff]
+        for i in info_to_plot:
+            for d in all_dfs:
+                low, high = self.get_ci(d[f'{i}_percentage'])
+                print(i, round(d[f'{i}_percentage'].mean(), 1), f'[{round(low, 1)}, {round(high, 1)}]')
+            print('------')
+        print(sum(df.total_sentences))
 
     def lineplot_code_switches(self, df, fname='code_switches_over_time', ylim=50, legend_loc='upper center'):
         sns.lineplot(x='epoch', y='alternational_percentage', data=df, ci=None, color='#0173b2',
@@ -165,7 +190,7 @@ class Plotter:
                         code_switches[m][switch_type][lang][switch_point] = df[(df.switched_type == switch_type) &
                                                                                (df.pos_of_switch_point == switch_point)
                                                                                & (df.switch_from == lang)
-                                                                               ].is_code_switched#.sum()
+                                                                               ].is_code_switched  # .sum()
 
         for switch_type in code_switch_types:  # one plot per switch_type and lang
             index_size = pd.np.arange(len(labels[switch_type]))
@@ -179,15 +204,15 @@ class Plotter:
                     ci_low = []
                     ci_high = []
                     for switch_point in labels[switch_type]:
-                        v = code_switches[model][switch_type][lang][switch_point] * 100 / correct_sentences[model][switch_type][
-                            labels[switch_type].index(switch_point)]
-                        #v = code_switches[model][switch_type][lang][switch_point]
+                        v = (code_switches[model][switch_type][lang][switch_point] * 100 /
+                             correct_sentences[model][switch_type][labels[switch_type].index(switch_point)])
 
                         low, high = self.get_ci(v)
 
                         r = code_switches[model][switch_type][lang][switch_point].sum()
-                        r_mean = truediv(code_switches[model][switch_type][lang][switch_point].mean() * 100, (correct_sentences[model][switch_type][
-                            labels[switch_type].index(switch_point)]))
+                        r_mean = truediv(code_switches[model][switch_type][lang][switch_point].mean() * 100,
+                                         (correct_sentences[model][switch_type][
+                                             labels[switch_type].index(switch_point)]))
                         val.append(r_mean)
                         ci_low.append(round(r_mean - low, 1))
                         ci_high.append(round(high - r_mean, 1))
@@ -297,7 +322,7 @@ class Plotter:
                 sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.5)
 
         plt.xlabel('epochs')
-        plt.ylabel('')
+        plt.ylabel(fname)
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim + 1, step=10))
 
@@ -386,7 +411,7 @@ class Plotter:
                               'CI:', round(low, 1), round(high, 1))
 
     def print_switches_per_model_OLD(self, models=('early', 'enes', 'esen'), l2_epoch=25,
-                                 print_per_lang=False, switch_type=('alternational', 'insertional', 'ambiguous')):
+                                     print_per_lang=False, switch_type=('alternational', 'insertional', 'ambiguous')):
         lang_sum = {}
         for m in models:
             lang_sum[m] = {'en': [], 'es': []}
@@ -400,11 +425,13 @@ class Plotter:
                     ll = df[df.switch_from == lang]
                     print(lang, '->')
                     for stype in switch_type:
-                        percentage = round(ll[ll.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences,
-                                           1)
+                        percentage = round(
+                            ll[ll.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences,
+                            1)
                         for pos in ll[ll.switched_type == stype].pos_of_switch_point.unique():
                             print(stype, pos,
-                                  ll[(ll.switched_type == stype) & (ll.pos_of_switch_point == pos)].is_code_switched.sum(),
+                                  ll[(ll.switched_type == stype) & (
+                                              ll.pos_of_switch_point == pos)].is_code_switched.sum(),
                                   round(ll[(ll.switched_type == stype) &
                                            (ll.pos_of_switch_point == pos)].is_code_switched.sum() * 100 /
                                         df[df.switch_from == lang].meaning.sum(), 1))
@@ -418,5 +445,5 @@ class Plotter:
                     print(m, lang, round(sum(lang_sum[m][lang]), 1))
 
     @staticmethod
-    def get_ci(df):
-        return boot.ci(df, n_samples=10000, alpha=0.05)
+    def get_ci(df, n_samples=10000):
+        return boot.ci(df, n_samples=n_samples, alpha=0.05)
