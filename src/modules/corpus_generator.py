@@ -341,7 +341,9 @@ class SetsGenerator:
         self.list_to_file("identifiability", self.identifiability)
         self.list_to_file("roles", self.roles)
         self.list_to_file("concepts", self.concepts)
-        self.lexicon_df.to_csv(f'{self.input_dir}/lexicon.csv', encoding='utf-8', index=False)
+        if not os.path.isfile(f'{self.input_dir}/lexicon.csv'):
+            self.lexicon_df.to_csv(f'{self.input_dir}/lexicon.csv', encoding='utf-8', index=False)
+            print('save lexicon')
         self.structures_df.to_csv(f'{self.input_dir}/structures.csv', encoding='utf-8', index=False)
 
     def list_to_file(self, fname, content):
@@ -402,26 +404,26 @@ class SetsGenerator:
         else:
             return self.lexicon_df.loc[random_idx, 'concept'].unique()
 
-    def convert_nouns_to_false_friends(self, cognate_decimal_fraction, excluded_concepts=[], seed=18):
+    def convert_nouns_to_false_friends(self, cognate_decimal_fraction, excluded_concepts=[], seed=18,
+                                       bidirectional=False):
         """ Very similar to convert_nouns_to_cognates """
         if seed:
             self.random.seed(seed)  # Option to set a seed for consistency
+        self.lexicon_df.to_csv(f'{self.input_dir}/lexicon.csv', encoding='utf-8', index=False)
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
         a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
-                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
+                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
-
         cognate_concepts = self.lexicon_df.loc[random_idx, 'concept'].unique()
         original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
         self.list_to_file("false_friends", cognate_concepts)
-        for current_idx, next_idx in pairwise_list_view(random_idx):
-            #print(self.lexicon_df.loc[current_idx, 'morpheme_es'], 'to--->')
+        for current_idx, next_idx in pairwise_list_view(random_idx, bidirectional=bidirectional):
+            # print(self.lexicon_df.loc[current_idx, 'morpheme_es'], 'to--->')
             self.lexicon_df.loc[current_idx, 'morpheme_es'] = original_morphemes.loc[next_idx]
-            #print(next_idx, self.lexicon_df.loc[next_idx, 'morpheme_en'])
+            # print(next_idx, self.lexicon_df.loc[next_idx, 'morpheme_en'])
             self.lexicon_df.loc[next_idx, 'is_false_friend'] = True
-            #print(self.lexicon_df.loc[current_idx, 'morpheme_es'])
         self.lexicon_df.to_csv(f'{self.input_dir}/false_friends_lexicon.csv', encoding='utf-8', index=False)
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):

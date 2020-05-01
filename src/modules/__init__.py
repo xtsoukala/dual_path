@@ -17,6 +17,8 @@ from .dual_path import DualPath
 from .plotter import Plotter
 from .corpus_generator import SetsGenerator
 
+logging.basicConfig(level=logging.WARNING)
+
 
 def str2bool(v):
     if isinstance(v, bool):

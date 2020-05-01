@@ -650,9 +650,11 @@ def copy_files(src, dest, ends_with=None):
             shutil.copyfile(os.path.join(src, filename), os.path.join(dest, filename))
 
 
-def pairwise_list_view(row_idx, use_step=True):
-    if use_step:
-        step = int(len(row_idx) / 2)
-        return ((row_idx[i], row_idx[i+step]) for i in range(step))
-    return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0]) for i in range(len(row_idx)))
+def pairwise_list_view(row_idx, bidirectional=False):
+    if bidirectional:
+        return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0]) for i in range(len(row_idx)))
+    # else use a step
+    step = int(len(row_idx) / 2)
+    return ((row_idx[i], row_idx[i+step]) for i in range(step))
+
 
