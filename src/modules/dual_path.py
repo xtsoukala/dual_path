@@ -242,9 +242,9 @@ class DualPath:
                 self.set_weights_epoch = random.randint(self.set_weights_epoch - self.epoch_deviation,
                                                         self.set_weights_epoch + self.epoch_deviation)
                 self.starting_epoch = self.set_weights_epoch
-            print(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
-                  f"fw: {self.inputs.fixed_weights}, epochs: {self.epochs}, ",
-                  f"starting weight epoch: {self.set_weights_epoch}" if self.set_weights_epoch else '')
+            logging.info(f"sim: {simulation_num}, hidden: {self.hidden_size}, compress: {self.compress_size}, "
+                         f"fw: {self.inputs.fixed_weights}, epochs: {self.epochs}, "
+                         f"{f'starting weight epoch: {self.set_weights_epoch}' if self.set_weights_epoch else ''}")
             self.initialize_srn()
 
         self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
@@ -347,10 +347,10 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = 'la novia patea a chair .'
-                        target_sentence = 'la novia patea una silla .'
+                        produced_sentence = 'el waiter da el bolígrafo a_ la abuela .'
+                        target_sentence = 'el hombre da a_ la abuela el bolígrafo .'
                         target_lang = 'es'
-                        print('Debugging sentence pair:', produced_sentence, 'target:', target_sentence)
+                        logging.info(f'Debugging sentence pair: {produced_sentence} target: {target_sentence}')
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
                         target_sentence_idx = self.inputs.sentence_indices(target_sentence)
@@ -376,8 +376,7 @@ class DualPath:
                                                                                                     target_pos,
                                                                                                     produced_idx)
                         code_switched = self.inputs.is_code_switched(produced_idx,
-                                                                     target_sentence_idx=target_sentence_idx,
-                                                                     target_lang_idx=target_sentence_idx[0])
+                                                                     target_sentence_idx=target_sentence_idx)
                         if is_grammatical:
                             if not code_switched:
                                 correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)
@@ -400,15 +399,12 @@ class DualPath:
                                         evaluated_concept_idx = next(iter(set(produced_idx).intersection(
                                             self.inputs.concepts_to_evaluate)))
                                         if evaluated_concept_idx:
-                                            target_concept_idx = next(iter(set(target_sentence_idx).intersection(
-                                                self.inputs.concepts_to_evaluate)))
                                             (switched_before, switched_at, switched_right_after,
                                              switched_one_after, switched_after_anywhere, switched_before_es_en,
                                              switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
                                              switched_after_anywhere_es_en, point_of_interest_produced_last
                                              ) = self.inputs.check_cs_around_idx_of_interest(
-                                                produced_idx, evaluated_concept_idx, target_concept_idx, target_lang)
-
+                                                produced_idx, evaluated_concept_idx, target_lang, target_sentence_idx)
                             if not correct_meaning:
                                 has_wrong_det = self.inputs.test_without_feature(produced_idx, line.target_sentence_idx,
                                                                                  feature="determiners")
@@ -416,7 +412,7 @@ class DualPath:
                                                                                    line.target_sentence_idx,
                                                                                    feature="tense")
                                 if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
-                                    print(produced_sentence, "should be correct meaning,FIXME")  # FIXME
+                                    logging.warning(f"'{produced_sentence}' should have correct meaning")  # FIXME
 
                             if self.pronoun_experiment:
                                 if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):

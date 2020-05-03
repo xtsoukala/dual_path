@@ -405,7 +405,7 @@ class SetsGenerator:
             return self.lexicon_df.loc[random_idx, 'concept'].unique()
 
     def convert_nouns_to_false_friends(self, cognate_decimal_fraction, excluded_concepts=[], seed=18,
-                                       bidirectional=False):
+                                       bidirectional=False, convert_all_concepts=True):
         """ Very similar to convert_nouns_to_cognates """
         if seed:
             self.random.seed(seed)  # Option to set a seed for consistency
@@ -414,16 +414,32 @@ class SetsGenerator:
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
         a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
-                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
+                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
-        cognate_concepts = self.lexicon_df.loc[random_idx, 'concept'].unique()
         original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
-        self.list_to_file("false_friends", cognate_concepts)
+
+        self.list_to_file("false_friends", self.lexicon_df.loc[random_idx, 'concept'].unique())
+        morphemes_to_convert = []
+        all_false_friends = []
         for current_idx, next_idx in pairwise_list_view(random_idx, bidirectional=bidirectional):
             # print(self.lexicon_df.loc[current_idx, 'morpheme_es'], 'to--->')
             self.lexicon_df.loc[current_idx, 'morpheme_es'] = original_morphemes.loc[next_idx]
+            if convert_all_concepts:
+                morphemes_to_convert.append(next_idx)
+            all_false_friends.append(self.lexicon_df.loc[next_idx, 'morpheme_en'])
             # print(next_idx, self.lexicon_df.loc[next_idx, 'morpheme_en'])
             self.lexicon_df.loc[next_idx, 'is_false_friend'] = True
+
+        for idx in morphemes_to_convert:
+            next_idx = self.random.choice(self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') &
+                                                              (self.lexicon_df.semantic_gender.notnull()) &
+                                                              (~self.lexicon_df.morpheme_es.isin(all_false_friends)) &
+                                                              (~self.lexicon_df.morpheme_en.isin(all_false_friends)) &
+                                                              (~self.lexicon_df.concept.isin(excluded_concepts)),
+                                          ].index, 1)[0]
+            self.lexicon_df.loc[idx, 'morpheme_es'] = self.lexicon_df.loc[next_idx, 'morpheme_en']
+            self.lexicon_df.loc[next_idx, 'is_false_friend'] = True
+            all_false_friends.append(self.lexicon_df.loc[idx, 'morpheme_es'])
         self.lexicon_df.to_csv(f'{self.input_dir}/false_friends_lexicon.csv', encoding='utf-8', index=False)
 
     def generate_replacement_test_sets(self, original_sets, replacement_idx=None, replace_with_cognates=True):
@@ -565,7 +581,7 @@ class SetsGenerator:
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
         self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
-        Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim,) for sim in simulation_range)
+        Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim, ) for sim in simulation_range)
 
     def generate_cognate_test_set(self, simulation_number, num_test_sentences=600):
         self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}", mk_new_dir=False)

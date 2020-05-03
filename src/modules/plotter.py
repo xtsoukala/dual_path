@@ -57,7 +57,7 @@ class Plotter:
             plt.legend(handles=handles[1:], labels=labels[1:], loc='upper center', fancybox=True, ncol=3, shadow=True,
                        bbox_to_anchor=(0.5, 1.11))
             plt.tight_layout()  # make room for labels
-            plt.ylim([0, 45])
+            plt.ylim([0, 32])
             fname = 'cog' if 'cog' in df_name else 'ff'
             plt.savefig(self.get_plot_path(40, f'{label}_{fname}'))
             plt.close()
