@@ -19,28 +19,30 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
         else:
             cog_or_ff_df.loc[:, 'model'] = 'cognate'
 
-        """
         no_cog_or_ff_df = pd.read_csv(f'{results_dir}/{model_pair[1]}/all_results.csv')
         if false_friends:
             no_cog_or_ff_df.loc[:, 'model'] = 'non_false_friend'
         else:
-            no_cog_or_ff_df.loc[:, 'model'] = 'non_cognate' """
+            no_cog_or_ff_df.loc[:, 'model'] = 'non_cognate'
 
-        baseline_df = pd.read_csv(f'{results_dir}/{model_pair[1]}/all_results.csv')
+        baseline_df = pd.read_csv(f'{results_dir}/{model_pair[2]}/all_results.csv')
         baseline_df.loc[:, 'model'] = 'baseline'
 
         if false_friends:
             sentences_with = cog_or_ff_df.loc[cog_or_ff_df.target_has_false_friend == True]
         else:
-            sentences_with = cog_or_ff_df.loc[cog_or_ff_df.target_has_cognate == True]
+            concepts_of_interest_ff = '|'.join(['dog', 'host', 'brother', 'waiter',
+                                                'sister', 'boy', 'woman', 'waitress'])
+            sentences_with = cog_or_ff_df.loc[(cog_or_ff_df.target_has_cognate == True) &
+                                              (cog_or_ff_df.target_sentence.str.contains(concepts_of_interest_ff))]
 
-        #sentences_without = no_cog_or_ff_df.loc[no_cog_or_ff_df.index.isin(sentences_with.index)]
+        sentences_without = no_cog_or_ff_df.loc[no_cog_or_ff_df.index.isin(sentences_with.index)]
         baseline_sentences = baseline_df.loc[baseline_df.index.isin(sentences_with.index)]
 
         sentences_with.reset_index(drop=True, inplace=True)
 
         sentences_with.loc[:, 'sentence_idx'] = sentences_with.index
-        #sentences_without.loc[:, 'sentence_idx'] = sentences_with.index
+        sentences_without.loc[:, 'sentence_idx'] = sentences_with.index
         baseline_sentences.loc[:, 'sentence_idx'] = sentences_with.index
 
         # Remove sentences with incorrect meaning or those in which the word of interest was produced at the end.
@@ -50,10 +52,10 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
             sentences_with.drop(sentences_with.loc[sentences_with.point_of_interest_produced_last == True].index,
                                 inplace=True)
 
-        #sentences_without.drop(sentences_without.loc[sentences_without.meaning == 0].index, inplace=True)
-        #if remove_eos_poi:
-        #    sentences_without.drop(sentences_without.loc[sentences_without.point_of_interest_produced_last == True
-        #                                                 ].index, inplace=True)
+        sentences_without.drop(sentences_without.loc[sentences_without.meaning == 0].index, inplace=True)
+        if remove_eos_poi:
+            sentences_without.drop(sentences_without.loc[sentences_without.point_of_interest_produced_last == True
+                                                         ].index, inplace=True)
 
         baseline_sentences.drop(baseline_sentences.loc[baseline_sentences.meaning == 0].index, inplace=True)
         if remove_eos_poi:
@@ -61,8 +63,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
             baseline_sentences.drop(baseline_sentences.loc[baseline_sentences.point_of_interest_produced_last == True
                                                            ].index, inplace=True)
 
-        #sentences_to_test = pd.concat([sentences_with, sentences_without, baseline_sentences], sort=False)
-        sentences_to_test = pd.concat([sentences_with, baseline_sentences], sort=False)
+        sentences_to_test = pd.concat([sentences_with, sentences_without, baseline_sentences], sort=False)
         print('sent before:', sentences_to_test.size)
         count_correct = sentences_to_test.groupby('sentence_idx').count()
         sentences_to_test = sentences_to_test.loc[sentences_to_test['sentence_idx'].isin(
@@ -128,28 +129,24 @@ def create_all_model_csv_files(results_dir, remove_eos_poi, create_csv=True, mod
         fname_suffix = "_include_last" if not remove_eos_poi else ""
         df1 = pd.read_csv(f'{results_dir}/all_epochs_{m}1_{m}2_baseline{fname_suffix}.csv')
         df2 = pd.read_csv(f'{results_dir}/all_epochs_{m}2_{m}1_baseline{fname_suffix}.csv')
+        df1 = df1[df1.epoch == df1.epoch.max()]
+        df2 = df2[df2.epoch == df2.epoch.max()]
         pd.concat([df1, df2]).to_csv(f'{results_dir}/{m}_models_merged{"_include_last" if not remove_eos_poi else ""}'
                                      f'.csv', index=False,
-                                     columns=['epoch', 'network_num', 'model', 'meaning', 'is_code_switched',
-                                              'switched_type', 'switched_before', 'switched_at', 'switched_right_after',
-                                              'switched_one_after', 'switched_after_anywhere'])
+                                     columns=['epoch', 'network_num', 'sentence_idx', 'model', 'meaning',
+                                              'is_code_switched', 'switched_type', 'switched_before', 'switched_at',
+                                              'switched_right_after', 'switched_one_after', 'switched_after_anywhere'])
         group_models(results_dir, f'{m}_models_merged{fname_suffix}.csv')
 
 
 if __name__ == "__main__":
-    results_dir = '../../simulations/long_ff'
+    results_dir = '../../simulations/cognates'
 
-    #remove_point_of_interest_at_eos = False
-    #create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos)
-    #create_cognate_or_false_friend_model_csv_files(results_dir, models=(f'ff1', ),
-    #                                               false_friends=True,
-    #                                               remove_eos_poi=remove_point_of_interest_at_eos)
+    remove_point_of_interest_at_eos = False
+    create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=('cog',), create_csv=False)
 
-    #fname = f'ff_models_merged{"_include_last" if not remove_point_of_interest_at_eos else ""}.csv'
-    #group_models(results_dir, fname)
     plt = Plotter(results_dir=results_dir)
     # plt.performance_all_models(models=('cog1', 'cog2', 'ff1', 'ff2', 'baseline'))
-    fname='all_epochs_ff1_baseline_include_last.csv'
-    plt.plot_cognate_effect_over_time(df_name=f'count_{fname}', ci=68)
-    #plt.plot_cognate_effect_over_time(df_name='count_ff_models_merged.csv', info_to_plot=['switched_right_after'], ci=68)
-    # plt.print_switches_around_switch_point(df_name='grouped_count_cog_models_merged.csv')
+    #plt.plot_cognate_effect_over_time(df_name=f'count_{fname}', ci=68)
+    #plt.plot_cognate_effect_over_time(df_name='count_cog_models_merged_include_last.csv', ci=68)
+    #plt.print_switches_around_switch_point(df_name='count_cog_models_merged_include_last.csv')

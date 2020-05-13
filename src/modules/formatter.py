@@ -291,7 +291,8 @@ class InputFormatter:
         non_shared_idx = list(filter(lambda i: i not in trg_sentence_idx, out_sentence_idx))
         check_idx = [i for i in non_shared_idx if (i in self.false_friend_idx or
                                                    not is_from_lang_filter[target_lang](i, self.code_switched_idx))]
-        if target_lang and (not check_idx or check_idx == out_sentence_idx):
+
+        if target_lang and (not check_idx or check_idx + [0] == out_sentence_idx):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
             return "inter-sentential", False

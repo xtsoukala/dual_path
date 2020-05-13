@@ -232,11 +232,11 @@ class SetsGenerator:
             gender = None
             boost_next = False
             pos_list = pos_full.split()
-            sentence_length = len(pos_list) - 1
+            #sentence_length = len(pos_list) - 1
             for i, pos in enumerate(pos_list):
                 exclude_cognates = False
                 # only one cognate per sentence and not at the end of the sentence
-                if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or i == sentence_length):
+                if self.unique_cognate_per_sentence and any([',COG' in ms for ms in message]): # or i == sentence_length):
                     exclude_cognates = True
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
@@ -393,8 +393,8 @@ class SetsGenerator:
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
-        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
-                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & #(self.lexicon_df.semantic_gender.notnull()) &
+                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
         if not only_report_values:
             self.lexicon_df.loc[random_idx, 'is_cognate'] = True
@@ -404,7 +404,7 @@ class SetsGenerator:
             return self.lexicon_df.loc[random_idx, 'concept'].unique()
 
     def convert_nouns_to_false_friends(self, cognate_decimal_fraction, excluded_concepts=[], seed=18,
-                                       bidirectional=False, convert_all_concepts=True):
+                                       bidirectional=False):
         """ Very similar to convert_nouns_to_cognates """
         if seed:
             self.random.seed(seed)  # Option to set a seed for consistency
@@ -412,7 +412,7 @@ class SetsGenerator:
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
-        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & (self.lexicon_df.semantic_gender.notnull()) &
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & #(self.lexicon_df.semantic_gender.notnull()) &
                                 (~self.lexicon_df.concept.isin(excluded_concepts)),]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
         original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
@@ -426,12 +426,12 @@ class SetsGenerator:
             all_false_friends = []
             excluded_concepts = self.lexicon_df.loc[random_idx, 'concept']
             for idx in random_idx:
-                next_idx = self.random.choice(self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') &
-                                                                  (self.lexicon_df.semantic_gender.notnull()) &
-                                                                  (~self.lexicon_df.morpheme_es.isin(all_false_friends)) &
-                                                                  (~self.lexicon_df.morpheme_en.isin(all_false_friends)) &
-                                                                  (~self.lexicon_df.concept.isin(excluded_concepts)),
-                                              ].index, 1)[0]
+                next_idx = self.random.choice(self.lexicon_df.loc[
+                                                  (self.lexicon_df.pos == 'noun') &
+                                                  # (self.lexicon_df.semantic_gender.notnull()) &
+                                                  (~self.lexicon_df.morpheme_es.isin(all_false_friends)) &
+                                                  (~self.lexicon_df.morpheme_en.isin(all_false_friends)) &
+                                                  (~self.lexicon_df.concept.isin(excluded_concepts)), ].index, 1)[0]
                 all_false_friends.append(self.lexicon_df.loc[idx, 'morpheme_en'])
                 self.lexicon_df.loc[idx, 'morpheme_es'] = self.lexicon_df.loc[next_idx, 'morpheme_en']
                 self.lexicon_df.loc[next_idx, 'is_false_friend'] = True
