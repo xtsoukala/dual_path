@@ -82,7 +82,7 @@ if __name__ == "__main__":
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('--cog_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
+    parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.3, dest='cognate_decimal_fraction')
     parser.add_argument('--exclude_cognates', help="Filename with concepts; exclude from cognate selection the "
                                                    "concepts of this list")
