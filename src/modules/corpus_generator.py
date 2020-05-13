@@ -190,7 +190,7 @@ class SetsGenerator:
         aux_structures = self.structures_df[self.structures_df.message.str.contains("PERFECT")]
         return self.generate_sentence_structures(num_sentences, filtered_structures=aux_structures)
 
-    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=None):
+    def generate_sentences(self, sentence_structures, fname, exclude_test_sentences=None, exclude_eos_cognate=False):
         """
         :param sentence_structures: list of allowed structures for the generated sentences
         :param fname: filename to store results (they won't be stored if set to None)
@@ -210,7 +210,8 @@ class SetsGenerator:
             remaining_structures, generated_pairs = self.structures_to_sentences(remaining_structures,
                                                                                  generated_pairs,
                                                                                  exclude_test_sentences,
-                                                                                 replace_aux_sentences)
+                                                                                 replace_aux_sentences,
+                                                                                 exclude_eos_cognate)
         self.random.shuffle(generated_pairs)
         self.save_language_sets(fname, generated_pairs)
         return generated_pairs
@@ -221,7 +222,7 @@ class SetsGenerator:
                 f.write(u'%s## %s\n' % (sentence, message))
 
     def structures_to_sentences(self, sentence_structures, generated_pairs, exclude_test_sentences,
-                                replace_aux_sentences):
+                                replace_aux_sentences, exclude_eos_cognate=False):
         sentence_idx = len(generated_pairs)  # keep track of how many sentences we have generated already
         remaining_structures = []
         for msg, pos_full in sentence_structures:
@@ -232,11 +233,12 @@ class SetsGenerator:
             gender = None
             boost_next = False
             pos_list = pos_full.split()
-            #sentence_length = len(pos_list) - 1
+            sentence_length = len(pos_list) - 1
             for i, pos in enumerate(pos_list):
                 exclude_cognates = False
                 # only one cognate per sentence and not at the end of the sentence
-                if self.unique_cognate_per_sentence and any([',COG' in ms for ms in message]): # or i == sentence_length):
+                if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or
+                                                         (exclude_eos_cognate and i == sentence_length)):
                     exclude_cognates = True
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
@@ -590,7 +592,8 @@ class SetsGenerator:
         existing_training_set_sentences = self.file_set_to_list(f"{self.root_simulations_path}/"
                                                                 f"{simulation_number}/training.in")
         test_set = self.generate_sentences(sentence_structures_test, fname="test_cog.in",
-                                           exclude_test_sentences=existing_training_set_sentences)
+                                           exclude_test_sentences=existing_training_set_sentences,
+                                           exclude_eos_cognate=True)
         assert num_test_sentences == len(test_set)
 
     @staticmethod

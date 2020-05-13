@@ -46,8 +46,9 @@ class Plotter:
                                                                    'switched_after_anywhere'),
                                       ignore_baseline=False, ci=95):
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
+        #df = df[df.network_num <= 40]
         if ignore_baseline:
-            df = df[df.model != 'baseline']
+            df = df[df.model != 'zero_cognates']
         for label in info_to_plot:
             ax = sns.lineplot(x='epoch', y=f'{label}_percentage', hue='model', ci=ci, n_boot=1000, data=df)
 
@@ -59,7 +60,7 @@ class Plotter:
             plt.tight_layout()  # make room for labels
             plt.ylim([0, 32])
             fname = 'cog' if 'cog' in df_name else 'ff'
-            plt.savefig(self.get_plot_path(40, f'{label}_{fname}'))
+            plt.savefig(self.get_plot_path(df.network_num.max(), f'{label}_{fname}'))
             plt.close()
 
     def print_switches_around_switch_point(self, df_name, ci=95, info_to_plot=('code_switched', 'switched_before',
