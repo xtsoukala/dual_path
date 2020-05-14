@@ -73,7 +73,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
         print('sent after:', sentences_to_test.size)
 
         # sentences that are correctly produced among all 3 models
-        fname = (f'all_epochs_{"_".join(model_pair)}'
+        fname = (f'all_epochs_{"_".join(model_pair).replace("/", "_")}'
                  f'{"_remove_last" if remove_eos_poi else ""}.csv')
 
         sentences_to_test.to_csv(f'{results_dir}/{fname}')
@@ -129,6 +129,7 @@ def create_all_model_csv_files(results_dir, remove_eos_poi, create_csv=True, mod
 
     for m in models:
         fname_suffix = "_remove_last" if remove_eos_poi else ""
+        m = m.replace("/", "_")
         df1 = pd.read_csv(f'{results_dir}/all_epochs_{m}1_{m}2_zero_cognates{fname_suffix}.csv')
         df2 = pd.read_csv(f'{results_dir}/all_epochs_{m}2_{m}1_zero_cognates{fname_suffix}.csv')
         #df1 = df1[df1.epoch == df1.epoch.max()]
@@ -142,14 +143,14 @@ def create_all_model_csv_files(results_dir, remove_eos_poi, create_csv=True, mod
 
 
 if __name__ == "__main__":
-    results_dir = '../../simulations/cognates'
+    results_dir = '../../simulations/server'
 
-    remove_point_of_interest_at_eos = True
-    #create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=('cognate',),
+    remove_point_of_interest_at_eos = False
+    #create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=('cognate10/cog', 'cognate20/cog', 'cognate30/cog'),
     #                           create_csv=True)
 
     plt = Plotter(results_dir=results_dir)
-    # plt.performance_all_models(models=('cog1', 'cog2', 'ff1', 'ff2', 'zero_cognates'))
+    #plt.performance_all_models(models=('cognate1', 'cognate2', 'ff1', 'ff2', 'zero_cognates'))
     #plt.plot_cognate_effect_over_time(df_name=f'count_{fname}', ci=68)
-    plt.plot_cognate_effect_over_time(df_name='count_cognate_models_merged.csv', ci=68, ignore_baseline=True)
+    plt.plot_cognate_effect_over_time(df_name='count_cognate10_cog_models_merged.csv', ci=68, ignore_baseline=True)
     #plt.print_switches_around_switch_point(df_name='count_cog_models_merged.csv')

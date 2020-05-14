@@ -60,6 +60,7 @@ if __name__ == "__main__":
                         default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments. Some are redundant: all the user needs to specify is the input folder """
+    parser.add_argument('--resdir', help='Name of results folder, where the simulations will be stored')
     parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
     parser.add_argument('--structures', help='CSV file that contains the structures')
     parser.add_argument('--trainingset', '--training', default="training.in",
@@ -197,9 +198,12 @@ if __name__ == "__main__":
         args.input = deepcopy(args.set_weights)
 
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
-                   f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
-                   f"c{args.compress}_fw{args.fw}_e{args.epochs}")
+    if args.resdir:
+        results_dir = f"{root_folder}/simulations/{args.resdir}"
+    else:
+        results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
+                       f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
+                       f"c{args.compress}_fw{args.fw}_e{args.epochs}")
     if os.path.exists(results_dir):
         results_dir += datetime.now().strftime('%M.%S')
     os.makedirs(results_dir)

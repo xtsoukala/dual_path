@@ -202,6 +202,7 @@ class SetsGenerator:
         generated_pairs = []
         remaining_structures = sentence_structures
         time_start = time.time()
+        self.save_lexicon_and_structures_to_csv()
         while len(remaining_structures):  # while loop needed because of the unique sentence restriction
             if time.time() - time_start > self.generator_timeout:
                 sys.exit(f"The process timed out (limit: {self.generator_timeout}s). Remaining structures: "

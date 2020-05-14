@@ -59,8 +59,7 @@ class Plotter:
                        bbox_to_anchor=(0.5, 1.11))
             plt.tight_layout()  # make room for labels
             plt.ylim([0, 32])
-            fname = 'cog' if 'cog' in df_name else 'ff'
-            plt.savefig(self.get_plot_path(df.network_num.max(), f'{label}_{fname}'))
+            plt.savefig(self.get_plot_path(df.network_num.max(), f'{label}_{df_name.replace(".csv", "")}'))
             plt.close()
 
     def print_switches_around_switch_point(self, df_name, ci=95, info_to_plot=('code_switched', 'switched_before',
