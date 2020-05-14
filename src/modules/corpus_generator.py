@@ -594,7 +594,7 @@ class SetsGenerator:
                                                                 f"{simulation_number}/training.in")
         test_set = self.generate_sentences(sentence_structures_test, fname="test_cog.in",
                                            exclude_test_sentences=existing_training_set_sentences,
-                                           exclude_eos_cognate=True)
+                                           exclude_eos_cognate=False)
         assert num_test_sentences == len(test_set)
 
     @staticmethod
