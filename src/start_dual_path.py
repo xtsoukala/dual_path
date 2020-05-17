@@ -245,12 +245,12 @@ if __name__ == "__main__":
             with open(f'{given_input_path}/target_lang.in', 'w') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
-    if not args.input or (args.input and (args.num_cognate_models_for_test_set > 0 or cognate_list)):  # generate a set
+    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a set
         from modules import SetsGenerator
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
                           "cognate/" if (cognate_experiment or args.false_friends or
-                                         args.num_cognate_models_for_test_set > 0 or cognate_list) else
+                                         args.num_cognate_models_for_test_set > 0) else
                           "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
@@ -265,7 +265,7 @@ if __name__ == "__main__":
                                    randomize=args.randomize, l2_decimal=l2_decimal, l2_decimal_dev=args.l2_decimal_dev,
                                    cognate_experiment=cognate_experiment, auxiliary_experiment=auxiliary_experiment)
 
-        if args.num_cognate_models_for_test_set > 0 or cognate_list:
+        if args.num_cognate_models_for_test_set > 0:
             input_sets.generate_cognate_experiment_test_sets(simulation_range,
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
                                                              num_models=args.num_cognate_models_for_test_set,
