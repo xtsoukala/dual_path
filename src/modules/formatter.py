@@ -367,22 +367,23 @@ class InputFormatter:
                 pos_idx = sentence_pos.index(pos_of_interest)
             if pos_idx:
                 # check switch before pos_of_interest   # FIXME: check if target_lang is the intended one
-                at, = self.is_code_switched(sentence_indices[:pos_idx + 1],
-                                            target_lang=self.lang_indices[sentence_indices[0]])
+                at, point = self.is_code_switched(sentence_indices[:pos_idx + 1],
+                                                  target_lang=self.lang_indices[sentence_indices[0]])
                 # check Spanish-to-English direction
                 at_esen = True if at and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
                 # check switch right after (e.g. between aux and participle)
-                right_after, = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
-                                                     target_lang=self.lang_indices[sentence_indices[pos_idx]])
+                right_after, point = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
+                                                           target_lang=self.lang_indices[sentence_indices[pos_idx]])
                 right_after_esen = (True if right_after and self.lang_indices[sentence_indices[pos_idx]] == 'en'
                                     else False)
                 # check switch at the end (e.g. after aux and participle)
-                after, = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
-                                               target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
+                after, point = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
+                                                     target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
                 after_esen = True if after and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
 
-                after_anywhere, = self.is_code_switched(sentence_indices[pos_idx + 1:],
-                                                        target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
+                after_anywhere, point = self.is_code_switched(sentence_indices[pos_idx + 1:],
+                                                              target_lang=self.lang_indices[
+                                                                  sentence_indices[pos_idx + 1]])
                 after_anywhere_esen = (True if (after_anywhere and
                                                 self.lang_indices[sentence_indices[pos_idx + 1]] == 'en') else False)
             cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
@@ -401,8 +402,8 @@ class InputFormatter:
              point_of_interest_produced_last) = (False, False, False, False, False,
                                                  False, False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
-            switched_before, = self.is_code_switched(sentence_indices[:target_idx], target_lang=target_lang,
-                                                     target_sentence_idx=target_sentence_idx)
+            switched_before, point = self.is_code_switched(sentence_indices[:target_idx], target_lang=target_lang,
+                                                           target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched before: {self.sentence_from_indices(sentence_indices[:target_idx])} '
                           f'{switched_before}')
             switched_before_es_en = True if switched_before and target_lang == 'es' else False
@@ -410,25 +411,26 @@ class InputFormatter:
             logging.debug(f'switched at: {idx_of_interest}, {switched_at}')
             switched_at_es_en = switched_at and target_lang == 'es'
 
-            switched_right_after, = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
-                                                          target_lang=target_lang,
-                                                          target_sentence_idx=target_sentence_idx)
+            switched_right_after, point = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
+                                                                target_lang=target_lang,
+                                                                target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched_right_after: '
                           f'{self.sentence_from_indices(sentence_indices[target_idx:target_idx + 2])}, '
                           f'{switched_right_after}')
             switched_right_after_es_en = True if switched_right_after and target_lang == 'es' else False
 
-            switched_one_after, = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
-                                                        target_lang=target_lang,
-                                                        target_sentence_idx=target_sentence_idx)
+            switched_one_after, point = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
+                                                              target_lang=target_lang,
+                                                              target_sentence_idx=target_sentence_idx)
             logging.debug('switched_one_after: '
                           f'{self.sentence_from_indices(sentence_indices[target_idx + 1:target_idx + 3])}'
                           f'{switched_one_after}')
             switched_one_after_es_en = True if switched_one_after and target_lang == 'es' else False
 
             # anywhere after point of interest
-            switched_after_anywhere, = self.is_code_switched(sentence_indices[target_idx + 1:], target_lang=target_lang,
-                                                             target_sentence_idx=target_sentence_idx)
+            switched_after_anywhere, point = self.is_code_switched(sentence_indices[target_idx + 1:],
+                                                                   target_lang=target_lang,
+                                                                   target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched_after_anywhere: {self.sentence_from_indices(sentence_indices[target_idx + 1:])}'
                           f'{switched_after_anywhere}')
             switched_after_anywhere_es_en = (True if switched_after_anywhere and target_lang == 'es' else False)
