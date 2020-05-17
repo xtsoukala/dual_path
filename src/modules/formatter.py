@@ -31,14 +31,14 @@ class InputFormatter:
             with open(f'{self.directory}/cognates.in', 'w') as f:
                 f.write("%s" % "\n".join(cognate_list))
 
-        self.lexicon, self.pos, self.code_switched_idx = self.get_lex_info_and_code_switched_idx()
+        self.lexicon, self.pos, self.lang_indices = self.get_lexicon_and_lang_info()
         self.lexicon_size = len(self.lexicon)
         self.lexicon_index = dict(zip(self.lexicon, range(self.lexicon_size)))
 
         self.false_friends_replacement_dict = None
         if false_friends_lexicon:
-            shutil.copyfile(false_friends_lexicon, os.path.join(self.directory,
-                                                                "false_friends_lexicon.csv"))
+            if f'{self.directory}/false_friends_lexicon.csv' != false_friends_lexicon:  # only copy if it's new
+                shutil.copyfile(false_friends_lexicon, os.path.join(self.directory, "false_friends_lexicon.csv"))
             original_form = []
             false_friends_form = []
             ff_lexicon = pd.read_csv(false_friends_lexicon)
@@ -46,11 +46,10 @@ class InputFormatter:
             for concept in ff_lexicon.loc[ff_lexicon.morpheme_es.isin(ff_word), 'concept']:
                 original_form.append(self.lexicon_df.loc[self.lexicon_df.concept == concept, 'morpheme_es'].iloc[0])
                 false_friends_form.append(ff_lexicon.loc[ff_lexicon.concept == concept,
-                                                              'morpheme_es'].iloc[0])
+                                                         'morpheme_es'].iloc[0])
             d = dict(zip(original_form, false_friends_form))
             self.false_friends_replacement_dict = {r'\b{}\b'.format(k): v for k, v in d.items()}  # add word boundaries
             self.lexicon_df = pd.read_csv(false_friends_lexicon)
-
         self.concepts_to_evaluate = None
         if concepts_to_evaluate:
             self.concepts_to_evaluate = self.df_query_to_idx(f"concept.isin({concepts_to_evaluate})")
@@ -93,6 +92,9 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1])
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
+        for i in list(self.cognate_idx) + list(self.false_friend_idx):  # update lang_id: append Spanish as well
+            self.lang_indices[i].append(self.L[2])
+
         logging.debug(self.false_friend_idx)
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
         self.shared_idx_no_false_friends = set(list([self.period_idx]) + list(self.cognate_idx))
@@ -201,7 +203,7 @@ class InputFormatter:
                 elif 'participle' in out_sentence_pos:
                     p_idx = out_sentence_pos.index('participle')
 
-                if p_idx and out_sentence_idx[p_idx] < self.code_switched_idx:  # FIXME assumption: L1 English in lex
+                if p_idx and self.lang_indices[out_sentence_idx[p_idx]] == 'en':
                     if self.same_unordered_lists(out_sentence_pos + ['prep'], trg_sentence_pos):
                         return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
@@ -282,7 +284,6 @@ class InputFormatter:
         return cache
 
     def check_for_switch_types(self, out_sentence_idx, out_pos, trg_sentence_idx, target_lang):
-        is_from_lang_filter = {'en': lt, 'es': ge}
         shared_idx = list(filter(lambda i: i in trg_sentence_idx, out_sentence_idx))
         # Check if switch is after the first word:
         if shared_idx == out_sentence_idx[0]:
@@ -290,7 +291,7 @@ class InputFormatter:
 
         non_shared_idx = list(filter(lambda i: i not in trg_sentence_idx, out_sentence_idx))
         check_idx = [i for i in non_shared_idx if (i in self.false_friend_idx or
-                                                   not is_from_lang_filter[target_lang](i, self.code_switched_idx))]
+                                                   target_lang not in self.lang_indices[i])]
 
         if target_lang and (not check_idx or check_idx + [0] == out_sentence_idx):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
@@ -336,52 +337,54 @@ class InputFormatter:
             return starting_switch_point[0]
         sys.exit(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
 
-    def is_code_switched(self, sentence_indices, target_sentence_idx):
+    def is_code_switched(self, sentence_idx, target_lang, target_sentence_idx=(), return_position=False):
         """ This function only checks whether words from different languages were used.
-        It doesn't verify the validity of the expressed message """
-        # skip indices that are common in all lang
-        clean_sentence = list(filter(lambda i: i not in self.shared_idx, sentence_indices))
-        if not clean_sentence:
-            return False  # empty sentence
-
-        false_friend = set([x for x in sentence_indices
-                            if x not in target_sentence_idx]).intersection(self.false_friend_idx)
-        min_and_max_idx = get_minimum_and_maximum_idx(clean_sentence)
-        if not false_friend and ((all(x >= self.code_switched_idx for x in min_and_max_idx) or
-                                  all(x < self.code_switched_idx for x in min_and_max_idx))
-                                 and self.morpheme_is_from_target_lang(clean_sentence[0], target_sentence_idx[0])):
-            return False
-        return True
+            It doesn't verify the validity of the expressed message """
+        first_cs_position = None
+        if sentence_idx == target_sentence_idx:
+            return False, first_cs_position
+        # false_friend = set([x for x in sentence_idx if x not in target_sentence_idx]
+        #                   ).intersection(self.false_friend_idx) if self.false_friend_idx else None
+        sentence_lang = self.sentence_lang_from_indices(sentence_idx)
+        num_in_target_lang = sum(x.count(target_lang) for x in sentence_lang)
+        if num_in_target_lang < len(sentence_idx):  # this indicates that there are words in the other language
+            if return_position:
+                for x in sentence_lang:
+                    if target_lang not in x:
+                        first_cs_position = sentence_lang.index(x)
+                        break
+            return True, first_cs_position
+        return False, first_cs_position
 
     def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
         out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.switch_points_cache)
         if not cache:
-            # FIXME: current assumption: lexicon contains first EN and then ES words
             (at, right_after, after, at_esen, right_after_esen, after_esen, after_anywhere,
              after_anywhere_esen) = (False, False, False, False, False, False, False, False)
             pos_idx = None
             if pos_of_interest in sentence_pos:
                 pos_idx = sentence_pos.index(pos_of_interest)
             if pos_idx:
-                # check switch before pos_of_interest
-                at = self.is_code_switched(sentence_indices[:pos_idx + 1], target_lang_idx=sentence_indices[0])
+                # check switch before pos_of_interest   # FIXME: check if target_lang is the intended one
+                at, = self.is_code_switched(sentence_indices[:pos_idx + 1],
+                                            target_lang=self.lang_indices[sentence_indices[0]])
                 # check Spanish-to-English direction
-                at_esen = True if at and sentence_indices[pos_idx + 1] < self.code_switched_idx else False
+                at_esen = True if at and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
                 # check switch right after (e.g. between aux and participle)
-                right_after = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
-                                                    target_lang_idx=sentence_indices[pos_idx])
-                right_after_esen = (True if right_after and sentence_indices[pos_idx] < self.code_switched_idx
+                right_after, = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
+                                                     target_lang=self.lang_indices[sentence_indices[pos_idx]])
+                right_after_esen = (True if right_after and self.lang_indices[sentence_indices[pos_idx]] == 'en'
                                     else False)
                 # check switch at the end (e.g. after aux and participle)
-                after = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
-                                              target_lang_idx=sentence_indices[pos_idx + 1])
-                after_esen = True if after and sentence_indices[pos_idx + 1] < self.code_switched_idx else False
+                after, = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
+                                               target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
+                after_esen = True if after and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
 
-                after_anywhere = self.is_code_switched(sentence_indices[pos_idx + 1:],
-                                                       target_lang_idx=sentence_indices[pos_idx + 1])
-                after_anywhere_esen = (True if after_anywhere and sentence_indices[pos_idx + 1] < self.code_switched_idx
-                                       else False)
+                after_anywhere, = self.is_code_switched(sentence_indices[pos_idx + 1:],
+                                                        target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
+                after_anywhere_esen = (True if (after_anywhere and
+                                                self.lang_indices[sentence_indices[pos_idx + 1]] == 'en') else False)
             cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
                      after_esen, after_anywhere_esen)
             self.switch_points_cache[out_idx] = cache
@@ -398,8 +401,8 @@ class InputFormatter:
              point_of_interest_produced_last) = (False, False, False, False, False,
                                                  False, False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
-            switched_before = self.is_code_switched(sentence_indices[:target_idx],
-                                                    target_sentence_idx=target_sentence_idx)
+            switched_before, = self.is_code_switched(sentence_indices[:target_idx], target_lang=target_lang,
+                                                     target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched before: {self.sentence_from_indices(sentence_indices[:target_idx])} '
                           f'{switched_before}')
             switched_before_es_en = True if switched_before and target_lang == 'es' else False
@@ -407,23 +410,25 @@ class InputFormatter:
             logging.debug(f'switched at: {idx_of_interest}, {switched_at}')
             switched_at_es_en = switched_at and target_lang == 'es'
 
-            switched_right_after = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
-                                                         target_sentence_idx=target_sentence_idx)
+            switched_right_after, = self.is_code_switched(sentence_indices[target_idx:target_idx + 2],
+                                                          target_lang=target_lang,
+                                                          target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched_right_after: '
                           f'{self.sentence_from_indices(sentence_indices[target_idx:target_idx + 2])}, '
                           f'{switched_right_after}')
             switched_right_after_es_en = True if switched_right_after and target_lang == 'es' else False
 
-            switched_one_after = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
-                                                       target_sentence_idx=target_sentence_idx)
+            switched_one_after, = self.is_code_switched(sentence_indices[target_idx + 1:target_idx + 3],
+                                                        target_lang=target_lang,
+                                                        target_sentence_idx=target_sentence_idx)
             logging.debug('switched_one_after: '
                           f'{self.sentence_from_indices(sentence_indices[target_idx + 1:target_idx + 3])}'
                           f'{switched_one_after}')
             switched_one_after_es_en = True if switched_one_after and target_lang == 'es' else False
 
             # anywhere after point of interest
-            switched_after_anywhere = self.is_code_switched(sentence_indices[target_idx + 1:],
-                                                            target_sentence_idx=target_sentence_idx)
+            switched_after_anywhere, = self.is_code_switched(sentence_indices[target_idx + 1:], target_lang=target_lang,
+                                                             target_sentence_idx=target_sentence_idx)
             logging.debug(f'switched_after_anywhere: {self.sentence_from_indices(sentence_indices[target_idx + 1:])}'
                           f'{switched_after_anywhere}')
             switched_after_anywhere_es_en = (True if switched_after_anywhere and target_lang == 'es' else False)
@@ -436,20 +441,12 @@ class InputFormatter:
             self.idx_points_cache[out_idx] = cache
         return cache
 
-    def morpheme_is_from_target_lang(self, morpheme_idx, target_idx):
-        """
-        Assumption: this doesn't check for shared indices (period/congates) because they have already been stripped
-        """
-        if (all(x >= self.code_switched_idx for x in [morpheme_idx, target_idx]) or
-                all(x < self.code_switched_idx for x in [morpheme_idx, target_idx])):
-            return True
-        return False
-
-    def get_lex_info_and_code_switched_idx(self):
+    def get_lexicon_and_lang_info(self):
         """
         :return: lexicon in list format and code-switched id (the first entry of the second language)
         """
         info = defaultdict(list)
+        langid = {}
         for lang in self.target_lang:
             if lang:
                 lexicon_of_lang = self.lexicon_df[[f'morpheme_{lang}', 'pos', 'concept',
@@ -458,10 +455,13 @@ class InputFormatter:
                     if row[f'morpheme_{lang}'] not in info['lex']:
                         info['lex'].append(row[f'morpheme_{lang}'])
                         info['pos'].append(row['pos'])
-            info['code_switched_idx'].append(len(info['lex']))
+                        langid[len(info['lex']) - 1] = [lang]
+                    elif lang not in langid[info['lex'].index(row[f'morpheme_{lang}'])]:
+                        langid[info['lex'].index(row[f'morpheme_{lang}'])].append(lang)
+
         with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
             f.writelines('\n'.join(info['lex']))
-        return info['lex'], info['pos'], info['code_switched_idx'][0]
+        return info['lex'], info['pos'], langid
 
     def concept_to_morphemes(self, lex_idx, target_lang):
         idx = repr((lex_idx, target_lang))
@@ -556,6 +556,9 @@ class InputFormatter:
         """
         return " ".join(list(itemgetter(*sentence_idx)(self.lexicon)))
 
+    def sentence_lang_from_indices(self, sentence_idx):
+        return list(itemgetter(*sentence_idx)(self.lang_indices))
+
     def sentence_indices(self, sentence):
         """
         :param sentence: intended sentence , e.g., 'the cat walk -s' (will be split into: ['the', 'cat', 'walks'])
@@ -627,10 +630,8 @@ class InputFormatter:
     def find_equivalent_translation_idx(self, idx, trg_sentence_idx, lang):
         if idx in trg_sentence_idx:
             return [idx]
-        # ignore shared indices (cognates/period, but not false friends as they *can* be code-switched)
-        if (idx in self.false_friend_idx or
-                (idx not in self.shared_idx and ((idx >= self.code_switched_idx and lang == self.L[1]) or
-                                                 (lang == self.L[2] and idx < self.code_switched_idx)))):
+
+        if idx in self.false_friend_idx or lang not in self.lang_indices[idx]:
             return self.concept_to_morphemes(lex_idx=idx, target_lang=lang)
         return [idx]
 
@@ -661,6 +662,4 @@ def pairwise_list_view(row_idx, bidirectional=False):
         return ((row_idx[i], row_idx[i + 1] if i + 1 < len(row_idx) else row_idx[0]) for i in range(len(row_idx)))
     # else use a step
     step = int(len(row_idx) / 2)
-    return ((row_idx[i], row_idx[i+step]) for i in range(step))
-
-
+    return ((row_idx[i], row_idx[i + step]) for i in range(step))

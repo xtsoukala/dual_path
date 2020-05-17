@@ -215,12 +215,13 @@ if __name__ == "__main__":
         args.activate_both_lang = True
 
     cognate_list = []
+    if args.cognate_list:
+        cognate_list = file_to_list(args.cognate_list)
+
     concepts_to_evaluate = []
-    if args.only_evaluate and (args.cognate_list or args.false_friends):
+    if args.only_evaluate and (cognate_list or args.false_friends):
         args.activate_both_lang = True
         cognate_experiment = True
-        if args.cognate_list:
-            cognate_list = file_to_list(args.cognate_list)
         if args.concepts_to_evaluate:
             concepts_to_evaluate = file_to_list(args.concepts_to_evaluate)
         if not args.testset:
@@ -244,12 +245,12 @@ if __name__ == "__main__":
             with open(f'{given_input_path}/target_lang.in', 'w') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
-    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a new set
+    if not args.input or (args.input and (args.num_cognate_models_for_test_set > 0 or cognate_list)):  # generate a set
         from modules import SetsGenerator
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
                           "cognate/" if (cognate_experiment or args.false_friends or
-                                         args.num_cognate_models_for_test_set > 0) else
+                                         args.num_cognate_models_for_test_set > 0 or cognate_list) else
                           "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
@@ -264,10 +265,11 @@ if __name__ == "__main__":
                                    randomize=args.randomize, l2_decimal=l2_decimal, l2_decimal_dev=args.l2_decimal_dev,
                                    cognate_experiment=cognate_experiment, auxiliary_experiment=auxiliary_experiment)
 
-        if args.num_cognate_models_for_test_set > 0:
+        if args.num_cognate_models_for_test_set > 0 or cognate_list:
             input_sets.generate_cognate_experiment_test_sets(simulation_range,
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
-                                                             num_models=args.num_cognate_models_for_test_set)
+                                                             num_models=args.num_cognate_models_for_test_set,
+                                                             cognate_list=cognate_list)
             quit()
         if cognate_experiment:
             input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))
@@ -276,8 +278,6 @@ if __name__ == "__main__":
                                                       file_to_list(args.exclude_cognates))
 
         Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
-
-        del input_sets  # we no longer need it
 
         if not args.target_lang:
             args.target_lang = args.languages
@@ -290,6 +290,9 @@ if __name__ == "__main__":
 
     with open(f'{results_dir}/commandline_args.txt', 'w') as f:
         json.dump(args.__dict__, f, indent=2)
+
+    if args.false_friends and not args.false_friends_lexicon:
+        args.false_friends_lexicon = f'{input_dir}/false_friends_lexicon.csv'
 
     formatted_input = InputFormatter(directory=input_dir, language=args.languages, use_semantic_gender=args.gender,
                                      overt_pronouns=args.overt_pronouns, test_haber_frequency=args.test_haber_frequency,

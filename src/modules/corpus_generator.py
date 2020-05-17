@@ -570,13 +570,16 @@ class SetsGenerator:
             return morpheme_df['semantic_gender']
         return None
 
-    def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction):
-        cognate_list = []
-        for m in range(num_models):
-            cognate_list.extend(self.convert_nouns_to_cognates(cognate_decimal_fraction=cognate_decimal_fraction,
-                                                               excluded_concepts=cognate_list,
-                                                               only_report_values=True))
+    def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction,
+                                              cognate_list=None):
+        if not cognate_list:
+            cognate_list = []
+            for m in range(num_models):
+                cognate_list.extend(self.convert_nouns_to_cognates(cognate_decimal_fraction=cognate_decimal_fraction,
+                                                                   excluded_concepts=cognate_list,
+                                                                   only_report_values=True))
         self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
+        print(cognate_list)
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
         self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
