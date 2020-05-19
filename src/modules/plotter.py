@@ -46,7 +46,6 @@ class Plotter:
                                                                    'switched_after_anywhere'),
                                       ignore_baseline=False, ci=95):
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
-        #df = df[df.network_num <= 40]
         if ignore_baseline:
             df = df[df.model != 'zero_cognates']
         for label in info_to_plot:
@@ -307,7 +306,10 @@ class Plotter:
             for l1_lang in langs:
                 self.performance(df[df.switch_from == l1_lang], fname=f'l1_performance_{m}_{l1_lang}')
 
-    def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True):
+    def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True,
+                    include_code_switches=False, max_epochs=20):
+        if max_epochs:
+            df = df[df.epoch < max_epochs + 1]
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,
                      label='grammaticality')
         sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning')
@@ -315,14 +317,18 @@ class Plotter:
             sns.swarmplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', size=2, alpha=.5)
             sns.swarmplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', size=2, alpha=.5)
 
-        if df.code_switched_percentage.sum() > 0:
+        if include_code_switches and df.code_switched_percentage.sum() > 0:
             sns.lineplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', ci=None,
                          label='code-switching')
             if include_individual_points:
                 sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.5)
 
         plt.xlabel('epochs')
-        plt.ylabel(fname)
+        plot_label = {'l1_performance_early_en': 'Balanced model tested on English',
+                      'l1_performance_early_es': 'Balanced model tested on Spanish',
+                      'l1_performance_enes_en': 'L1 English model tested on English',
+                      'l1_performance_esen_es': 'L1 Spanish model tested on Spanish'}
+        plt.ylabel(plot_label[fname])
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim + 1, step=10))
 
@@ -342,7 +348,9 @@ class Plotter:
             l2_lang = m[2:]
             self.l2_performance(df, l2_lang=l2_lang, fname=f'l2_performance_{m}_{l2_lang}')
 
-    def l2_performance(self, df, l2_lang, fname, ylim=100):
+    def l2_performance(self, df, l2_lang, fname, ylim=100, max_epochs=None, include_code_switches=False):
+        if max_epochs:
+            df = df[df.epoch < max_epochs + 1]
         df = df[df.switch_from == l2_lang]
         df = df[df.epoch > df.l2_epoch]
         epoch_range = range(df.epoch.min(), df.epoch.max())
@@ -353,24 +361,56 @@ class Plotter:
         xaxis = ax.get_xticks()[1:]
         plt.plot(xaxis, [df[df.epoch == ep].grammaticality_percentage.mean() for ep in epoch_range],
                  label='grammaticality', color='#0173b2')
-        print(fname, [df[df.epoch == ep].meaning_percentage.mean() for ep in epoch_range])
         plt.plot(xaxis, [df[df.epoch == ep].meaning_percentage.mean() for ep in epoch_range],
                  label='meaning', color='#de8f05')
 
-        if df.code_switched_percentage.sum() > 0:
+        if include_code_switches and df.code_switched_percentage.sum() > 0:
             sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.7)
-            print([df[df.epoch == ep].code_switched_percentage.mean() for ep in epoch_range])
             plt.plot(xaxis, [df[df.epoch == ep].code_switched_percentage.mean() for ep in epoch_range],
                      label='code-switching', color='#029E73')
 
+        plot_labels = {'l2_performance_enes_es': 'L1 English model tested on Spanish',
+                       'l2_performance_esen_en': 'L1 Spanish model tested on English'}
         plt.xlabel('epochs')
-        plt.ylabel('')
+        plt.ylabel(plot_labels[fname])
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim + 1, step=10))
         plt.xlim([ax.get_xticks()[0], ax.get_xticks()[-1]])
         plt.legend(loc='upper center', fancybox=True, ncol=3, shadow=True, bbox_to_anchor=(0.5, 1.11))
         plt.tight_layout()  # make room for labels
-        plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
+        plt.savefig(self.get_plot_path(len(df.network_num.unique()), f'{fname}'))
+        plt.close()
+
+    def plot_code_switches_from_all_models(self, models=('enes', 'esen'), fname='code_switching_all',
+                                           include_swarmplot=True):
+        frames = []
+        for m in models:
+            df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/performance_per_lang.csv',
+                             index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int, 'l2_epoch': int})
+            df = df[df.switch_from == m[2:]]
+            df['model'] = m
+            frames.append(df)
+            #color_model = {'early': '#0173b2', 'enes': '#de8f05', 'esen': '#029E73'}
+            color_model = {'enes': '#0173b2', 'esen': '#de8f05'}
+            if include_swarmplot:
+                ax = sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, size=2, alpha=.7,
+                                   color=color_model[m])
+        df_full = pd.concat(frames)
+        plt.xlim([0, 40])
+        plt.ylim([0, 40])
+        ci = None if include_swarmplot else 95
+        ax = sns.lineplot(x='epoch', y='code_switched_percentage', hue='model', data=df_full, ci=ci)
+        handles, labels = ax.get_legend_handles_labels()
+        rename_labels = {'early': 'Balanced', 'enes': 'L1 English', 'esen': 'L1 Spanish'}
+        plt.legend(labels=[rename_labels[x] for x in labels[1:]], loc='upper center', fancybox=True, ncol=3,
+                   shadow=True, bbox_to_anchor=(0.5, 1.11))
+        xrange = range(0, 40)
+
+        #plt.xticks([])
+        #plt.xticks(xrange)
+        plt.xlabel('epochs')
+        plt.ylabel('')
+        plt.savefig(self.get_plot_path(len(df.network_num.unique()), f'{fname}_Ls'))
         plt.close()
 
     def get_plot_path(self, num_simulations, fname):

@@ -97,8 +97,8 @@ class DualPath:
                        "switched_before_es_en,switched_right_before_es_en,switched_right_after_es_en, "
                        "switched_after_anywhere_es_en")
         elif self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_at,switched_right_after,switched_one_after,switched_after_anywhere,"
-                       "switched_before_es_en,switched_at_es_en,switched_right_after_es_en,switched_one_after_es_en,"
+            header += (",switched_before,switched_at,switched_right_after,switched_second_after,switched_after_anywhere,"
+                       "switched_before_es_en,switched_at_es_en,switched_right_after_es_en,switched_second_after_es_en,"
                        "switched_after_anywhere_es_en,point_of_interest_produced_last,concept_position")
         if self.pronoun_experiment:
             header += ",pronoun_error,pronoun_error_flex"
@@ -357,9 +357,9 @@ class DualPath:
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
 
                     (has_wrong_det, has_wrong_tense, correct_meaning, cs_type, cs_pos_point,
-                     switched_before, switched_right_before, switched_at, switched_right_after, switched_one_after,
+                     switched_before, switched_right_before, switched_at, switched_right_after, switched_second_after,
                      switched_after_anywhere, switched_before_es_en, switched_right_before_es_en, switched_at_es_en,
-                     switched_right_after_es_en, switched_one_after_es_en, switched_after_anywhere_es_en,
+                     switched_right_after_es_en, switched_second_after_es_en, switched_after_anywhere_es_en,
                      has_pronoun_error, has_pronoun_error_flex, point_of_interest_produced_last,
                      has_cognate, has_false_friend,
                      concept_position, first_switch_position) = (False, False, False, False, False, False, False,
@@ -404,8 +404,8 @@ class DualPath:
                                         concept_position = produced_idx.index(evaluated_concept_idx)
                                         if evaluated_concept_idx:
                                             (switched_before, switched_at, switched_right_after,
-                                             switched_one_after, switched_after_anywhere, switched_before_es_en,
-                                             switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
+                                             switched_second_after, switched_after_anywhere, switched_before_es_en,
+                                             switched_at_es_en, switched_right_after_es_en, switched_second_after_es_en,
                                              switched_after_anywhere_es_en, point_of_interest_produced_last
                                              ) = self.inputs.check_cs_around_idx_of_interest(
                                                 produced_idx, evaluated_concept_idx, target_lang, target_sentence_idx)
@@ -415,9 +415,6 @@ class DualPath:
                                 has_wrong_tense = self.inputs.test_without_feature(produced_idx,
                                                                                    line.target_sentence_idx,
                                                                                    feature="tense")
-                                if self.ignore_tense_and_det and (has_wrong_det or has_wrong_tense):
-                                    logging.warning(f"'{produced_sentence}' should have correct meaning")  # FIXME
-
                             if self.pronoun_experiment:
                                 if self.inputs.has_pronoun_error(produced_idx, line.target_sentence_idx):
                                     if self.inputs.test_meaning_without_pronouns(produced_idx,
@@ -438,8 +435,8 @@ class DualPath:
                              switched_after_anywhere_es_en])
                     elif self.inputs.concepts_to_evaluate:
                         log_info.extend([switched_before, switched_at, switched_right_after,
-                                         switched_one_after, switched_after_anywhere, switched_before_es_en,
-                                         switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
+                                         switched_second_after, switched_after_anywhere, switched_before_es_en,
+                                         switched_at_es_en, switched_right_after_es_en, switched_second_after_es_en,
                                          switched_after_anywhere_es_en, point_of_interest_produced_last,
                                          concept_position])
                     if self.pronoun_experiment:
