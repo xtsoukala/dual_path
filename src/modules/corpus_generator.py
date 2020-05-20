@@ -16,6 +16,7 @@ class SetsGenerator:
         self.auxiliary_experiment = auxiliary_experiment
         self.cognate_experiment = cognate_experiment
         self.unique_cognate_per_sentence = False
+        self.excluded_concepts = False
         self.randomize = randomize
         self.l2_decimal = l2_decimal
         self.l2_decimal_dev = l2_decimal_dev
@@ -203,6 +204,9 @@ class SetsGenerator:
         remaining_structures = sentence_structures
         time_start = time.time()
         self.save_lexicon_and_structures_to_csv()
+        if self.excluded_concepts:
+            self.lexicon_df.drop(self.lexicon_df.loc[self.lexicon_df.concept.isin(self.excluded_concepts)].index,
+                                 inplace=True)
         while len(remaining_structures):  # while loop needed because of the unique sentence restriction
             if time.time() - time_start > self.generator_timeout:
                 sys.exit(f"The process timed out (limit: {self.generator_timeout}s). Remaining structures: "
@@ -571,7 +575,7 @@ class SetsGenerator:
         return None
 
     def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction,
-                                              cognate_list=None):
+                                              cognate_list=None, excluded_concepts=None):
         if not cognate_list:
             cognate_list = []
             for m in range(num_models):
@@ -580,6 +584,10 @@ class SetsGenerator:
                                                                    only_report_values=True))
         self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
         print(cognate_list)
+        if excluded_concepts:
+            # awk NF 'FNR==1{print ""}1' *0cog*/input/cognates.in | sort | uniq > exclude_cognates.in
+            self.excluded_concepts = list(set(excluded_concepts).difference(cognate_list))
+            print(len(excluded_concepts), len(self.excluded_concepts))
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
         self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]

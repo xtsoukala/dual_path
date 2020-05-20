@@ -266,10 +266,12 @@ if __name__ == "__main__":
                                    cognate_experiment=cognate_experiment, auxiliary_experiment=auxiliary_experiment)
 
         if args.num_cognate_models_for_test_set > 0:
+            excluded_concepts = file_to_list(args.exclude_cognates) if args.exclude_cognates else []
             input_sets.generate_cognate_experiment_test_sets(simulation_range,
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
                                                              num_models=args.num_cognate_models_for_test_set,
-                                                             cognate_list=cognate_list)
+                                                             cognate_list=cognate_list,
+                                                             excluded_concepts=excluded_concepts)
             quit()
         if cognate_experiment:
             input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))

@@ -12,9 +12,13 @@ from modules import Plotter, pd, create_dataframes_for_plots
 def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 'cog2'), false_friends=False,
                                                    remove_eos_poi=False, include_baseline=False,
                                                    cognate_list_fname='all_cognates.in'):
+    cognate_list_fname = None
+    cognate_list = None
     if cognate_list_fname:
         with open(f'{results_dir}/{cognate_list_fname}') as f:
             cognate_list = [line.rstrip('\n').lower() for line in f]
+
+    only_compare_with_sentences_not_containing_any_cognates = False
 
     for model_pair in [models, list(reversed(models))]:
         if include_baseline:
@@ -66,7 +70,13 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
             sentences_with.drop(sentences_with.loc[sentences_with.point_of_interest_produced_last == True].index,
                                 inplace=True)
 
+        print(len(sentences_without))
         sentences_without.drop(sentences_without.loc[sentences_without.meaning == 0].index, inplace=True)
+        print(len(sentences_without))
+        if only_compare_with_sentences_not_containing_any_cognates:
+            sentences_without.drop(sentences_without.loc[sentences_without.target_has_cognate == True].index,
+                                   inplace=True)
+            print(len(sentences_without))
         if remove_eos_poi:
             sentences_without.drop(sentences_without.loc[sentences_without.point_of_interest_produced_last == True
                                                          ].index, inplace=True)
@@ -81,9 +91,22 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
             sentences_to_test = pd.concat([sentences_with, sentences_without, zero_cognates_sentences], sort=False)
         else:
             sentences_to_test = pd.concat([sentences_with, sentences_without], sort=False)
+
+        sentences_to_test.loc[sentences_to_test.concept_position == 'None', 'concept_position'] = -1
+        sentences_to_test.loc[sentences_to_test.first_switch_position == 'None', 'first_switch_position'] = -1
+
         count_correct = sentences_to_test.groupby('sentence_idx').count()
         sentences_to_test = sentences_to_test.loc[sentences_to_test['sentence_idx'].isin(
             count_correct[count_correct['model'] == len(model_pair)].index)]
+
+        #a = sentences_to_test.groupby('sentence_idx').concept_position.nunique() == 1
+        #print(len(a[a == False]))
+        #quit()
+
+        # -1 because indexing of other columns starts from 0, not 1
+        sentences_to_test['produced_sentence_length'] = sentences_to_test.apply(lambda x:
+                                                                                x.produced_sentence.count(' ') - 1,
+                                                                                axis=1)
 
         # sentences that are correctly produced among all 3 models
         fname = (f'all_epochs_{"_".join(model_pair).replace("/", "_")}'
@@ -95,21 +118,23 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 
 
 
 def group_models(results_dir, fname, make_exclusive=False):
+    print(f'{results_dir}/{fname}')
     df = pd.read_csv(f'{results_dir}/{fname}', dtype={'switched_before': int, 'switched_at': int,
-                                                      'switched_right_after': int, 'switched_one_after': int,
-                                                      'switched_after_anywhere': int})
+                                                      'switched_right_after': int, 'switched_second_after': int,
+                                                      'switched_after_anywhere': int, 'concept_position': int,
+                                                      'produced_sentence_length': int, 'first_switch_position': int})
 
     if make_exclusive:
         df['switched_after_anywhere'] = df.apply(lambda x: (0 if ((x['switched_right_after'] == 1) or
-                                                                  (x['switched_one_after'] == 1) or
+                                                                  (x['switched_second_after'] == 1) or
                                                                   (x['switched_at'] == 1) or
                                                                   (x['switched_before'] == 1)) else
                                                             x['switched_after_anywhere']), axis=1)
 
-        df['switched_one_after'] = df.apply(lambda x: (0 if ((x['switched_right_after'] == 1) or
-                                                             (x['switched_at'] == 1) or
-                                                             (x['switched_before'] == 1)) else
-                                                       x['switched_one_after']), axis=1)
+        df['switched_second_after'] = df.apply(lambda x: (0 if ((x['switched_right_after'] == 1) or
+                                                                (x['switched_at'] == 1) or
+                                                                (x['switched_before'] == 1)) else
+                                                          x['switched_second_after']), axis=1)
         df['switched_right_after'] = df.apply(
             lambda x: (0 if (x['switched_at'] == 1) or (x['switched_before'] == 1)
                        else x['switched_right_after']), axis=1)
@@ -121,14 +146,23 @@ def group_models(results_dir, fname, make_exclusive=False):
          'switched_before': dft.switched_before.sum(),
          'switched_at': dft.switched_at.sum(),
          'switched_right_after': dft.switched_right_after.sum(),
-         'switched_second_after': dft.switched_one_after.sum(),
+         'switched_second_after': dft.switched_second_after.sum(),
          'switched_after_anywhere': dft.switched_after_anywhere.sum(),
          'code_switched_percentage': dft.is_code_switched.sum() * 100 / len(dft.meaning),
-         'switched_before_percentage': dft.switched_before.sum() * 100 / len(dft.meaning),
+         'switched_before_percentage': (dft.switched_before.sum() * 100 /
+                                        len(dft[dft.concept_position > 1].meaning)),
          'switched_at_percentage': dft.switched_at.sum() * 100 / len(dft.meaning),
-         'switched_right_after_percentage': dft.switched_right_after.sum() * 100 / len(dft.meaning),
-         'switched_second_after_percentage': dft.switched_one_after.sum() * 100 / len(dft.meaning),
-         'switched_after_anywhere_percentage': dft.switched_after_anywhere.sum() * 100 / len(dft.meaning)
+         'switched_right_after_percentage': (dft.switched_right_after.sum() * 100 /
+                                             len(dft[dft.concept_position < dft.produced_sentence_length].meaning)),
+         'switched_second_after_percentage': (dft.switched_second_after.sum() * 100 /
+                                              len(dft[dft.concept_position < dft.produced_sentence_length].meaning)),
+         'switched_after_anywhere_percentage': (dft.switched_after_anywhere.sum() * 100 /
+                                                len(dft[dft.concept_position < dft.produced_sentence_length].meaning)),
+         'switch_position': (dft[dft.first_switch_position > 0].concept_position -
+                             dft[dft.first_switch_position > 0].first_switch_position),
+         'switch_position_distance': ((dft[dft.first_switch_position > 0].concept_position -
+                                       dft[dft.first_switch_position > 0].first_switch_position) * 100 /
+                                      dft[dft.first_switch_position > 0].produced_sentence_length)
          }))
     gb.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}count_{fname}')
 
@@ -157,27 +191,35 @@ def create_all_model_csv_files(results_dir, remove_eos_poi, create_csv=True, mod
                                  f'.csv', index=False,
                                  columns=['epoch', 'network_num', 'sentence_idx', 'model', 'meaning',
                                           'is_code_switched', 'switched_type', 'switched_before', 'switched_at',
-                                          'switched_right_after', 'switched_one_after', 'switched_after_anywhere'])
+                                          'switched_right_after', 'switched_second_after', 'switched_after_anywhere',
+                                          'first_switch_position', 'concept_position', 'produced_sentence_length'])
         group_models(results_dir, f'{m}_models_merged{fname_suffix}.csv')
 
 
 def cognate_simulations():
-    results_dir = '../../simulations/cognates/cognate_cross_model'
+    results_dir = '../../simulations/cognates/cognate_cross_model/'
+    results_dir = '../../simulations/cognates/within_model_cog30'
+    results_dir = '../../simulations/cognates/within_model'
 
     remove_point_of_interest_at_eos = False
     create_files = True
     if create_files:
-        models = ('10cog', '20cog', '30cog', '40cog')
-        create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=models,
+        models = ('10cog', '20cog', '30cog', '40cog', '50cog')
+        create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=('40cog',),
                                    create_csv=True)
 
     plt = Plotter(results_dir=results_dir)
     # plt.performance_all_models(models=('10cog1', '10cog1', '20cog1', '20cog2', 'zero_cognates'))
     # plt.plot_cognate_effect_over_time(df_name=f'count_{fname}', ci=68)
-    for i in range(10, 41, 10):
+    """for i in range(10, 51, 10):
         plt.plot_cognate_effect_over_time(df_name=f'count_{i}cog_models_merged.csv', ci=68, ignore_baseline=True,
                                           info_to_plot=('code_switched',))
-    # plt.print_switches_around_switch_point(df_name='count_cog_models_merged.csv')
+        print(i)
+        plt.print_switches_around_switch_point(df_name=f'count_{i}cog_models_merged.csv')"""
+    i = 40
+    plt.plot_cognate_effect_over_time(df_name=f'count_{i}cog_models_merged.csv', ci=68, ignore_baseline=True,
+                                      )
+    #plt.print_switches_around_switch_point(df_name=f'count_{i}cog_models_merged.csv')
 
 
 def code_switching_patterns_model_comparison():

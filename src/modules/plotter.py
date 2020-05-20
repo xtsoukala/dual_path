@@ -42,7 +42,7 @@ class Plotter:
         plt.close()
 
     def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',
-                                                                   'switched_right_after', 'switched_one_after',
+                                                                   'switched_right_after', 'switched_second_after',
                                                                    'switched_after_anywhere'),
                                       ignore_baseline=False, ci=95):
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
@@ -64,23 +64,29 @@ class Plotter:
     def print_switches_around_switch_point(self, df_name, ci=95, info_to_plot=('code_switched', 'switched_before',
                                                                                'switched_at', 'switched_right_after',
                                                                                'switched_one_after',
-                                                                               'switched_after_anywhere')):
-        print(df_name)
+                                                                               'switched_after_anywhere'),
+                                           ignore_baseline=True):
         false_friends = False
         if 'ff' in df_name:
             false_friends = True
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
         df = df[df.epoch == df.epoch.max()]
-        df_baseline = df[df.model == 'baseline']
         df_cog_or_ff = df[df.model == ('cognate' if not false_friends else 'false_friend')]
         df_no_cog_or_ff = df[df.model == ('non_cognate' if not false_friends else 'non_false_friend')]
-        all_dfs = [df_baseline, df_cog_or_ff, df_no_cog_or_ff]
+        all_dfs = [df_cog_or_ff, df_no_cog_or_ff]
+
+        if not ignore_baseline:
+            df_baseline = df[df.model == 'baseline']
+            all_dfs.append(df_baseline)
+
+        print(df_name, sum(df.total_sentences))
         for i in info_to_plot:
             for d in all_dfs:
-                low, high = self.get_ci(d[f'{i}_percentage'])
+                if f'{i}_percentage' not in d:
+                    i = 'switched_second_after'
+                low, high = self.get_ci(d[f'{i}_percentage'], ci=ci)
                 print(i, round(d[f'{i}_percentage'].mean(), 1), f'[{round(low, 1)}, {round(high, 1)}]')
             print('------')
-        print(sum(df.total_sentences))
 
     def lineplot_code_switches(self, df, fname='code_switches_over_time', ylim=50, legend_loc='upper center'):
         sns.lineplot(x='epoch', y='alternational_percentage', data=df, ci=None, color='#0173b2',
@@ -485,5 +491,8 @@ class Plotter:
                     print(m, lang, round(sum(lang_sum[m][lang]), 1))
 
     @staticmethod
-    def get_ci(df, n_samples=10000):
-        return boot.ci(df, n_samples=n_samples, alpha=0.05)
+    def get_ci(df, ci, n_samples=10000):
+        alpha = 0.05
+        if ci == 68:
+            alpha = 0.32
+        return boot.ci(df, n_samples=n_samples, alpha=alpha)
