@@ -41,6 +41,19 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
+    def plot_cognate_last_epoch(self, fname=None):
+        if not fname:
+            fname = 'count_all_models_merged.csv'
+        df = pd.read_csv(f'{self.results_dir}/{fname}')
+        ax = sns.barplot(x='model_name', y='code_switched_percentage', hue='model', ci=95, n_boot=1000,
+                         data=df, errcolor='gray', errwidth=1.5)
+        plt.xlabel('')
+        plt.ylabel('Percentage of sentences with code-switches')
+        ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
+        plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
+        plt.savefig(self.get_plot_path(df.network_num.max(), f'{fname.replace(".csv", "")}'))
+        plt.close()
+
     def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',
                                                                    'switched_right_after', 'switched_second_after',
                                                                    'switched_after_anywhere'),
@@ -334,7 +347,10 @@ class Plotter:
                       'l1_performance_early_es': 'Balanced model tested on Spanish',
                       'l1_performance_enes_en': 'L1 English model tested on English',
                       'l1_performance_esen_es': 'L1 Spanish model tested on Spanish'}
-        plt.ylabel(plot_label[fname])
+        ylabel = ""
+        if fname in plot_label:
+            ylabel = plot_label[fname]
+        plt.ylabel(ylabel)
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim + 1, step=10))
 
