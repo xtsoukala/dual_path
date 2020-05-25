@@ -580,7 +580,7 @@ class SetsGenerator:
         return None
 
     def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction,
-                                              cognate_list=None, excluded_concepts=None):
+                                              num_test_sentences, cognate_list=None, excluded_concepts=None):
         if not cognate_list:
             cognate_list = []
             for m in range(num_models):
@@ -596,9 +596,10 @@ class SetsGenerator:
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
         self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
-        Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim, ) for sim in simulation_range)
+        Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim, num_test_sentences)
+                            for sim in simulation_range)
 
-    def generate_cognate_test_set(self, simulation_number, num_test_sentences=600):
+    def generate_cognate_test_set(self, simulation_number, num_test_sentences):
         self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}", mk_new_dir=False)
         self.random.seed(simulation_number)  # set new seed each time we run a new simulation
         if self.randomize and self.l2_decimal:

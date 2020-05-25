@@ -97,6 +97,7 @@ if __name__ == "__main__":
                         type=float, default=0)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
+    parser.add_argument('--generate_test_num', type=int, default=600, help='Total test sentences for experiments')
     parser.add_argument('--title', help='Title for the plots')
     parser.add_argument('--sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
@@ -271,6 +272,7 @@ if __name__ == "__main__":
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
                                                              num_models=args.num_cognate_models_for_test_set,
                                                              cognate_list=cognate_list,
+                                                             num_test_sentences=args.generate_test_num,
                                                              excluded_concepts=excluded_concepts)
             quit()
         if cognate_experiment:
