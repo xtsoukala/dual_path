@@ -183,6 +183,56 @@ def hash_string(message):
     return hashlib.md5(message.encode()).hexdigest()
 
 
+def cross_model_csv(results_dir, models, create_files=True):
+    if create_files:
+        all_dfs = []
+        for m in models:
+            print(f'{results_dir}/{m}/all_results.csv')
+            df = pd.read_csv(f'{results_dir}/{m}/all_results.csv')
+            if m != '0cog':
+                assert len(df) == len(df[df.target_has_cognate == True])
+            df['model_name'] = m
+            df['sentence_idx'] = df.apply(lambda x: hash_string(f'{x.message}{x.epoch}{x.network_num}'), axis=1)
+            df.drop(df.loc[df.meaning == 0].index, inplace=True)
+            all_dfs.append(df)
+        non_pairwise_merged = pd.concat(all_dfs, sort=False)
+
+        if False:
+            count_correct = non_pairwise_merged.groupby('sentence_idx').count()
+            num_per_unique_sentence = len(models)
+            non_pairwise_merged = non_pairwise_merged.loc[non_pairwise_merged['sentence_idx'].isin(
+                count_correct[count_correct['model_name'] == num_per_unique_sentence].index)]
+
+        non_pairwise_merged.to_csv(f'{results_dir}/non_pairwise_models.csv', index=False,
+                                   columns=['epoch', 'network_num', 'sentence_idx', 'model_name', 'meaning',
+                                            'is_code_switched', 'switched_type', 'switched_before', 'switched_at',
+                                            'switched_right_after', 'switched_second_after', 'switched_after_anywhere',
+                                            'first_switch_position', 'concept_position', 'produced_sentence_length'])
+    else:
+        non_pairwise_merged = pd.read_csv(f'{results_dir}/non_pairwise_models.csv')
+
+    gb = non_pairwise_merged.groupby(['epoch', 'network_num', 'model_name']).apply(lambda dft: pd.Series(
+        {'code_switched': dft.is_code_switched.sum(),
+         'total_sentences': len(dft.meaning),
+         'switched_before': dft.switched_before.sum(),
+         'switched_at': dft.switched_at.sum(),
+         'switched_right_after': dft.switched_right_after.sum(),
+         'switched_second_after': dft.switched_second_after.sum(),
+         'switched_after_anywhere': dft.switched_after_anywhere.sum(),
+         'code_switched_percentage': dft.is_code_switched.sum() * 100 / len(dft.meaning),
+         'switched_before_percentage': (dft.switched_before.sum() * 100 /
+                                        len(dft.meaning)),
+         'switched_at_percentage': dft.switched_at.sum() * 100 / len(dft.meaning),
+         'switched_right_after_percentage': (dft.switched_right_after.sum() * 100 /
+                                             len(dft.meaning)),
+         'switched_second_after_percentage': (dft.switched_second_after.sum() * 100 /
+                                              len(dft.meaning)),
+         'switched_after_anywhere_percentage': (dft.switched_after_anywhere.sum() * 100 /
+                                                len(dft.meaning))
+         }))
+    gb.to_csv(f'{results_dir}/non_pairwise_models_grouped.csv')
+
+
 def create_all_model_csv_files(results_dir, remove_eos_poi, create_csv=True, models=('ff',), only_last_epoch=True,
                                create_group=False):
     if create_csv:
@@ -234,14 +284,25 @@ def compare_last_epoch_cognate_csv(results_dir, models=('10cog', '20cog', '30cog
     group_models(results_dir, fname)
 
 
+def cognate_non_pairwise(results_dir = '../../simulations/cross_model_non_pairwise/results', create_files=True):
+    if create_files:
+        models = []
+        for i in range(0, 71, 10):
+            models.append(f'{i}cog')
+        cross_model_csv(results_dir, models)
+
+    plt = Plotter(results_dir=results_dir)
+    plt.plot_cognate_last_epoch(fname='non_pairwise_models_grouped.csv', hue=None, epoch=20)
+
+
 def cognate_simulations():
     results_dir = '../../simulations/cognate_cross_model_max_data/cognate_cross_model'
-    #results_dir = '../../simulations/cognates/within_model_cog30'
-    #results_dir = '../../simulations/cognates/within_model'
-    models = ('10cog', '20cog', '30cog')
+    # results_dir = '../../simulations/cognates/within_model_cog30'
+    # results_dir = '../../simulations/cognates/within_model'
 
     remove_point_of_interest_at_eos = False
     create_files = True
+    # models = ('10cog', '20cog', '30cog')
     if create_files:
         create_all_model_csv_files(results_dir, remove_eos_poi=remove_point_of_interest_at_eos, models=models,
                                    create_csv=True, create_group=False)
@@ -286,4 +347,5 @@ def code_switching_patterns_model_comparison():
 
 
 if __name__ == "__main__":
-    cognate_simulations()
+    #cognate_simulations()
+    cognate_non_pairwise()

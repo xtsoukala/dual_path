@@ -41,15 +41,16 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
-    def plot_cognate_last_epoch(self, fname=None):
+    def plot_cognate_last_epoch(self, fname=None, hue='model', epoch=20):
         if not fname:
             fname = 'count_all_models_merged.csv'
         df = pd.read_csv(f'{self.results_dir}/{fname}')
-        ax = sns.barplot(x='model_name', y='code_switched_percentage', hue='model', ci=95, n_boot=1000,
+        df = df[df.epoch == epoch]
+        ax = sns.barplot(x='model_name', y='code_switched_percentage', hue=hue, ci=95, n_boot=1000,
                          data=df, errcolor='gray', errwidth=1.5)
         plt.xlabel('')
         plt.ylabel('Percentage of sentences with code-switches')
-        ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
+        #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
         plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
         plt.savefig(self.get_plot_path(df.network_num.max(), f'{fname.replace(".csv", "")}'))
         plt.close()

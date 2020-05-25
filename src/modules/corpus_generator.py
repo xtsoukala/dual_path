@@ -299,6 +299,10 @@ class SetsGenerator:
                 all_pos.append(None)
             pos, pos_type, tense, aspect, number = all_pos
 
+            if tense == 'cog':
+                tense = None
+                only_get_cognate = True
+
             query = [f"pos == '{pos}' and morpheme_{lang} == morpheme_{lang}"]  # x == x to avoid NaN values
             if pos_type == 'animate':
                 query.append("and semantic_gender == semantic_gender")
