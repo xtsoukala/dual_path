@@ -203,7 +203,8 @@ class SetsGenerator:
         generated_pairs = []
         remaining_structures = sentence_structures
         time_start = time.time()
-        self.save_lexicon_and_structures_to_csv()
+        if "test_cog" not in fname:
+            self.save_lexicon_and_structures_to_csv()
         if self.excluded_concepts:
             self.lexicon_df.drop(self.lexicon_df.loc[self.lexicon_df.concept.isin(self.excluded_concepts)].index,
                                  inplace=True)
