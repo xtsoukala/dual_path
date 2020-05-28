@@ -41,19 +41,25 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
-    def plot_cognate_last_epoch(self, fname=None, hue='model', epoch=20):
-        if not fname:
-            fname = 'count_all_models_merged.csv'
-        df = pd.read_csv(f'{self.results_dir}/{fname}')
+    def plot_cognate_last_epoch(self, df_name=None, xrow='model_name', hue='model', epoch=20, include_annotations=False,
+                                info_to_plot=('code_switched',), ci=95, include_legend=True):
+        if not df_name:
+            df_name = 'count_all_models_merged.csv'
+        df = pd.read_csv(f'{self.results_dir}/{df_name}')
         df = df[df.epoch == epoch]
-        ax = sns.barplot(x='model_name', y='code_switched_percentage', hue=hue, ci=95, n_boot=1000,
-                         data=df, errcolor='gray', errwidth=1.5)
-        plt.xlabel('')
-        plt.ylabel('Percentage of sentences with code-switches')
-        #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
-        plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
-        plt.savefig(self.get_plot_path(df.network_num.max(), f'{fname.replace(".csv", "")}'))
-        plt.close()
+        for label in info_to_plot:
+            ax = sns.barplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000,
+                             data=df, errcolor='gray', errwidth=1.5)
+            if include_annotations:
+                self.autolabels(ax, [int(df.loc[df.model_name == modname, 'total_sentences'].sum())
+                                     for modname in df.model_name.unique()])
+            plt.xlabel('')
+            #plt.ylabel('Percentage of sentences with code-switches')
+            #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
+            if include_legend:
+                plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
+            plt.savefig(self.get_plot_path(df.network_num.max(), f'{label}_{df_name.replace(".csv", "")}'))
+            plt.close()
 
     def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',
                                                                    'switched_right_after', 'switched_second_after',

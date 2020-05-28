@@ -92,8 +92,9 @@ class InputFormatter:
         self.tense_markers = self.df_query_to_idx("pos == 'aux' or pos == 'verb_suffix'")
         self.cognate_idx = self.df_query_to_idx("is_cognate == True", lang=self.L[1])
         self.false_friend_idx = self.df_query_to_idx("is_false_friend == True", lang=self.L[1])
-        for i in list(self.cognate_idx) + list(self.false_friend_idx):  # update lang_id: append Spanish as well
-            self.lang_indices[i].append(self.L[2])
+        if 2 in self.L:
+            for i in list(self.cognate_idx) + list(self.false_friend_idx):  # update lang_id: append Spanish as well
+                self.lang_indices[i].append(self.L[2])
 
         logging.debug(self.false_friend_idx)
         self.shared_idx = set(list([self.period_idx]) + list(self.cognate_idx) + list(self.false_friend_idx))
