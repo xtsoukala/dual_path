@@ -1,27 +1,11 @@
 # -*- coding: utf-8 -*-
 from scipy.stats import entropy
 import pickle
-from . import os, sys, torch, zeros, cat, stack, empty, lz4, defaultdict
-
-# remove
-from functools import wraps
-from time import time
-
-
-def measure(func):
-    @wraps(func)
-    def _time_it(*args, **kwargs):
-        start = time() / 100
-        try:
-            return func(*args, **kwargs)
-        finally:
-            print(func.__name__, ':', (time() / 100) - start)
-
-    return _time_it
+from . import os, sys, torch, zeros, cat, stack, empty, lz4
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, rdir, debug_messages, separate_hidden_layers, role_copy, input_copy):
+    def __init__(self, learn_rate, momentum, debug_messages, separate_hidden_layers, role_copy, input_copy):
         self.layers = {}
         self.backpropagated_layers = []
         self.feedforward_layers = []
@@ -40,9 +24,6 @@ class SimpleRecurrentNetwork:
         self.semantic_layers = ('pred_concept', 'role')  # 'pred_identifiability', 'eventsem', 'target_lang']
         self.initially_deactive_layers = ('compress', 'concept', 'identifiability', 'role')
         self.current_layer = None
-        self.dir = rdir
-        self.mse = defaultdict(list)
-        self.divergence_error = defaultdict(list)
 
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
@@ -63,9 +44,13 @@ class SimpleRecurrentNetwork:
 
     def load_weights(self, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
-            weights_fname = os.path.join(set_weights_folder,
-                                         str(simulation_num) if simulation_num is not None else '',
-                                         "weights", f"w{set_weights_epoch}.lz4")
+            if "weights" not in set_weights_folder:
+                weights_fname = os.path.join(set_weights_folder,
+                                             str(simulation_num) if simulation_num is not None else '',
+                                             "weights", f"w{set_weights_epoch}.lz4")
+            else:
+                weights_fname = os.path.join(set_weights_folder, f"w{set_weights_epoch}.lz4")
+
             with lz4.open(weights_fname, 'rb') as f:
                 self.layers = pickle.load(f)
         else:
@@ -274,7 +259,6 @@ class SimpleRecurrentNetwork:
 
     def compute_output_error(self):
         # Calculate error[Eo](target - output)
-        # calculate_mean_square_and_divergence_error(epoch, output_layer.target_activation, output_layer.activation)
         output = self.layers["output"]
         output.gradient = output.target_activation - output.activation
 

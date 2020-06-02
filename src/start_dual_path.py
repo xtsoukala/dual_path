@@ -146,7 +146,7 @@ if __name__ == "__main__":
                         help='Evaluate training sets')
     parser.add_argument('--evaluate', dest='only_evaluate', action='store_true',
                         help='Do not train, only evaluate test sets', default=False)
-    parser.add_argument('--continue_training', '--continue', dest='continue_training', action='store_true',
+    parser.add_argument('--continue_training', dest='continue_training', action='store_true',
                         help='Continue training for more epochs', default=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true', default=False,
                         help='The model is not given role information in the event semantics and it is therefore '
@@ -310,20 +310,18 @@ if __name__ == "__main__":
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                     role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                     compress_size=args.compress, activate_both_lang=args.activate_both_lang,
-                     momentum=args.momentum, randomize=args.randomize,
-                     set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
-                     input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
-                     set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                     role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug, compress_size=args.compress,
+                     activate_both_lang=args.activate_both_lang, momentum=args.momentum, randomize=args.randomize,
+                     input_class=formatted_input, starting_epoch=starting_epoch, epochs=args.epochs,
+                     set_weights_folder=args.set_weights, set_weights_epoch=set_weights_epoch, l2_epoch=args.l2_epoch,
+                     ignore_tense_and_det=args.ignore_tense_and_det, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
-                     epoch_deviation=args.epoch_dev, l2_epoch=args.l2_epoch,
-                     starting_epoch=starting_epoch, epochs=args.epochs)
+                     epoch_deviation=args.epoch_dev)
 
-    Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, args.set_weights) for sim in simulation_range)
+    Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 
     if args.eval_test:  # plot results
         create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)

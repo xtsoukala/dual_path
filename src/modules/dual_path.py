@@ -80,8 +80,8 @@ class DualPath:
         self.starting_epoch = starting_epoch
         self.l2_epoch = l2_epoch
         self.epoch_deviation = epoch_deviation
-        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, rdir=self.inputs.directory,
-                                          debug_messages=srn_debug, role_copy=role_copy, input_copy=input_copy,
+        self.srn = SimpleRecurrentNetwork(learn_rate=learn_rate, momentum=momentum, debug_messages=srn_debug,
+                                          role_copy=role_copy, input_copy=input_copy,
                                           separate_hidden_layers=separate_hidden_layers)
         self.initialize_srn()
 
@@ -97,13 +97,14 @@ class DualPath:
                        "switched_before_es_en,switched_right_before_es_en,switched_right_after_es_en, "
                        "switched_after_anywhere_es_en")
         elif self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_at,switched_right_after,switched_second_after,switched_after_anywhere,"
-                       "switched_before_es_en,switched_at_es_en,switched_right_after_es_en,switched_second_after_es_en,"
-                       "switched_after_anywhere_es_en,point_of_interest_produced_last,concept_position")
+            header += (",switched_before,switched_at,switched_right_after,switched_second_after,"
+                       "switched_after_anywhere,switched_before_es_en,switched_at_es_en,switched_right_after_es_en,"
+                       "switched_second_after_es_en,switched_after_anywhere_es_en,point_of_interest_produced_last,"
+                       "concept_position")
         if self.pronoun_experiment:
             header += ",pronoun_error,pronoun_error_flex"
-        header += ",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch," \
-                  "target_has_cognate,target_has_false_friend"
+        header += (",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch,"
+                   "target_has_cognate,target_has_false_friend")
         logger.info(header)
         return logger
 
@@ -166,7 +167,8 @@ class DualPath:
         self.srn.connect_layers("pred_identifiability", "output")
         self.srn.connect_layers("pred_concept", "output")
         self.srn.connect_layers("pred_compress", "output")
-        if not self.randomize or (not self.only_evaluate and self.simulation_num):  # else they will be loaded again
+        # make sure weights will not be loaded again in start_network() function
+        if not self.randomize or (not self.only_evaluate and self.simulation_num):
             self.srn.load_weights(set_weights_epoch=self.set_weights_epoch, set_weights_folder=self.set_weights_folder,
                                   simulation_num=self.simulation_num)
 
@@ -210,7 +212,7 @@ class DualPath:
         if not backpropagate:
             return produced_sent_ids, sentence_entropy
 
-    def start_network(self, simulation_num, set_existing_weights):
+    def start_network(self, simulation_num):
         """
         :param simulation_num: unique number (integer) of simulation
         Training: for each word of input sentence:
@@ -221,10 +223,24 @@ class DualPath:
         In Chang, Dell & Bock (2006) each model subject experienced 60k message-sentence pairs from its training set and
         was tested after 2k epochs. Each training set consisted of 8k pairs and the test set_name of 2k.
         The authors created 20 sets x 8k for 20 subjects
-        :param set_existing_weights: folder containing trained weights (in case we want to continue training
-        or evaluate only)
         """
         self.simulation_num = simulation_num
+
+        if self.set_weights_folder:
+            destination_folder = f'{self.inputs.root_directory}/{simulation_num}/weights'
+            src_folder = os.path.join(self.set_weights_folder, f"{simulation_num}/weights")
+            if self.only_evaluate or self.continue_training:  # copy all weights
+                copy_files(src_folder, destination_folder)
+            else:  # only copy the starting epoch (such as epoch 0)
+                copy_files(src=src_folder, dest=destination_folder, ends_with=f"_{self.set_weights_epoch}")
+                if self.set_weights_epoch != 0:  # rename them all to epoch 0
+                    weights_path = f'{self.inputs.root_directory}/{simulation_num}/weights/'
+                    for fname in os.listdir(weights_path):
+                        if f'w{self.set_weights_epoch}' in fname:
+                            new_name = os.path.join(weights_path, fname.replace(f'w{self.set_weights_epoch}', 'w0'))
+                            os.rename(os.path.join(weights_path, fname), new_name)
+            self.set_weights_folder = destination_folder
+
         if self.randomize:
             random.seed(simulation_num)  # select a random hidden seed
             self.hidden_size = random.randint(self.hidden_size - self.hidden_deviation,
@@ -249,17 +265,6 @@ class DualPath:
 
         self.inputs.update_sets(f"{self.inputs.root_directory}/{simulation_num}")
 
-        if set_existing_weights:
-            destination_folder = f'{self.inputs.directory}/weights'
-            self.set_weights_folder = self.inputs.directory if set_existing_weights else None
-            src_folder = os.path.join(set_existing_weights, f"{simulation_num}/weights")
-            if self.only_evaluate or self.continue_training:  # copy all weights
-                copy_files(src_folder, destination_folder)
-            else:  # only copy the starting epoch (such as epoch 0)
-                copy_files(src=src_folder, dest=destination_folder, ends_with=f"_{self.set_weights_epoch}")
-                if self.set_weights_epoch != 0:  # rename them all to epoch 0
-                    os.system(f"rename s/_{self.set_weights_epoch}/_0/ {self.inputs.directory}/weights/*")
-
         if not self.only_evaluate:
             weights_role_concept = self.inputs.weights_role_concept['training']
             weights_concept_role = self.inputs.weights_concept_role['training']
@@ -272,7 +277,8 @@ class DualPath:
 
             epoch_range = range(self.starting_epoch, self.epochs + 1)
             for epoch in epoch_range:
-                self.srn.save_weights(directory, epoch)
+                if not self.set_weights_epoch or epoch > self.set_weights_epoch:
+                    self.srn.save_weights(directory, epoch)
                 for line in set_lines.sample(frac=1, random_state=epoch).itertuples():  # random_state is the seed
                     line_idx = line.Index
                     self.feed_line(target_sentence_idx=line.target_sentence_idx,
@@ -287,7 +293,6 @@ class DualPath:
                         self.srn.learn_rate -= self.lrate_decrease_step
                     elif self.srn.learn_rate != self.final_lrate:
                         self.srn.learn_rate = self.final_lrate
-            self.srn.save_weights(directory, epoch_range[-1])
 
         set_names = set()
         if self.evaluate_training_set:
