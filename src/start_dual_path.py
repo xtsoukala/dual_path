@@ -236,7 +236,10 @@ if __name__ == "__main__":
     if args.input:  # if "input" was set, copy existing files
         given_input_path = check_given_input_path(args.input)
         copy_files(given_input_path, input_dir)
-        existing_input_path = given_input_path.replace("/input", "")  # remove "/input", the sets are in the sub folders
+        if given_input_path.endswith('/input'):
+            existing_input_path = given_input_path[:-len("/input")]  # remove "/input", the sets are in the sub folders
+        else:
+            existing_input_path = given_input_path
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
