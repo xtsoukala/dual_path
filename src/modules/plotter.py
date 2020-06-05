@@ -42,7 +42,7 @@ class Plotter:
         plt.close()
 
     def plot_cognate_last_epoch(self, df_name=None, xrow='model_name', hue='model', epoch=20, include_annotations=False,
-                                info_to_plot=('code_switched',), ci=95, include_legend=True):
+                                info_to_plot=('code_switched',), ci=95, include_legend=False, ylim=None):
         if not df_name:
             df_name = 'count_all_models_merged.csv'
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
@@ -54,6 +54,8 @@ class Plotter:
                 self.autolabels(ax, [int(df.loc[df.model_name == modname, 'total_sentences'].sum())
                                      for modname in df.model_name.unique()])
             plt.xlabel('')
+            if ylim:
+                plt.ylim([0, ylim])
             #plt.ylabel('Percentage of sentences with code-switches')
             #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
             if include_legend:
