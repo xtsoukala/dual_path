@@ -342,6 +342,7 @@ def code_switching_patterns_model_comparison():
 
 
 if __name__ == "__main__":
-    cognate_simulations(create_files=True, results_dir='../../simulations/cognates_paper/late_cognate_models/30_eos',
+    cognate_simulations(create_files=True,
+                        results_dir='../../simulations/cognates_paper/within_model/within_model/balanced_results/generic_test/',
                         models=('cog',))
     # cognate_non_pairwise(create_files=False)
