@@ -313,7 +313,7 @@ def cognate_simulations(results_dir='../../simulations/within_model_30', create_
         for i in models:
             i = i.replace("/", "_")
             #plt.plot_cognate_effect_over_time(df_name=f'count_{i}cog_models_merged.csv', ci=68, ignore_baseline=True)
-            plt.plot_cognate_last_epoch(df_name=f'count_{i}_models_merged.csv', ci=95, xrow='model', hue=None,
+            plt.plot_cognate_last_epoch(df_name=f'count_{i}_models_merged.csv', ci=68, xrow='model', hue=None,
                                         info_to_plot=('code_switched', 'switched_before', 'switched_at',
                                                       'switched_right_after', 'switched_second_after',
                                                       'switched_after_anywhere'))
@@ -342,7 +342,7 @@ def code_switching_patterns_model_comparison():
 
 
 if __name__ == "__main__":
-    cognate_simulations(create_files=True,
+    cognate_simulations(create_files=False,
                         results_dir='../../simulations/cognates_paper/within_model/within_model/balanced_results/generic_test/',
                         models=('cog',))
     # cognate_non_pairwise(create_files=False)

@@ -60,7 +60,9 @@ class Plotter:
             #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
             if include_legend:
                 plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
-            plt.savefig(self.get_plot_path(df.network_num.max(), f'{label}_{df_name.replace(".csv", "")}'))
+            plt.savefig(self.get_plot_path(df.network_num.max(),
+                                           f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("models_merged", "")}')
+                        )
             plt.close()
 
     def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',
