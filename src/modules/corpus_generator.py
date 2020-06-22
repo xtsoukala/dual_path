@@ -161,11 +161,15 @@ class SetsGenerator:
 
     def structures_per_lang_and_occurrance(self, df, num_total, lang):
         occurrences = [int(x) for x in df[f'percentage_{lang}'] * num_total / 100]
-        sentence_structures = df[['message', lang]].values.repeat(occurrences, axis=0)
+        df_copy = df.copy()
+        if ('message_l2' in df.columns) and (lang == self.L[2]):
+            df_copy.loc[(pd.notnull(df_copy['message_l2'])), 'message'] = df_copy.loc[(pd.notnull(df_copy['message_l2'])), 'message_l2']
+            df_copy.to_csv(f'{self.input_dir}/structures_test.csv', encoding='utf-8', index=False)
+        sentence_structures = df_copy[['message', lang]].values.repeat(occurrences, axis=0)
         structures_missing = num_total - len(sentence_structures)
         if structures_missing > 0:
             sentence_structures = np.append(sentence_structures,
-                                            df[['message', lang]].sample(n=structures_missing, replace=True), axis=0)
+                                            df_copy[['message', lang]].sample(n=structures_missing, replace=True), axis=0)
         elif structures_missing < 0:
             sentence_structures = np.delete(sentence_structures,
                                             self.random.randint(len(sentence_structures), size=abs(structures_missing)),
@@ -364,6 +368,8 @@ class SetsGenerator:
         for l in self.L.values():
             keys.append(l)
             keys.append(f'percentage_{l}')
+        if 'message_l2' in structures.columns:
+            keys.append('message_l2')
         df = structures[keys]
         if self.allow_free_structure_production:
             df.message = df.message.map(lambda a: self.remove_roles_from_event_semantics(a))
