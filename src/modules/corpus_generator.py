@@ -525,7 +525,7 @@ class SetsGenerator:
         semantic gender. Otherwise, return the syntactic gender if it's not empty or ambiguous.
         """
         if (lang in self.languages_with_syntactic_gender and not pd.isnull(morpheme_df[f'syntactic_gender_{lang}'])
-                and morpheme_df[f'syntactic_gender_{lang}'] != 'M-F'):
+                and not self.has_multiple_possible_genders(morpheme_df[f'syntactic_gender_{lang}'])):
             return morpheme_df[f'syntactic_gender_{lang}']
         elif (not pd.isnull(morpheme_df['semantic_gender']) and (lang not in self.languages_with_syntactic_gender or
                                                                  pd.isnull(morpheme_df[f'syntactic_gender_{lang}']))
@@ -536,6 +536,12 @@ class SetsGenerator:
                 # ASSUMPTION: multiple genders are connected with a hyphen. Select a gender randomly.
                 return self.random.choice(morpheme_df['semantic_gender'].split('-'))
         return prev_gender
+
+    @staticmethod
+    def has_multiple_possible_genders(gender, gender_separator='-'):
+        if gender_separator in gender:
+            return True
+        return False
 
     @staticmethod
     def get_df_semantic_gender(morpheme_df, syntactic_gender):
