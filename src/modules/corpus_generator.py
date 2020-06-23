@@ -23,6 +23,8 @@ class SetsGenerator:
         self.L = self.get_languages_with_idx(lang)
         self.random = np.random
         self.lexicon_df = self.get_clean_lexicon(lexicon_csv)
+        self.languages_with_syntactic_gender = [lang for lang in self.L.values()
+                                                if f'syntactic_gender_{lang}' in list(self.lexicon_df)]
         self.results_dir = sim_results_dir
         self.input_dir = input_dir
         if input_dir and not os.path.exists(input_dir):
@@ -241,7 +243,7 @@ class SetsGenerator:
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
                 morpheme_df = morpheme_df
-                gender = self.get_syntactic_gender(morpheme_df, prev_gender=gender)
+                gender = self.get_syntactic_gender(morpheme_df, lang, prev_gender=gender)
                 lang_code = ("en" if ((morpheme_df.is_cognate == True) and
                                       (not self.unique_cognate_per_sentence)) else lang)
                 sentence.append(morpheme_df[f'morpheme_{lang_code}'])
@@ -304,8 +306,8 @@ class SetsGenerator:
                 query.append(f"and tense == '{tense}'")
             if aspect:
                 query.append(f"and aspect == '{aspect}'")
-            if gender:
-                query.append(f"and (syntactic_gender_es == '{gender}' or syntactic_gender_es == 'M-F')")
+            if gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):
+                query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
 
             if exclude_cognates:
                 query.append("and is_cognate != True")
@@ -448,7 +450,7 @@ class SetsGenerator:
 
     def get_word_from_concept(self, concept, lang):
         w = self.lexicon_df.query(f"concept == '{concept}'")
-        return w[[f'morpheme_{lang}', 'pos', 'syntactic_gender_es', 'semantic_gender', 'type']].values[0]
+        return w[[f'morpheme_{lang}', 'pos', f'syntactic_gender_{lang}', 'semantic_gender', 'type']].values[0]
 
     @staticmethod
     def remove_roles_from_event_semantics(msg_str):
@@ -472,7 +474,7 @@ class SetsGenerator:
         """
         :param msg_idx: index of the message list (e.g., ['AGENT', 'AGENT-MOD', 'ACTION', 'PATIENT']
         :param pos: current part of speech (e.g., 'det' for determiner, 'noun:animate' for an animate noun)
-        :param lang: language code (en, es)
+        :param lang: language code (e.g., en, es)
         :param next_pos: the pos that follows
         :param boost_next: whether to move two indexes ahead. This hack is because in English we want to use the
         adjective as 'AGENT-MOD', then go back to 'AGENT' for the noun, and finally move to 'ACTION' for the verb
@@ -517,10 +519,22 @@ class SetsGenerator:
             concept = morpheme_df['type']
         return concept
 
-    @staticmethod
-    def get_syntactic_gender(morpheme_df, prev_gender=None):
-        if not pd.isnull(morpheme_df['syntactic_gender_es']) and morpheme_df['syntactic_gender_es'] != 'M-F':
-            return morpheme_df['syntactic_gender_es']
+    def get_syntactic_gender(self, morpheme_df, lang, prev_gender=None):
+        """
+        If the syntactic gender is not set but the semantic one is (and it's not ambiguous, e.g., "M-F"), return the
+        semantic gender. Otherwise, return the syntactic gender if it's not empty or ambiguous.
+        """
+        if (lang in self.languages_with_syntactic_gender and not pd.isnull(morpheme_df[f'syntactic_gender_{lang}'])
+                and morpheme_df[f'syntactic_gender_{lang}'] != 'M-F'):
+            return morpheme_df[f'syntactic_gender_{lang}']
+        elif (not pd.isnull(morpheme_df['semantic_gender']) and (lang not in self.languages_with_syntactic_gender or
+                                                                 pd.isnull(morpheme_df[f'syntactic_gender_{lang}']))
+              ):
+            if len(morpheme_df['semantic_gender']) == 1:
+                return morpheme_df['semantic_gender']
+            else:
+                # ASSUMPTION: multiple genders are connected with a hyphen. Select a gender randomly.
+                return self.random.choice(morpheme_df['semantic_gender'].split('-'))
         return prev_gender
 
     @staticmethod
