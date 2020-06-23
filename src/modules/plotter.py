@@ -42,27 +42,46 @@ class Plotter:
         plt.close()
 
     def plot_cognate_last_epoch(self, df_name=None, xrow='model_name', hue='model', epoch=20, include_annotations=False,
-                                info_to_plot=('code_switched',), ci=95, include_legend=False, ylim=None):
+                                info_to_plot=('code_switched',), ci=95, ylim=None, lineplot=False,
+                                bbox_to_anchor=(0.5, 1.1)):
         if not df_name:
             df_name = 'count_all_models_merged.csv'
+        print('plot_cognate_last_epoch:', df_name)
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
         df = df[df.epoch == epoch]
         for label in info_to_plot:
-            ax = sns.barplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000,
-                             data=df, errcolor='gray', errwidth=1.5)
-            if include_annotations:
-                self.autolabels(ax, [int(df.loc[df.model_name == modname, 'total_sentences'].sum())
-                                     for modname in df.model_name.unique()])
+            if lineplot:
+                ax = sns.lineplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000, data=df)
+                plt.xlim(['10cog', '70cog'])
+                plt.ylim([0, 35])
+                bbox_to_anchor = (0.5, 1.05)
+                plt.ylabel('code-switched percentage')
+            else:
+                xrow = 'model' if xrow not in list(df) else xrow
+                if xrow == 'model':
+                    hue = 'switch_from' if 'switch_from' in list(df) else None
+                if hue:
+                    ax = sns.barplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000,
+                                     data=df, errcolor='gray', errwidth=1.5)
+                else:
+                    ax = sns.barplot(x=xrow, y=f'{label}_percentage', ci=ci, n_boot=1000,
+                                     data=df, errcolor='gray', errwidth=1.5)
+                if include_annotations:
+                    self.autolabels(ax, [int(df.loc[df.model_name == modname, 'total_sentences'].sum())
+                                         for modname in df.model_name.unique()])
             plt.xlabel('')
             if ylim:
                 plt.ylim([0, ylim])
             #plt.ylabel('Percentage of sentences with code-switches')
             #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
-            if include_legend:
-                plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=(0.5, 1.1))
+            handles, labels = ax.get_legend_handles_labels()
+            if len(labels) > 1:
+                plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=bbox_to_anchor,
+                           handles=handles, labels=labels)
             plt.savefig(self.get_plot_path(df.network_num.max(),
-                                           f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("models_merged", "")}')
-                        )
+                                           f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("_models_merged", "")}'
+                                           f'epoch{epoch}{"_line" if lineplot else ""}_'
+                                           f'sent{int(df.total_sentences.sum())}{hue if hue else ""}'))
             plt.close()
 
     def plot_cognate_effect_over_time(self, df_name, info_to_plot=('code_switched', 'switched_before', 'switched_at',

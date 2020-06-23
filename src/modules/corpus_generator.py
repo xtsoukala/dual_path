@@ -289,6 +289,10 @@ class SetsGenerator:
 
     def select_random_morpheme_for_lang(self, pos, lang, gender, only_get_cognate=False, only_get_false_friend=False,
                                         exclude_cognates=False, exclude_false_friends=False):
+        print(list(self.lexicon_df))
+        print('syntactic_gender_es' in list(self.lexicon_df))
+        print('syntactic_gender_nl' in list(self.lexicon_df))
+        sys.exit()
         params = repr(locals().values())
         cache = self.get_query_cache(params)
         if cache is False:
