@@ -60,6 +60,7 @@ if __name__ == "__main__":
                         default=0.5)
     parser.add_argument('--input', help='(Input) folder that contains all input files (lexicon, concepts etc)')
     """ input-related arguments. Some are redundant: all the user needs to specify is the input folder """
+    parser.add_argument('--resdir', help='Name of results folder, where the simulations will be stored')
     parser.add_argument('--lexicon', help='CSV file that contains lexicon and concepts')
     parser.add_argument('--structures', help='CSV file that contains the structures')
     parser.add_argument('--trainingset', '--training', default="training.in",
@@ -82,11 +83,12 @@ if __name__ == "__main__":
                         help='Fixed weight value for concept-role connections')
     parser.add_argument('--fwi', '--fixed_weights_identif', type=int, default=10,
                         help='Fixed weight value for identif-role connections')
-    parser.add_argument('--cog_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
+    parser.add_argument('--cognate_decimal_fraction', help='Amount of sentences with cognates in test/training sets',
                         type=float, default=0.3, dest='cognate_decimal_fraction')
     parser.add_argument('--exclude_cognates', help="Filename with concepts; exclude from cognate selection the "
                                                    "concepts of this list")
     parser.add_argument('--cognate_list', help="Filename with concepts; use these instead of ones in lexicon.csv")
+    parser.add_argument('--false_friends_lexicon', help="Csv file with false friends lexicon; use these in lexicon.csv")
     parser.add_argument('--concepts_to_evaluate', help="Filename with concepts of words that will become the focus "
                                                        "around code-switched points (e.g., cognates of all models)")
     parser.add_argument('--pron', dest='overt_pronouns', type=decimal_fraction, default=0,
@@ -95,6 +97,7 @@ if __name__ == "__main__":
                         type=float, default=0)
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
+    parser.add_argument('--generate_test_num', type=int, default=600, help='Total test sentences for experiments')
     parser.add_argument('--title', help='Title for the plots')
     parser.add_argument('--sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
@@ -143,7 +146,7 @@ if __name__ == "__main__":
                         help='Evaluate training sets')
     parser.add_argument('--evaluate', dest='only_evaluate', action='store_true',
                         help='Do not train, only evaluate test sets', default=False)
-    parser.add_argument('--continue_training', '--continue', dest='continue_training', action='store_true',
+    parser.add_argument('--continue_training', dest='continue_training', action='store_true',
                         help='Continue training for more epochs', default=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true', default=False,
                         help='The model is not given role information in the event semantics and it is therefore '
@@ -152,7 +155,8 @@ if __name__ == "__main__":
                         help='Represent semantics using word embeddings instead of one-hot vectors.')
     parser.add_argument('--cognates', dest='cognate_experiment', action='store_true',
                         help='Run cognate experiment', default=False)
-
+    parser.add_argument('--false_friends', '--ff', dest='false_friends', action='store_true',
+                        help='Run false friends experiment', default=False)
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true', default=False,
                         help='Run auxiliary asymmetry experiment')
     parser.add_argument('--tener', dest='replace_haber', action='store_true', default=False,
@@ -195,9 +199,12 @@ if __name__ == "__main__":
         args.input = deepcopy(args.set_weights)
 
     # create path to store results (simulations/date/datetime_num-simulations_num-hidden_num-compress)
-    results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
-                   f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
-                   f"c{args.compress}_fw{args.fw}_e{args.epochs}")
+    if args.resdir:
+        results_dir = f"{root_folder}/simulations/{args.resdir}"
+    else:
+        results_dir = (f"{root_folder}/simulations/{datetime.now().strftime('%Y-%m-%d')}/"
+                       f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
+                       f"c{args.compress}_fw{args.fw}_e{args.epochs}")
     if os.path.exists(results_dir):
         results_dir += datetime.now().strftime('%M.%S')
     os.makedirs(results_dir)
@@ -205,15 +212,17 @@ if __name__ == "__main__":
     if args.replace_haber or args.test_haber_frequency:
         auxiliary_experiment = True
 
-    if auxiliary_experiment or cognate_experiment:
+    if auxiliary_experiment or cognate_experiment or args.false_friends:
         args.activate_both_lang = True
 
     cognate_list = []
+    if args.cognate_list:
+        cognate_list = file_to_list(args.cognate_list)
+
     concepts_to_evaluate = []
-    if args.only_evaluate and args.cognate_list:
+    if args.only_evaluate and (cognate_list or args.false_friends):
         args.activate_both_lang = True
         cognate_experiment = True
-        cognate_list = file_to_list(args.cognate_list)
         if args.concepts_to_evaluate:
             concepts_to_evaluate = file_to_list(args.concepts_to_evaluate)
         if not args.testset:
@@ -227,7 +236,10 @@ if __name__ == "__main__":
     if args.input:  # if "input" was set, copy existing files
         given_input_path = check_given_input_path(args.input)
         copy_files(given_input_path, input_dir)
-        existing_input_path = given_input_path.replace("/input", "")  # remove "/input", the sets are in the sub folders
+        if given_input_path.endswith('/input/') or given_input_path.endswith('/input'):
+            existing_input_path = given_input_path[:-len("/input")]  # remove "/input", the sets are in the sub folders
+        else:
+            existing_input_path = given_input_path
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
@@ -237,14 +249,14 @@ if __name__ == "__main__":
             with open(f'{given_input_path}/target_lang.in', 'w') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
-    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a new set
+    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a set
         from modules import SetsGenerator
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
-                          "cognate/" if (cognate_experiment or args.num_cognate_models_for_test_set > 0) else
+                          "cognate/" if (cognate_experiment or args.false_friends or
+                                         args.num_cognate_models_for_test_set > 0) else
                           "code-switching/" if args.activate_both_lang else "")
         if not args.lexicon:
-            print(f'{root_folder}/data/{experiment_dir}lexicon.csv')
             args.lexicon = f'{root_folder}/data/{experiment_dir}lexicon.csv'
         if not args.structures:
             args.structures = f'{root_folder}/data/{experiment_dir}structures.csv'
@@ -258,16 +270,21 @@ if __name__ == "__main__":
                                    cognate_experiment=cognate_experiment, auxiliary_experiment=auxiliary_experiment)
 
         if args.num_cognate_models_for_test_set > 0:
+            excluded_concepts = file_to_list(args.exclude_cognates) if args.exclude_cognates else []
             input_sets.generate_cognate_experiment_test_sets(simulation_range,
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
-                                                             num_models=args.num_cognate_models_for_test_set)
+                                                             num_models=args.num_cognate_models_for_test_set,
+                                                             cognate_list=cognate_list,
+                                                             num_test_sentences=args.generate_test_num,
+                                                             excluded_concepts=excluded_concepts)
             quit()
         if cognate_experiment:
             input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))
+        elif args.false_friends:
+            input_sets.convert_nouns_to_false_friends(args.cognate_decimal_fraction,
+                                                      file_to_list(args.exclude_cognates))
 
         Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
-
-        del input_sets  # we no longer need it
 
         if not args.target_lang:
             args.target_lang = args.languages
@@ -281,31 +298,33 @@ if __name__ == "__main__":
     with open(f'{results_dir}/commandline_args.txt', 'w') as f:
         json.dump(args.__dict__, f, indent=2)
 
+    if args.false_friends and not args.false_friends_lexicon:
+        args.false_friends_lexicon = f'{input_dir}/false_friends_lexicon.csv'
+
     formatted_input = InputFormatter(directory=input_dir, language=args.languages, use_semantic_gender=args.gender,
                                      overt_pronouns=args.overt_pronouns, test_haber_frequency=args.test_haber_frequency,
                                      num_training=num_training, training_set_name=args.trainingset,
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
+                                     false_friends_lexicon=args.false_friends_lexicon,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
                                      messageless_decimal_fraction=args.messageless_decimal_fraction)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
-                     role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug,
-                     compress_size=args.compress, activate_both_lang=args.activate_both_lang,
-                     cognate_experiment=cognate_experiment, momentum=args.momentum, randomize=args.randomize,
-                     set_weights_folder=args.set_weights,  # formatted_input.directory if args.set_weights else None,
-                     input_class=formatted_input, ignore_tense_and_det=args.ignore_tense_and_det,
-                     set_weights_epoch=set_weights_epoch, pronoun_experiment=args.pronoun_experiment,
+                     role_copy=args.crole, input_copy=args.cinput, srn_debug=args.debug, compress_size=args.compress,
+                     activate_both_lang=args.activate_both_lang, momentum=args.momentum, randomize=args.randomize,
+                     input_class=formatted_input, starting_epoch=starting_epoch, epochs=args.epochs,
+                     set_weights_folder=args.set_weights, set_weights_epoch=set_weights_epoch, l2_epoch=args.l2_epoch,
+                     ignore_tense_and_det=args.ignore_tense_and_det, pronoun_experiment=args.pronoun_experiment,
                      auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
-                     epoch_deviation=args.epoch_dev, l2_epoch=args.l2_epoch,
-                     starting_epoch=starting_epoch, epochs=args.epochs)
+                     epoch_deviation=args.epoch_dev)
 
-    Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, args.set_weights) for sim in simulation_range)
+    Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 
     if args.eval_test:  # plot results
         create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
