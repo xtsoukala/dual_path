@@ -299,8 +299,9 @@ class SetsGenerator:
             pos, pos_type, tense, aspect, number = all_pos
 
             query = [f"pos == '{pos}' and morpheme_{lang} == morpheme_{lang}"]  # x == x to avoid NaN values
-            if pos_type == 'animate':
-                query.append("and semantic_gender == semantic_gender")
+            if pos_type == 'animate':  # set the semantic gender
+                query.append("and semantic_gender == semantic_gender" if not gender
+                             else f"and semantic_gender == '{gender}'")
             elif pos_type == 'inanimate':  # checks for NaN
                 query.append("and semantic_gender != semantic_gender")
             elif pos_type:
@@ -310,9 +311,8 @@ class SetsGenerator:
                 query.append(f"and tense == '{tense}'")
             if aspect:
                 query.append(f"and aspect == '{aspect}'")
-            if gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):
+            if gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
                 query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
-
             if exclude_cognates:
                 query.append("and is_cognate != True")
             elif exclude_false_friends:
@@ -322,7 +322,6 @@ class SetsGenerator:
             elif only_get_false_friend:
                 query.append("and is_false_friend == True")
             cache = self.lexicon_df.query(' '.join(query))
-            self.df_cache[params] = cache
         cache_size = len(cache.index)
         if not cache_size:
             sys.exit(f"Error: Empty cache. {params} {cache} {query if query else ''}")
@@ -541,6 +540,10 @@ class SetsGenerator:
             else:
                 # ASSUMPTION: multiple genders are connected with a hyphen. Select a gender randomly.
                 return self.random.choice(morpheme_df['semantic_gender'].split('-'))
+        elif not prev_gender and lang not in self.languages_with_syntactic_gender and morpheme_df['pos'] == 'pron':
+            # this is a HACK for pronouns, in case the language has no syntactic gender information
+            other_lang = [l for l in self.L.values() if l not in lang][0]
+            return morpheme_df[f'syntactic_gender_{other_lang}']
         return prev_gender
 
     @staticmethod
