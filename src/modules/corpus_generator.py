@@ -311,7 +311,7 @@ class SetsGenerator:
                 query.append(f"and tense == '{tense}'")
             if aspect:
                 query.append(f"and aspect == '{aspect}'")
-            if gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
+            if pos_type != 'animate' and gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
                 query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
             if exclude_cognates:
                 query.append("and is_cognate != True")
