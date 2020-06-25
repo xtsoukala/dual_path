@@ -188,7 +188,7 @@ class Plotter:
 
                     switches_percentage = switches * 100 / mean_correct_sentences
                     switches_percentage_mean = switches_percentage.mean()
-                    low, high = self.get_ci(switches_percentage)
+                    low, high = self.get_ci(switches_percentage, ci=95)
                     ci_low.append(round(switches_percentage_mean - low, 1))
                     ci_high.append(round(high - switches_percentage_mean, 1))
 
@@ -215,13 +215,13 @@ class Plotter:
         labels = {'insertional': ['adj', 'aux', 'det', 'noun', 'participle', 'prep', 'verb'],
                   'alternational': ['adj', 'aux', 'det', 'noun', 'participle', 'prep', 'verb'],
                   'ambiguous': ['noun', 'participle', 'verb', 'adverb']}
-        legend = {'early': 'Early', 'enes': 'L1 English', 'esen': 'L1 Spanish'}
+        legend = {'early': 'Early', 'enes': 'L1 English', 'esen': 'L1 Spanish', 'messageless_balanced': 'Early'}
         correct_sentences = {}
         code_switches = {}
         for m in models:
             df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/all_results.csv',
                              index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
-            epoch = l2_epoch if m == 'early' else df.epoch.max()
+            epoch = l2_epoch if m == ('early' or 'messageless_balanced') else df.epoch.max()
             df = df[(df.epoch == epoch) & (df.meaning == 1)]
             code_switches[m] = {}
             correct_sentences[m] = {}
@@ -255,7 +255,7 @@ class Plotter:
                         v = (code_switches[model][switch_type][lang][switch_point] * 100 /
                              correct_sentences[model][switch_type][labels[switch_type].index(switch_point)])
 
-                        low, high = self.get_ci(v)
+                        low, high = self.get_ci(v, ci=95)
 
                         r = code_switches[model][switch_type][lang][switch_point].sum()
                         r_mean = truediv(code_switches[model][switch_type][lang][switch_point].mean() * 100,
@@ -292,13 +292,13 @@ class Plotter:
     def plot_code_switch_types_per_model(self, models=('early', 'enes', 'esen'), bar_width=0.25, l2_epoch=25):
         sns.set_style("white")
         code_switch_types = ['alternational', 'insertional', 'ambiguous']
-        legend = {'early': 'Early', 'enes': 'L1 English', 'esen': 'L1 Spanish'}
+        legend = {'early': 'Early', 'enes': 'L1 English', 'esen': 'L1 Spanish', 'messageless_balanced': 'Early'}
 
         all_dfs = {}
         for m in models:
             temp_df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/performance_per_lang.csv',
                                   index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
-            epoch = l2_epoch if m == 'early' else temp_df.epoch.max()
+            epoch = l2_epoch if m in ['early', 'messageless_balanced'] else temp_df.epoch.max()
             temp_df = temp_df[temp_df.epoch == epoch]
             all_dfs[m] = temp_df
         network_num = temp_df.network_num.max()
@@ -317,7 +317,7 @@ class Plotter:
                 for switch_type in code_switch_types:
                     if f'{switch_type}_percentage' in df_per_lang:
                         val.append(df_per_lang[f'{switch_type}_percentage'].mean())
-                        low, high = self.get_ci(df_per_lang[f'{switch_type}_percentage'])
+                        low, high = self.get_ci(df_per_lang[f'{switch_type}_percentage'], ci=95)
                         ci_low.append(round(df_per_lang[f'{switch_type}_percentage'].mean() - low, 1))
                         ci_high.append(round(high - df_per_lang[f'{switch_type}_percentage'].mean(), 1))
                     else:
@@ -360,8 +360,8 @@ class Plotter:
         if max_epochs:
             df = df[df.epoch < max_epochs + 1]
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,
-                     label='grammaticality')
-        sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning')
+                     label='grammaticality', marker='v')
+        sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning', marker='*')
         if include_individual_points:
             sns.swarmplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', size=2, alpha=.5)
             sns.swarmplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', size=2, alpha=.5)

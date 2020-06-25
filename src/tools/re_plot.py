@@ -347,12 +347,24 @@ def code_switching_patterns_model_comparison():
         # plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()
 
+def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/messageless_balanced',
+                               languages=['en', 'es']):
+    df = pd.read_csv(f'{results_dir}/performance_per_lang.csv',
+                     index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
+    plt = Plotter(results_dir=results_dir)
+    for l in languages:
+        plt.performance(df[df.switch_from == l], fname=f'l1_performance_{l}', include_code_switches=True, max_epochs=40)
+
 
 cognate_list_fname = None  # 'all_cognates.in'
 
 if __name__ == "__main__":
-    cognate_simulations(create_files=True,
-                        results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
-                        models=('cog',))
+    #plot_l1_with_code_switches()
+    plt = Plotter(results_dir='../../simulations/messageless/')
+    plt.plot_code_switch_types_per_model(models=('messageless_balanced',))
+    plt.plot_code_switche_types_per_pos_for_all_models(models=('messageless_balanced',), ylim=3)
+    #cognate_simulations(create_files=True,
+    #                    results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
+    #                    models=('cog',))
     #non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')
