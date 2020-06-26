@@ -502,7 +502,7 @@ class InputFormatter:
         # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
 
         if not self.use_semantic_gender:
-            df.message = df.message.str.replace(',(M|F);', ';', regex=True)
+            df.message = df.message.str.replace(',(M|F|M-F);', ';', regex=True)
 
         df['target_sentence_idx'] = df.target_sentence.apply(self.sentence_indices)
         df['target_pos'] = df.target_sentence_idx.apply(self.sentence_pos)
