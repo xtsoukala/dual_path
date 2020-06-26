@@ -110,7 +110,7 @@ if __name__ == "__main__":
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
-    parser.add_argument('--generator_timeout', type=positive_int, default=60,
+    parser.add_argument('--generator_timeout', type=positive_int, default=120,
                         help="Number of seconds before the sentence generation process times out")
     parser.add_argument('--hidden_dev', type=non_negative_int, default=10,
                         help='Maximum deviation for the number of hidden layer units when randomization is used. '
