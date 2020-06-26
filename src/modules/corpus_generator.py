@@ -260,7 +260,8 @@ class SetsGenerator:
                                       (not self.unique_cognate_per_sentence)) else lang)
                 sentence.append(morpheme_df[f'morpheme_{lang_code}'])
                 if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
-                    morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang, gender=gender)
+                    morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang,
+                                                                       gender=gender, use_semantic_gender=True)
                 concept = self.get_concept(morpheme_df)
                 if concept:
                     semantic_gender = self.get_semantic_gender(morpheme_df['semantic_gender'], syntactic_gender=gender)
@@ -294,7 +295,7 @@ class SetsGenerator:
         return False
 
     def select_random_morpheme_for_lang(self, pos, lang, gender, only_get_cognate=False, only_get_false_friend=False,
-                                        exclude_cognates=False, exclude_false_friends=False):
+                                        exclude_cognates=False, exclude_false_friends=False, use_semantic_gender=False):
         params = repr(locals().values())
         cache = self.get_query_cache(params)
         if cache is False:
@@ -311,9 +312,8 @@ class SetsGenerator:
                 only_get_cognate = True
 
             query = [f"pos == '{pos}' and morpheme_{lang} == morpheme_{lang}"]  # x == x to avoid NaN values
-            if pos_type == 'animate':  # set the semantic gender
-                query.append("and semantic_gender == semantic_gender" if not gender
-                             else f"and semantic_gender == '{gender}'")
+            if pos_type == 'animate':  
+                query.append("and semantic_gender == semantic_gender")
             elif pos_type == 'inanimate':  # checks for NaN
                 query.append("and semantic_gender != semantic_gender")
             elif pos_type:
@@ -323,7 +323,9 @@ class SetsGenerator:
                 query.append(f"and tense == '{tense}'")
             if aspect:
                 query.append(f"and aspect == '{aspect}'")
-            if pos_type != 'animate' and gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
+            if gender and use_semantic_gender:
+                query.append(f"and (semantic_gender == '{gender}' or semantic_gender == 'M-F')")
+            elif gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
                 query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
             if exclude_cognates:
                 query.append("and is_cognate != True")
@@ -536,9 +538,9 @@ class SetsGenerator:
         if boost_next:
             msg_idx += 2
             boost_next = False
-        elif pos == 'det' and lang == 'en' and 'adj' in next_pos:
+        elif pos == 'det' and lang in ['en', 'nl'] and 'adj' in next_pos:
             msg_idx += 1
-        elif lang == 'en' and 'adj' in pos:
+        elif lang in ['en', 'nl'] and 'adj' in pos:
             msg_idx -= 1
             boost_next = True
         elif pos != 'det':
