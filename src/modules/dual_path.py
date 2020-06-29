@@ -409,7 +409,7 @@ class DualPath:
                                                                                                     produced_idx)
                         code_switched, first_switch_position = self.inputs.is_code_switched(
                             sentence_idx=produced_idx, target_lang=target_lang,
-                            target_sentence_idx=target_sentence_idx, return_position=True)
+                            target_sentence_idx=target_sentence_idx, return_position=True, srn_only=self.srn_only)
                         if is_grammatical:
                             if not code_switched:
                                 correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)

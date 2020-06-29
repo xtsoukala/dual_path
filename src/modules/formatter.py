@@ -344,7 +344,8 @@ class InputFormatter:
             return starting_switch_point[0]
         sys.exit(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
 
-    def is_code_switched(self, sentence_idx, target_lang, target_sentence_idx=(), return_position=False):
+    def is_code_switched(self, sentence_idx, target_lang, target_sentence_idx=(),
+                         return_position=False, srn_only=False):
         """ This function only checks whether words from different languages were used.
             It doesn't verify the validity of the expressed message """
         first_cs_position = None
@@ -360,7 +361,7 @@ class InputFormatter:
                     if target_lang not in x:
                         first_cs_position = sentence_lang.index(x)
                         break
-            return True, first_cs_position
+            return True if not srn_only else False, first_cs_position
         return False, first_cs_position
 
     def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
