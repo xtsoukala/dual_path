@@ -172,6 +172,10 @@ if __name__ == "__main__":
     parser.add_argument('--norandomization', dest='randomize', action='store_false', default=True,
                         help='By default, we sample the free parameters (fixed weight, hidden/compress size, l2 decimal'
                              ') within a certain standard deviation. Using this flag deactivates this setting.')
+    parser.add_argument('--defpro', action='store_true', default=False, help='Merge def/indef/pron into a single unit'
+                                                                             'with different activations')
+    parser.add_argument('--srn_only', action='store_true', default=False, help='Run the SRN alone, without '
+                                                                               'the semantic path')
     args = parser.parse_args()
 
     if args.config_file:  # read params from file; I used the json format to make it readable
@@ -307,7 +311,7 @@ if __name__ == "__main__":
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
-                                     false_friends_lexicon=args.false_friends_lexicon,
+                                     false_friends_lexicon=args.false_friends_lexicon, determinerpronoun=args.defpro,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
                                      messageless_decimal_fraction=args.messageless_decimal_fraction)
 
@@ -322,7 +326,7 @@ if __name__ == "__main__":
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
-                     epoch_deviation=args.epoch_dev)
+                     epoch_deviation=args.epoch_dev, srn_only=args.srn_only)
 
     Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 

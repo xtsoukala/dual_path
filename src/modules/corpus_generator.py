@@ -45,6 +45,7 @@ class SetsGenerator:
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
         self.generator_timeout = generator_timeout
+        self.use_message_l2 = False
 
     @staticmethod
     def get_languages_with_idx(languages):
@@ -152,7 +153,7 @@ class SetsGenerator:
                     df.loc[:, key] *= percentage_l2 / existing_percentages
         else:
             df = self.distribute_percentages_equally_if_not_set(self.structures_df)
-
+        self.use_message_l2 = ('message_l2' in df.columns)
         sentence_structures = self.structures_per_lang_and_occurrance(df, num_l1, self.L[1])
         if num_l2:  # repeat the procedure for L2
             sentence_structures_l2 = self.structures_per_lang_and_occurrance(df, num_l2, self.L[2])
@@ -165,14 +166,16 @@ class SetsGenerator:
     def structures_per_lang_and_occurrance(self, df, num_total, lang):
         occurrences = [int(x) for x in df[f'percentage_{lang}'] * num_total / 100]
         df_copy = df.copy()
-        if ('message_l2' in df.columns) and (lang == self.L[2]):
-            df_copy.loc[(pd.notnull(df_copy['message_l2'])), 'message'] = df_copy.loc[(pd.notnull(df_copy['message_l2'])), 'message_l2']
+        if self.use_message_l2 and lang == self.L[2]:
+            df_copy.loc[(pd.notnull(df_copy['message_l2'])), 'message'] = df_copy.loc[(pd.notnull(df_copy['message_l2'])
+                                                                                       ), 'message_l2']
             df_copy.to_csv(f'{self.input_dir}/structures_test.csv', encoding='utf-8', index=False)
         sentence_structures = df_copy[['message', lang]].values.repeat(occurrences, axis=0)
         structures_missing = num_total - len(sentence_structures)
         if structures_missing > 0:
             sentence_structures = np.append(sentence_structures,
-                                            df_copy[['message', lang]].sample(n=structures_missing, replace=True), axis=0)
+                                            df_copy[['message', lang]].sample(n=structures_missing, replace=True),
+                                            axis=0)
         elif structures_missing < 0:
             sentence_structures = np.delete(sentence_structures,
                                             self.random.randint(len(sentence_structures), size=abs(structures_missing)),
@@ -312,7 +315,7 @@ class SetsGenerator:
                 only_get_cognate = True
 
             query = [f"pos == '{pos}' and morpheme_{lang} == morpheme_{lang}"]  # x == x to avoid NaN values
-            if pos_type == 'animate':  
+            if pos_type == 'animate':
                 query.append("and semantic_gender == semantic_gender")
             elif pos_type == 'inanimate':  # checks for NaN
                 query.append("and semantic_gender != semantic_gender")
@@ -414,8 +417,8 @@ class SetsGenerator:
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
-        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & #(self.lexicon_df.semantic_gender.notnull()) &
-                                (~self.lexicon_df.concept.isin(excluded_concepts)), ]
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') &  # (self.lexicon_df.semantic_gender.notnull()) &
+                                (~self.lexicon_df.concept.isin(excluded_concepts)),]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
         if not only_report_values:
             self.lexicon_df.loc[random_idx, 'is_cognate'] = True
@@ -433,7 +436,7 @@ class SetsGenerator:
         all_nouns = self.lexicon_df[self.lexicon_df.pos == 'noun']
         all_nouns_count = len(all_nouns.index)
         num_cognates = round(all_nouns_count * cognate_decimal_fraction)
-        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') & #(self.lexicon_df.semantic_gender.notnull()) &
+        a = self.lexicon_df.loc[(self.lexicon_df.pos == 'noun') &  # (self.lexicon_df.semantic_gender.notnull()) &
                                 (~self.lexicon_df.concept.isin(excluded_concepts)),]
         random_idx = self.random.choice(a.index, num_cognates, replace=False)
         original_morphemes = self.lexicon_df.loc[random_idx, 'morpheme_en']
@@ -452,7 +455,7 @@ class SetsGenerator:
                                                   # (self.lexicon_df.semantic_gender.notnull()) &
                                                   (~self.lexicon_df.morpheme_es.isin(all_false_friends)) &
                                                   (~self.lexicon_df.morpheme_en.isin(all_false_friends)) &
-                                                  (~self.lexicon_df.concept.isin(excluded_concepts)), ].index, 1)[0]
+                                                  (~self.lexicon_df.concept.isin(excluded_concepts)),].index, 1)[0]
                 all_false_friends.append(self.lexicon_df.loc[idx, 'morpheme_en'])
                 self.lexicon_df.loc[idx, 'morpheme_es'] = self.lexicon_df.loc[next_idx, 'morpheme_en']
                 self.lexicon_df.loc[next_idx, 'is_false_friend'] = True
@@ -584,7 +587,7 @@ class SetsGenerator:
             return morpheme_df[f'syntactic_gender_{lang}']
         elif (not pd.isnull(morpheme_df['semantic_gender']) and (lang not in self.languages_with_syntactic_gender or
                                                                  pd.isnull(morpheme_df[f'syntactic_gender_{lang}']))
-              ):
+        ):
             if len(morpheme_df['semantic_gender']) == 1:
                 return morpheme_df['semantic_gender']
             else:

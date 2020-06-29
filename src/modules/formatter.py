@@ -9,13 +9,14 @@ class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_list, false_friends_lexicon, concepts_to_evaluate):
+                 cognate_list, false_friends_lexicon, concepts_to_evaluate, determinerpronoun):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
         self.root_directory = directory.replace('/input', '/')
         self.target_lang = self._read_file_to_list('target_lang.in')
-        self.identifiability = self._read_file_to_list('identifiability.in')
+        self.identifiability = self._read_file_to_list('identifiability.in') if not determinerpronoun else ['defpro']
+        self.determinerpronoun = determinerpronoun
         self.use_semantic_gender = use_semantic_gender
         if self.use_semantic_gender and 'M' not in self.identifiability:
             self.identifiability += ['M', 'F']
@@ -119,6 +120,11 @@ class InputFormatter:
 
     def update_sets(self, new_directory):
         self.directory = new_directory
+
+        if self.determinerpronoun:
+            os.system(f"sed -i -e 's/=indef,/=defpro:0.33,/g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/=def,/=defpro:0.66,/g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/=pron,/=defpro,/g' {new_directory}/t*.in")
 
         if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system(f"sed -i -e 's/ ha / tiene /g' {new_directory}/t*.in")
@@ -611,12 +617,18 @@ class InputFormatter:
                 else:
                     # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
                     # activate the bindings with a high value
+                    input_activation = None
                     for concept in what.split(","):
+                        if ':' in concept:
+                            concept, input_activation = concept.split(':')
                         if concept in self.identifiability:
-                            weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
-                                self.fixed_identif
+                            weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = (
+                                self.fixed_identif * float(input_activation) if input_activation
+                                else self.fixed_identif)
                         elif concept in self.concepts:
-                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
+                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = (
+                                    self.fixed_weights * float(input_activation)
+                                    if input_activation else self.fixed_weights)
                         elif concept not in ['COG', 'FF']:
                             sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
