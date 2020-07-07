@@ -340,9 +340,9 @@ def code_switching_patterns_model_comparison():
 
     plt = Plotter(results_dir=results_dir)
     if plot_code_switches:
-        # plt.l1_performance_all_models()
-        # plt.l2_performance_all_models()
-        plt.plot_code_switches_from_all_models()
+        plt.l1_performance_all_models()
+        plt.l2_performance_all_models()
+        #plt.plot_code_switches_from_all_models()
         # plt.print_switches_per_model(models=('early', 'esen', 'enes'))
         # plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()
@@ -351,8 +351,9 @@ def code_switching_patterns_model_comparison():
 cognate_list_fname = None  # 'all_cognates.in'
 
 if __name__ == "__main__":
-    cognate_simulations(create_files=True,
-                        results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
-                        models=('cog',))
+    code_switching_patterns_model_comparison()
+    #cognate_simulations(create_files=True,
+    #                    results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
+    #                    models=('cog',))
     #non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')

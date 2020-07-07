@@ -213,6 +213,12 @@ class DualPath:
                                                target_lang_act=target_lang_act,
                                                activate_language=(activate_target_lang or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
+        if self.srn_only and not prod_idx:
+            trg_idx = target_sentence_idx[0]
+            target_sentence_idx = target_sentence_idx[1:]
+            prod_idx = trg_idx
+            append_to_produced(prod_idx)  # give the first word to the model
+
         for trg_idx in target_sentence_idx:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=prod_idx is None)
