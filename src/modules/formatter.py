@@ -29,7 +29,7 @@ class InputFormatter:
         if cognate_list:
             self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
             self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
-            with open(f'{self.directory}/cognates.in', 'w') as f:
+            with open(f'{self.directory}/cognates.in', 'w', encoding='utf-8') as f:
                 f.write("%s" % "\n".join(cognate_list))
 
         self.lexicon, self.pos, self.lang_indices = self.get_lexicon_and_lang_info()
@@ -150,7 +150,7 @@ class InputFormatter:
             messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values
             self.trainlines_df.loc[messageless_indices, 'message'] = ''
             # Can't use df.to_csv, because separater must be a 1-character string
-            with open(f'{new_directory}/training.in', 'w') as f:
+            with open(f'{new_directory}/training.in', 'w', encoding='utf-8') as f:
                 for row in list(zip(self.trainlines_df['target_sentence'], self.trainlines_df['message'])):
                     f.write(f'{row[0]}## {row[1]}\n')
 
@@ -469,7 +469,7 @@ class InputFormatter:
                     elif lang not in langid[info['lex'].index(row[f'morpheme_{lang}'])]:
                         langid[info['lex'].index(row[f'morpheme_{lang}'])].append(lang)
 
-        with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
+        with open(os.path.join(self.directory, "lexicon.in"), 'w', encoding='utf-8') as f:
             f.writelines('\n'.join(info['lex']))
         return info['lex'], info['pos'], langid
 
@@ -543,7 +543,7 @@ class InputFormatter:
         :param fname: file name
         :return: Simply reads a file into a list while stripping newlines
         """
-        with open(os.path.join(self.directory, fname)) as f:
+        with open(os.path.join(self.directory, fname), encoding='utf-8') as f:
             lines = [line.rstrip('\n') for line in f]
         return lines
 

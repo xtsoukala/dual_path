@@ -232,7 +232,7 @@ class SetsGenerator:
         return generated_pairs
 
     def save_language_sets(self, fname, generated_pairs):
-        with open('%s/%s' % (self.results_dir, fname), 'w') as f:
+        with open('%s/%s' % (self.results_dir, fname), 'w', encoding='utf-8') as f:
             for sentence, message in generated_pairs:
                 f.write(u'%s## %s\n' % (sentence, message))
 
@@ -368,7 +368,7 @@ class SetsGenerator:
         self.structures_df.to_csv(f'{self.input_dir}/structures.csv', encoding='utf-8', index=False)
 
     def list_to_file(self, fname, content):
-        with open('%s/%s.in' % (self.input_dir, fname), 'w') as f:
+        with open('%s/%s.in' % (self.input_dir, fname), 'w', encoding='utf-8') as f:
             f.write("%s" % "\n".join(content))
 
     def get_determiners_from_lexicon(self):
@@ -650,6 +650,6 @@ class SetsGenerator:
     @staticmethod
     def file_set_to_list(fname):
         """ split fname lines by sentence## message """
-        with open(fname) as file:
+        with open(fname, encoding='utf-8') as file:
             lines = [line.strip().split('## ') for line in file]
         return lines

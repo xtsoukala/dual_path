@@ -22,7 +22,7 @@ def file_to_list(fname_path):
     if fname_path:
         if not os.path.exists(fname_path):
             sys.exit(f"Wrong path for excluded file: {fname_path}")
-        with open(fname_path) as f:
+        with open(fname_path, encoding='utf-8') as f:
             return [line.rstrip('\n') for line in f]
     return []
 
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.config_file:  # read params from file; I used the json format to make it readable
-        with open(args.config_file, 'r') as f:
+        with open(args.config_file, 'r', encoding='utf-8') as f:
             args.__dict__ = json.load(f)
 
     root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -247,10 +247,10 @@ if __name__ == "__main__":
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
-        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}"))
+        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}", encoding='utf-8'))
 
         if args.target_lang:  # replace with given target language
-            with open(f'{given_input_path}/target_lang.in', 'w') as f:
+            with open(f'{given_input_path}/target_lang.in', 'w', encoding='utf-8') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
     if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a set
@@ -292,14 +292,14 @@ if __name__ == "__main__":
 
         if not args.target_lang:
             args.target_lang = args.languages
-        with open(f'{input_dir}/target_lang.in', 'w') as f:
+        with open(f'{input_dir}/target_lang.in', 'w', encoding='utf-8') as f:
             f.write("%s" % "\n".join(args.target_lang))
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
         logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
-    with open(f'{results_dir}/commandline_args.txt', 'w') as f:
+    with open(f'{results_dir}/commandline_args.txt', 'w', encoding='utf-8') as f:
         json.dump(args.__dict__, f, indent=2)
 
     if args.false_friends and not args.false_friends_lexicon:

@@ -17,7 +17,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
 
     print('Cognate list file name:', cognate_list_fname)
     if cognate_list_fname:
-        with open(f'{results_dir}/{cognate_list_fname}') as f:
+        with open(f'{results_dir}/{cognate_list_fname}', encoding='utf-8') as f:
             cognate_list = [line.rstrip('\n').lower() for line in f]
 
     for model_pair in [models, list(reversed(models))]:
@@ -27,7 +27,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
 
         target_concepts = None
         if cognate_list:
-            with open(f'{results_dir}/{model_pair[0]}/input/cognates.in') as f:
+            with open(f'{results_dir}/{model_pair[0]}/input/cognates.in', encoding='utf-8') as f:
                 cognates_in_simulation = [line.rstrip('\n').lower() for line in f]
             target_concepts = '|'.join(set(cognate_list).intersection(cognates_in_simulation))
             print('target concepts:', target_concepts)
