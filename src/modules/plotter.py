@@ -353,22 +353,24 @@ class Plotter:
                              index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
             langs = [m[:2]] if m != 'early' else self.languages
             for l1_lang in langs:
-                self.performance(df[df.switch_from == l1_lang], fname=f'l1_performance_{m}_{l1_lang}')
+                self.performance(df[df.switch_from == l1_lang], fname=f'l1_performance_{m}_{l1_lang}',
+                                 include_code_switches=True)
 
     def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True,
-                    include_code_switches=False, max_epochs=20):
+                    include_code_switches=False, max_epochs=None):
         if max_epochs:
             df = df[df.epoch < max_epochs + 1]
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,
-                     label='grammaticality', marker='v')
-        sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning', marker='*')
+                     label='grammaticality')
+        sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning',
+                     marker='X')
         if include_individual_points:
             sns.swarmplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', size=2, alpha=.5)
             sns.swarmplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', size=2, alpha=.5)
 
         if include_code_switches and df.code_switched_percentage.sum() > 0:
             sns.lineplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', ci=None,
-                         label='code-switching')
+                         label='code-switching', marker='v')
             if include_individual_points:
                 sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.5)
 
@@ -398,7 +400,7 @@ class Plotter:
             df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/performance_per_lang.csv',
                              index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int, 'l2_epoch': int})
             l2_lang = m[2:]
-            self.l2_performance(df, l2_lang=l2_lang, fname=f'l2_performance_{m}_{l2_lang}')
+            self.l2_performance(df, l2_lang=l2_lang, fname=f'l2_performance_{m}_{l2_lang}', include_code_switches=True)
 
     def l2_performance(self, df, l2_lang, fname, ylim=100, max_epochs=None, include_code_switches=False):
         if max_epochs:
@@ -414,12 +416,12 @@ class Plotter:
         plt.plot(xaxis, [df[df.epoch == ep].grammaticality_percentage.mean() for ep in epoch_range],
                  label='grammaticality', color='#0173b2')
         plt.plot(xaxis, [df[df.epoch == ep].meaning_percentage.mean() for ep in epoch_range],
-                 label='meaning', color='#de8f05')
+                 label='meaning', color='#de8f05', marker='x', markersize=4)
 
         if include_code_switches and df.code_switched_percentage.sum() > 0:
             sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.7)
             plt.plot(xaxis, [df[df.epoch == ep].code_switched_percentage.mean() for ep in epoch_range],
-                     label='code-switching', color='#029E73')
+                     label='code-switching', color='#029E73',  marker='v', markersize=4)
 
         plot_labels = {'l2_performance_enes_es': 'L1 English model tested on Spanish',
                        'l2_performance_esen_en': 'L1 Spanish model tested on English'}

@@ -17,7 +17,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
 
     print('Cognate list file name:', cognate_list_fname)
     if cognate_list_fname:
-        with open(f'{results_dir}/{cognate_list_fname}') as f:
+        with open(f'{results_dir}/{cognate_list_fname}', encoding='utf-8') as f:
             cognate_list = [line.rstrip('\n').lower() for line in f]
 
     for model_pair in [models, list(reversed(models))]:
@@ -27,7 +27,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
 
         target_concepts = None
         if cognate_list:
-            with open(f'{results_dir}/{model_pair[0]}/input/cognates.in') as f:
+            with open(f'{results_dir}/{model_pair[0]}/input/cognates.in', encoding='utf-8') as f:
                 cognates_in_simulation = [line.rstrip('\n').lower() for line in f]
             target_concepts = '|'.join(set(cognate_list).intersection(cognates_in_simulation))
             print('target concepts:', target_concepts)
@@ -340,9 +340,9 @@ def code_switching_patterns_model_comparison():
 
     plt = Plotter(results_dir=results_dir)
     if plot_code_switches:
-        # plt.l1_performance_all_models()
-        # plt.l2_performance_all_models()
-        plt.plot_code_switches_from_all_models()
+        plt.l1_performance_all_models()
+        plt.l2_performance_all_models()
+        #plt.plot_code_switches_from_all_models()
         # plt.print_switches_per_model(models=('early', 'esen', 'enes'))
         # plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()
@@ -359,12 +359,9 @@ def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/mess
 cognate_list_fname = None  # 'all_cognates.in'
 
 if __name__ == "__main__":
-    #plot_l1_with_code_switches()
-    plt = Plotter(results_dir='../../simulations/messageless/')
-    plt.plot_code_switch_types_per_model(models=('messageless_balanced',))
-    plt.plot_code_switche_types_per_pos_for_all_models(models=('messageless_balanced',), ylim=3)
-    #cognate_simulations(create_files=True,
+    code_switching_patterns_model_comparison()
+    # cognate_simulations(create_files=True,
     #                    results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
     #                    models=('cog',))
-    #non_pairwise_cross_model_comparison(create_files=False,
+    # non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')

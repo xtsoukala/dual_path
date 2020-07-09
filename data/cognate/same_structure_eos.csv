@@ -1,2 +1,2 @@
 message,es,percentage_es,en,percentage_en
-"AGENT=;ACTION-LINKING=;PATIENT=;RECIPIENT=;EVENT-SEM=SIMPLE,PRESENT,AGENT,ACTION-LINKING,PATIENT,RECIPIENT",det noun:animate verb:double:present det noun:inanimate prep:to det noun:animate:cog,100,det noun:animate verb:double:present det noun:inanimate prep:to det noun:animate:cog,100
+"AGENT=;ACTION-LINKING=;PATIENT=;RECIPIENT=;EVENT-SEM=SIMPLE,PRESENT,AGENT,PATIENT,RECIPIENT",det noun:animate verb:double:present det noun:inanimate prep:to det noun:animate:cog,100,det noun:animate verb:double:present det noun:inanimate prep:to det noun:animate:cog,100

@@ -21,7 +21,7 @@ class DualPath:
                  input_class, pronoun_experiment, auxiliary_experiment, ignore_tense_and_det,
                  only_evaluate, continue_training, separate_hidden_layers, evaluate_test_set, evaluate_training_set,
                  starting_epoch, randomize, hidden_deviation, compress_deviation, fw_deviation, l2_epoch,
-                 epoch_deviation, simulation_num=None):
+                 epoch_deviation, srn_only, simulation_num=None):
         """
         :param hidden_size: Size of the hidden layer
         :param learn_rate: Initial learning rate
@@ -43,6 +43,7 @@ class DualPath:
         is for speed, if we want to training network and save weights
         :param evaluate_training_set: Whether to evaluate the training set (default: False)
         :param starting_epoch: training can start from a later epoch
+        :param srn_only: whether to ignore the message (semantic path) and train using the SRN only
         """
         self.inputs = input_class
         self.compress_size = compress_size
@@ -50,6 +51,7 @@ class DualPath:
         self.simulation_num = simulation_num
         self.pronoun_experiment = pronoun_experiment
         self.auxiliary_experiment = auxiliary_experiment
+        self.srn_only = srn_only
         self.training_logger = None
         self.test_logger = None
         self.only_evaluate = only_evaluate
@@ -112,35 +114,49 @@ class DualPath:
         compress_size = self.compress_size if self.compress_size is not None else int(self.hidden_size // 1.3)
         # Chang: The where, what, and cwhat units were unbiased to make them more input driven
         self.srn.add_layer("input", self.inputs.lexicon_size)  # , convert_input=True)
-        self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
-        self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
-        self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")
+
+        if not self.srn_only:
+            self.srn.add_layer("identifiability", self.inputs.identif_size, has_bias=False)
+            self.srn.add_layer("concept", self.inputs.concept_size, has_bias=False)
+            self.srn.add_layer("role", self.inputs.roles_size, activation_function="softmax")
+
         self.srn.add_layer("compress", compress_size)
-        self.srn.add_layer("eventsem", self.inputs.event_sem_size)
-        self.srn.add_layer("target_lang", self.inputs.num_languages)
+
+        if not self.srn_only:
+            self.srn.add_layer("eventsem", self.inputs.event_sem_size)
+            self.srn.add_layer("target_lang", self.inputs.num_languages)
+
         if self.separate_hidden_layers:
             self.srn.add_layer("hidden_semantic", int(self.hidden_size * 2 / 3), recurrent=True)
             self.srn.add_layer("hidden_syntactic", int(self.hidden_size / 3), recurrent=True)
         else:
             self.srn.add_layer("hidden", self.hidden_size, recurrent=True)
 
-        # If pred_role is not softmax the model performs poorly on determiners.
-        self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
-        self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
-        self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
+        if not self.srn_only:
+            # If pred_role is not softmax the model performs poorly on determiners.
+            self.srn.add_layer("pred_role", self.inputs.roles_size, activation_function="softmax")
+            self.srn.add_layer("pred_identifiability", self.inputs.identif_size, has_bias=False)
+            self.srn.add_layer("pred_concept", self.inputs.concept_size, has_bias=False)
+
         self.srn.add_layer("pred_compress", compress_size)
         self.srn.add_layer("output", self.inputs.lexicon_size, activation_function="softmax")
 
         # Connect layers
-        self.srn.connect_layers("input", "identifiability")
-        self.srn.connect_layers("input", "concept")
+        if not self.srn_only:
+            self.srn.connect_layers("input", "identifiability")
+            self.srn.connect_layers("input", "concept")
+
         self.srn.connect_layers("input", "compress")
-        self.srn.connect_layers("identifiability", "role")
-        self.srn.connect_layers("concept", "role")
+
+        if not self.srn_only:
+            self.srn.connect_layers("identifiability", "role")
+            self.srn.connect_layers("concept", "role")
+
         # hidden layer
         if self.input_copy:
             self.srn.add_layer("input_copy", self.inputs.lexicon_size)
             self.srn.connect_layers("input", "hidden")
+
         if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
             self.srn.add_layer("role_copy", self.inputs.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
@@ -154,18 +170,25 @@ class DualPath:
             self.srn.connect_layers("hidden_semantic", "pred_role")
             self.srn.connect_layers("hidden_syntactic", "pred_compress")
         else:
-            self.srn.connect_layers("role", "hidden")
-            self.srn.connect_layers("eventsem", "hidden")
-            self.srn.connect_layers("target_lang", "hidden")
+            if not self.srn_only:
+                self.srn.connect_layers("role", "hidden")
+                self.srn.connect_layers("eventsem", "hidden")
+                self.srn.connect_layers("target_lang", "hidden")
+
             self.srn.connect_layers("compress", "hidden")
-            # hidden to predicted and output layers
-            self.srn.connect_layers("hidden", "pred_role")
+
+            if not self.srn_only:
+                # hidden to predicted and output layers
+                self.srn.connect_layers("hidden", "pred_role")
+
             self.srn.connect_layers("hidden", "pred_compress")
 
-        self.srn.connect_layers("pred_role", "pred_identifiability")
-        self.srn.connect_layers("pred_role", "pred_concept")
-        self.srn.connect_layers("pred_identifiability", "output")
-        self.srn.connect_layers("pred_concept", "output")
+        if not self.srn_only:
+            self.srn.connect_layers("pred_role", "pred_identifiability")
+            self.srn.connect_layers("pred_role", "pred_concept")
+            self.srn.connect_layers("pred_identifiability", "output")
+            self.srn.connect_layers("pred_concept", "output")
+
         self.srn.connect_layers("pred_compress", "output")
         # make sure weights will not be loaded again in start_network() function
         if not self.randomize or (not self.only_evaluate and self.simulation_num):
@@ -179,15 +202,23 @@ class DualPath:
         sentence_entropy = []
         append_to_produced = produced_sent_ids.append
         append_to_entropy = sentence_entropy.append
-
-        self.srn.set_message_reset_context(weights_role_concept=weights_role_concept,
-                                           weights_concept_role=weights_concept_role,
-                                           weights_role_identif=weights_role_identif,
-                                           weights_identif_role=weights_identif_role,
-                                           event_semantics=event_semantics,
-                                           target_lang_act=target_lang_act,
-                                           activate_language=(activate_target_lang or backpropagate))
+        if self.srn_only:
+            self.srn.reset_context_delta_and_crole()
+        else:
+            self.srn.set_message_reset_context(weights_role_concept=weights_role_concept,
+                                               weights_concept_role=weights_concept_role,
+                                               weights_role_identif=weights_role_identif,
+                                               weights_identif_role=weights_identif_role,
+                                               event_semantics=event_semantics,
+                                               target_lang_act=target_lang_act,
+                                               activate_language=(activate_target_lang or backpropagate))
         prod_idx = None  # previously produced word (at the beginning of sentence: None)
+        if self.srn_only and not prod_idx:
+            trg_idx = target_sentence_idx[0]
+            target_sentence_idx = target_sentence_idx[1:]
+            prod_idx = trg_idx
+            append_to_produced(prod_idx)  # give the first word to the model
+
         for trg_idx in target_sentence_idx:
             self.srn.set_inputs(input_idx=prod_idx, target_idx=trg_idx if backpropagate else None)
             self.srn.feedforward(start_of_sentence=prod_idx is None)
@@ -196,7 +227,7 @@ class DualPath:
                 self.srn.backpropagate()
             else:  # no "target" word in this case. Also, return the produced sentence
                 # reset the target language for the rest of the sentence (during testing only!)
-                if activate_target_lang and prod_idx is None and self.activate_both_lang:
+                if activate_target_lang and not self.srn_only and prod_idx is None and self.activate_both_lang:
                     # TODO: play with activations, e.g. activate the target language slightly more
                     # ones or: [1, 0.9] if self.inputs.target_lang.index(lang) == 0 else [0.9, 1]
                     self.srn.set_layer_activation("target_lang", activation=ones(2))
@@ -384,7 +415,7 @@ class DualPath:
                                                                                                     produced_idx)
                         code_switched, first_switch_position = self.inputs.is_code_switched(
                             sentence_idx=produced_idx, target_lang=target_lang,
-                            target_sentence_idx=target_sentence_idx, return_position=True)
+                            target_sentence_idx=target_sentence_idx, return_position=True, srn_only=self.srn_only)
                         if is_grammatical:
                             if not code_switched:
                                 correct_meaning = self.inputs.has_correct_meaning(produced_idx, target_sentence_idx)

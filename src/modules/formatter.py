@@ -9,13 +9,14 @@ class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_list, false_friends_lexicon, concepts_to_evaluate):
+                 cognate_list, false_friends_lexicon, concepts_to_evaluate, determinerpronoun):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
         self.root_directory = directory.replace('/input', '/')
         self.target_lang = self._read_file_to_list('target_lang.in')
-        self.identifiability = self._read_file_to_list('identifiability.in')
+        self.identifiability = self._read_file_to_list('identifiability.in') if not determinerpronoun else ['defpro']
+        self.determinerpronoun = determinerpronoun
         self.use_semantic_gender = use_semantic_gender
         if self.use_semantic_gender and 'M' not in self.identifiability:
             self.identifiability += ['M', 'F']
@@ -28,7 +29,7 @@ class InputFormatter:
         if cognate_list:
             self.lexicon_df.loc[:, 'is_cognate'] = False  # reset any preexisting cognates
             self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
-            with open(f'{self.directory}/cognates.in', 'w') as f:
+            with open(f'{self.directory}/cognates.in', 'w', encoding='utf-8') as f:
                 f.write("%s" % "\n".join(cognate_list))
 
         self.lexicon, self.pos, self.lang_indices = self.get_lexicon_and_lang_info()
@@ -120,6 +121,11 @@ class InputFormatter:
     def update_sets(self, new_directory):
         self.directory = new_directory
 
+        if self.determinerpronoun:
+            os.system(f"sed -i -e 's/=indef,/=defpro:0.33,/g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/=def,/=defpro:0.66,/g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/=pron,/=defpro,/g' {new_directory}/t*.in")
+
         if self.replace_haber_tener:  # call sed to replace training and test files with "tener"
             os.system(f"sed -i -e 's/ ha / tiene /g' {new_directory}/t*.in")
             self.lexicon_df.loc[(self.lexicon_df.pos == 'aux') & (self.lexicon_df.aspect == 'perfect') &
@@ -144,7 +150,7 @@ class InputFormatter:
             messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values
             self.trainlines_df.loc[messageless_indices, 'message'] = ''
             # Can't use df.to_csv, because separater must be a 1-character string
-            with open(f'{new_directory}/training.in', 'w') as f:
+            with open(f'{new_directory}/training.in', 'w', encoding='utf-8') as f:
                 for row in list(zip(self.trainlines_df['target_sentence'], self.trainlines_df['message'])):
                     f.write(f'{row[0]}## {row[1]}\n')
 
@@ -338,7 +344,8 @@ class InputFormatter:
             return starting_switch_point[0]
         sys.exit(f"No CS detected for: {out_sentence_idx} {self.sentence_from_indices(out_sentence_idx)}")
 
-    def is_code_switched(self, sentence_idx, target_lang, target_sentence_idx=(), return_position=False):
+    def is_code_switched(self, sentence_idx, target_lang, target_sentence_idx=(),
+                         return_position=False, srn_only=False):
         """ This function only checks whether words from different languages were used.
             It doesn't verify the validity of the expressed message """
         first_cs_position = None
@@ -354,7 +361,7 @@ class InputFormatter:
                     if target_lang not in x:
                         first_cs_position = sentence_lang.index(x)
                         break
-            return True, first_cs_position
+            return True if not srn_only else False, first_cs_position
         return False, first_cs_position
 
     def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
@@ -462,7 +469,7 @@ class InputFormatter:
                     elif lang not in langid[info['lex'].index(row[f'morpheme_{lang}'])]:
                         langid[info['lex'].index(row[f'morpheme_{lang}'])].append(lang)
 
-        with open(os.path.join(self.directory, "lexicon.in"), 'w') as f:
+        with open(os.path.join(self.directory, "lexicon.in"), 'w', encoding='utf-8') as f:
             f.writelines('\n'.join(info['lex']))
         return info['lex'], info['pos'], langid
 
@@ -536,7 +543,7 @@ class InputFormatter:
         :param fname: file name
         :return: Simply reads a file into a list while stripping newlines
         """
-        with open(os.path.join(self.directory, fname)) as f:
+        with open(os.path.join(self.directory, fname), encoding='utf-8') as f:
             lines = [line.rstrip('\n') for line in f]
         return lines
 
@@ -611,12 +618,18 @@ class InputFormatter:
                 else:
                     # there are usually multiple concepts/identif per role, e.g. (MAN, DEF, EMPH). We want to
                     # activate the bindings with a high value
+                    input_activation = None
                     for concept in what.split(","):
+                        if ':' in concept:
+                            concept, input_activation = concept.split(':')
                         if concept in self.identifiability:
-                            weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = \
-                                self.fixed_identif
+                            weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = (
+                                self.fixed_identif * float(input_activation) if input_activation
+                                else self.fixed_identif)
                         elif concept in self.concepts:
-                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = self.fixed_weights
+                            weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = (
+                                    self.fixed_weights * float(input_activation)
+                                    if input_activation else self.fixed_weights)
                         elif concept not in ['COG', 'FF']:
                             sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,

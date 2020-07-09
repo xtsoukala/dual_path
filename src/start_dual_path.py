@@ -22,7 +22,7 @@ def file_to_list(fname_path):
     if fname_path:
         if not os.path.exists(fname_path):
             sys.exit(f"Wrong path for excluded file: {fname_path}")
-        with open(fname_path) as f:
+        with open(fname_path, encoding='utf-8') as f:
             return [line.rstrip('\n') for line in f]
     return []
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
-    parser.add_argument('--generator_timeout', type=positive_int, default=90,
+    parser.add_argument('--generator_timeout', type=positive_int, default=120,
                         help="Number of seconds before the sentence generation process times out")
     parser.add_argument('--hidden_dev', type=non_negative_int, default=10,
                         help='Maximum deviation for the number of hidden layer units when randomization is used. '
@@ -172,10 +172,14 @@ if __name__ == "__main__":
     parser.add_argument('--norandomization', dest='randomize', action='store_false', default=True,
                         help='By default, we sample the free parameters (fixed weight, hidden/compress size, l2 decimal'
                              ') within a certain standard deviation. Using this flag deactivates this setting.')
+    parser.add_argument('--defpro', action='store_true', default=False, help='Merge def/indef/pron into a single unit'
+                                                                             'with different activations')
+    parser.add_argument('--srn_only', action='store_true', default=False, help='Run the SRN alone, without '
+                                                                               'the semantic path')
     args = parser.parse_args()
 
     if args.config_file:  # read params from file; I used the json format to make it readable
-        with open(args.config_file, 'r') as f:
+        with open(args.config_file, 'r', encoding='utf-8') as f:
             args.__dict__ = json.load(f)
 
     root_folder = os.path.relpath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -243,10 +247,10 @@ if __name__ == "__main__":
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
-        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}"))
+        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}", encoding='utf-8'))
 
         if args.target_lang:  # replace with given target language
-            with open(f'{given_input_path}/target_lang.in', 'w') as f:
+            with open(f'{given_input_path}/target_lang.in', 'w', encoding='utf-8') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
     if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a set
@@ -288,14 +292,14 @@ if __name__ == "__main__":
 
         if not args.target_lang:
             args.target_lang = args.languages
-        with open(f'{input_dir}/target_lang.in', 'w') as f:
+        with open(f'{input_dir}/target_lang.in', 'w', encoding='utf-8') as f:
             f.write("%s" % "\n".join(args.target_lang))
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
         logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
         args.lrate = args.final_lrate  # assign the >lowest< learning rate.
 
-    with open(f'{results_dir}/commandline_args.txt', 'w') as f:
+    with open(f'{results_dir}/commandline_args.txt', 'w', encoding='utf-8') as f:
         json.dump(args.__dict__, f, indent=2)
 
     if args.false_friends and not args.false_friends_lexicon:
@@ -307,7 +311,7 @@ if __name__ == "__main__":
                                      test_set_name=args.testset, fixed_weights=args.fw, fixed_weights_identif=args.fwi,
                                      use_word_embeddings=args.word_embeddings, replace_haber_tener=args.replace_haber,
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
-                                     false_friends_lexicon=args.false_friends_lexicon,
+                                     false_friends_lexicon=args.false_friends_lexicon, determinerpronoun=args.defpro,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
                                      messageless_decimal_fraction=args.messageless_decimal_fraction)
 
@@ -322,7 +326,7 @@ if __name__ == "__main__":
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
-                     epoch_deviation=args.epoch_dev)
+                     epoch_deviation=args.epoch_dev, srn_only=args.srn_only)
 
     Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 
