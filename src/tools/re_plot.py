@@ -256,7 +256,7 @@ def create_all_model_csv_files(results_dir, create_csv=True, models=('ff',), onl
 def pairwise_cross_model_comparison(results_dir, models=('10cog', '20cog', '30cog'), only_last_epoch=True,
                                     only_common_sentences=False, create_files=False):
     if create_files:
-        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=True if 'eos' in results_dir else False,
+        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=False,
                                    create_csv=False, create_group=True, only_last_epoch=only_last_epoch)
 
     all_df = []
@@ -297,7 +297,7 @@ def non_pairwise_cross_model_comparison(results_dir, create_files=True):
 
 def cognate_simulations(results_dir, models, create_files=True, plot_items=True, only_last_epoch=False):
     if create_files:
-        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=True if 'eos' in results_dir else False,
+        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=False,
                                    create_csv=True, create_group=True, only_last_epoch=only_last_epoch)
 
     if plot_items:
@@ -359,9 +359,9 @@ def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/mess
 cognate_list_fname = None  # 'all_cognates.in'
 
 if __name__ == "__main__":
-    code_switching_patterns_model_comparison()
-    # cognate_simulations(create_files=True,
-    #                    results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
-    #                    models=('cog',))
+    # code_switching_patterns_model_comparison()
+    cognate_simulations(create_files=True,
+                        results_dir='../../simulations/cognate_minimal_30/cognate_minimal_30/evaluation/eos/balanced',
+                        models=('cog',))
     # non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')

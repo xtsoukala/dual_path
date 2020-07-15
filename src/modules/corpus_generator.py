@@ -249,20 +249,28 @@ class SetsGenerator:
             boost_next = False
             pos_list = pos_full.split()
             sentence_length = len(pos_list) - 1
+            print(pos_list)
             for i, pos in enumerate(pos_list):
                 exclude_cognates = False
                 # only one cognate per sentence and not at the end of the sentence
                 if self.unique_cognate_per_sentence and (any([',COG' in ms for ms in message]) or
                                                          (exclude_eos_cognate and i == sentence_length)):
                     exclude_cognates = True
+                print('HERE', gender)
+                if gender and not any([x in pos for x in ['noun', 'adj']]):
+                    print("RESET")
+                    gender = None
                 morpheme_df = self.select_random_morpheme_for_lang(pos=pos, lang=lang, gender=gender,
                                                                    exclude_cognates=exclude_cognates)
                 morpheme_df = morpheme_df
                 gender = self.get_syntactic_gender(morpheme_df, lang, prev_gender=gender)
+                print(gender, 'after')
                 lang_code = ("en" if ((morpheme_df.is_cognate == True) and
                                       (not self.unique_cognate_per_sentence)) else lang)
                 sentence.append(morpheme_df[f'morpheme_{lang_code}'])
+                print('sentence:', sentence)
                 if pos.startswith('pron'):  # also need to choose a random concept -- only constraint: gender
+                    print('FIND CONCEPT:', gender)
                     morpheme_df = self.select_random_morpheme_for_lang(pos='noun:animate', lang=lang,
                                                                        gender=gender, use_semantic_gender=True)
                 concept = self.get_concept(morpheme_df)
@@ -299,11 +307,11 @@ class SetsGenerator:
 
     def select_random_morpheme_for_lang(self, pos, lang, gender, only_get_cognate=False, only_get_false_friend=False,
                                         exclude_cognates=False, exclude_false_friends=False, use_semantic_gender=False):
+        print('selecT:', pos, gender, use_semantic_gender, any([x in pos for x in ['noun', 'adj']]))
         params = repr(locals().values())
         cache = self.get_query_cache(params)
+        print(cache)
         if cache is False:
-            if gender and not any([x in pos for x in ['noun', 'adj']]):
-                gender = None
             pos_type = None
             all_pos = pos.split(':')
             for n in range(0, 5 - len(all_pos)):  # this is simply to be able to unpack even N/A values like number
@@ -326,10 +334,13 @@ class SetsGenerator:
                 query.append(f"and tense == '{tense}'")
             if aspect:
                 query.append(f"and aspect == '{aspect}'")
-            if gender and use_semantic_gender:
-                query.append(f"and (semantic_gender == '{gender}' or semantic_gender == 'M-F')")
-            elif gender and lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
-                query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
+
+            if gender:
+                if use_semantic_gender:
+                    query.append(f"and (semantic_gender == '{gender}' or semantic_gender == 'M-F')")
+                elif lang in f'syntactic_gender_{lang}' in list(self.lexicon_df):  # set the syntactic gender
+                    query.append(f"and (syntactic_gender_{lang} == '{gender}' or syntactic_gender_{lang} == 'M-F')")
+
             if exclude_cognates:
                 query.append("and is_cognate != True")
             elif exclude_false_friends:
@@ -582,21 +593,25 @@ class SetsGenerator:
         If the syntactic gender is not set but the semantic one is (and it's not ambiguous, e.g., "M-F"), return the
         semantic gender. Otherwise, return the syntactic gender if it's not empty or ambiguous.
         """
+        #print(morpheme_df, lang, prev_gender, self.languages_with_syntactic_gender)
         if (lang in self.languages_with_syntactic_gender and not pd.isnull(morpheme_df[f'syntactic_gender_{lang}'])
                 and not self.has_multiple_possible_genders(morpheme_df[f'syntactic_gender_{lang}'])):
+            print('ENA')
             return morpheme_df[f'syntactic_gender_{lang}']
         elif (not pd.isnull(morpheme_df['semantic_gender']) and (lang not in self.languages_with_syntactic_gender or
-                                                                 pd.isnull(morpheme_df[f'syntactic_gender_{lang}']))
-        ):
+                                                                 pd.isnull(morpheme_df[f'syntactic_gender_{lang}']))):
+            print('DIO')
             if len(morpheme_df['semantic_gender']) == 1:
                 return morpheme_df['semantic_gender']
             else:
                 # ASSUMPTION: multiple genders are connected with a hyphen. Select a gender randomly.
                 return self.random.choice(morpheme_df['semantic_gender'].split('-'))
         elif not prev_gender and lang not in self.languages_with_syntactic_gender and morpheme_df['pos'] == 'pron':
+            print('TRIA')  # and len(self.L.values()) > 1
             # this is a HACK for pronouns, in case the language has no syntactic gender information
             other_lang = [l for l in self.L.values() if l not in lang][0]
             return morpheme_df[f'syntactic_gender_{other_lang}']
+        print('TES', prev_gender)
         return prev_gender
 
     @staticmethod
