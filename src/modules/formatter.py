@@ -215,7 +215,8 @@ class InputFormatter:
                         return is_grammatical, has_flex_order
         return not is_grammatical, not has_flex_order
 
-    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=False):
+    def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=False,
+                                restrict_subject_position=False):
         """
         :param out_sentence_idx:
         :param trg_sentence_idx:
@@ -227,7 +228,9 @@ class InputFormatter:
         ignore_idx = self.to_prepositions_idx
         if ignore_det:
             ignore_idx.extend(self.determiners)
-
+        if restrict_subject_position and len(trg_sentence_idx) > 2:  # arbitrarily remove 2 first words for now
+            trg_sentence_idx = trg_sentence_idx[2:]
+            out_sentence_idx = out_sentence_idx[2:]
         if self.same_unordered_lists(filter(lambda i: i not in ignore_idx, out_sentence_idx),
                                      filter(lambda i: i not in ignore_idx, trg_sentence_idx)):
             flexible_order = True
@@ -273,7 +276,8 @@ class InputFormatter:
                                                                   None if top_down_language_activation else target_lang)
             if switch_type:
                 for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
-                    if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
+                    if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx,
+                                                    restrict_subject_position=True):
                         cache = switch_type, switch_pos
                         self.code_switched_type_cache[out_idx] = cache
                         return cache
@@ -331,7 +335,7 @@ class InputFormatter:
         return cache
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, out_pos, trg_sentence_idx):
-        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx):
+        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, restrict_subject_position=True):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
         check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx_no_false_friends),
                                 out_sentence_idx))

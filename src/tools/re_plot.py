@@ -10,8 +10,8 @@ sys.path.append('..')
 from modules import Plotter, pd, create_dataframes_for_plots
 
 
-def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only, models=('cog1', 'cog2'),
-                                                   false_friends=False, include_baseline=False,
+def create_cognate_or_false_friend_model_csv_files(results_dir, models=('cog1', 'cog2'),
+                                                   false_friends=False,
                                                    only_compare_with_sentences_not_containing_any_cognates=True):
     cognate_list = None
 
@@ -21,8 +21,6 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
             cognate_list = [line.rstrip('\n').lower() for line in f]
 
     for model_pair in [models, list(reversed(models))]:
-        if include_baseline:
-            model_pair += ('zero_cognates',)
         print(model_pair)
 
         target_concepts = None
@@ -57,7 +55,6 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
         no_cog_or_ff_df['sentence_idx'] = no_cog_or_ff_df.apply(lambda x:
                                                                 hash_string(f'{x.message}{x.epoch}{x.network_num}'),
                                                                 axis=1)
-        #KEEP SAME SENTENCES:sentences_without = no_cog_or_ff_df.loc[no_cog_or_ff_df.sentence_idx.isin(sentences_with.sentence_idx)].copy()
         sentences_without = no_cog_or_ff_df.copy()
         # Remove sentences with incorrect meaning or those in which the word of interest was produced at the end.
         sentences_with.drop(sentences_with.loc[sentences_with.meaning == 0].index, inplace=True)
@@ -66,30 +63,12 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
         sentences_without.drop(sentences_without.loc[sentences_without.meaning == 0].index, inplace=True)
         print(len(sentences_without))
 
-        if poi_at_end_only:  # drop sentences in which the concept was not produced at the end
-            sentences_with.drop(sentences_with.loc[sentences_with.point_of_interest_produced_last == False].index,
-                                inplace=True)
-            sentences_without.drop(sentences_without.loc[sentences_without.point_of_interest_produced_last == False
-                                                         ].index, inplace=True)
-            print('POI at end only:', len(sentences_without))
-
         if only_compare_with_sentences_not_containing_any_cognates:
             sentences_without.drop(sentences_without.loc[sentences_without.target_has_cognate == True].index,
                                    inplace=True)
             print('not containing any cognates', len(sentences_without), '---')
 
-        if include_baseline:
-            zero_cognates_df = pd.read_csv(f'{results_dir}/{model_pair[2]}/all_results.csv')
-            zero_cognates_df.loc[:, 'model'] = 'zero_cognates'
-            zero_cognates_df['sentence_idx'] = zero_cognates_df.apply(
-                lambda x: hash_string(f'{x.message}{x.epoch}{x.network_num}'), axis=1)
-            zero_cognates_sentences = zero_cognates_df.loc[zero_cognates_df.sentence_idx.isin(
-                sentences_with.sentence_idx)].copy()
-            zero_cognates_sentences.drop(zero_cognates_sentences.loc[zero_cognates_sentences.meaning == 0].index,
-                                         inplace=True)
-            sentences_to_test = pd.concat([sentences_with, sentences_without, zero_cognates_sentences], sort=False)
-        else:
-            sentences_to_test = pd.concat([sentences_with, sentences_without], sort=False)
+        sentences_to_test = pd.concat([sentences_with, sentences_without], sort=False)
 
         sentences_to_test.loc[sentences_to_test.concept_position == 'None', 'concept_position'] = -1
         sentences_to_test.loc[sentences_to_test.first_switch_position == 'None', 'first_switch_position'] = -1
@@ -99,13 +78,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
 
         only_allow_identical_sentences = False
         if only_allow_identical_sentences:
-            groupby = ['sentence_idx', 'concept_position'] if False else 'sentence_idx'
-            count_correct = sentences_to_test.groupby(groupby).count()
-            # count_correct_non_unique = sentences_to_test.groupby(groupby).count()
-            # count_correct_num = count_correct_non_unique.nunique()
-            # print(count_correct_num)
-            # count_correct = count_correct_non_unique.loc[count_correct_non_unique['sentence_idx'].isin(
-            #    count_correct_num['sentence_idx'] == 1)]
+            count_correct = sentences_to_test.groupby('sentence_idx').count()
             sentences_to_test = sentences_to_test.loc[sentences_to_test['sentence_idx'].isin(
                 count_correct[count_correct['model'] == len(model_pair)].index)]
             print('final sentences to test:', len(sentences_to_test))
@@ -118,7 +91,7 @@ def create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only,
         group_models(results_dir, fname)
 
 
-def group_models(results_dir, fname, make_exclusive=False):
+def group_models(results_dir, fname, make_exclusive=False, per_switch_direction=False):
     print(f'{results_dir}/{fname}')
     df = pd.read_csv(f'{results_dir}/{fname}', dtype={'switched_before': int, 'switched_at': int,
                                                       'switched_right_after': int, 'switched_second_after': int,
@@ -142,9 +115,11 @@ def group_models(results_dir, fname, make_exclusive=False):
         df['switched_at'] = df.apply(lambda x: 0 if x['switched_before'] == 1 else x['switched_at'], axis=1)
     df.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}{fname}')
 
-    groups = ['epoch', 'network_num', 'model', 'switch_from']
+    groups = ['epoch', 'network_num', 'model']
     if 'model_name' in df:
         groups.append('model_name')
+    if per_switch_direction:
+        groups.append('switch_from')
 
     gb = df.groupby(groups).apply(lambda dft: pd.Series(
         {'code_switched': dft.is_code_switched.sum(),
@@ -224,11 +199,11 @@ def cross_model_non_pairwise_csv(results_dir, models, create_files=True, only_co
 
 
 def create_all_model_csv_files(results_dir, create_csv=True, models=('ff',), only_last_epoch=True,
-                               create_group=True, poi_at_end_only=False):
+                               create_group=True, per_switch_direction=False):
     if create_csv:
         for m in models:
             print(results_dir, m)
-            create_cognate_or_false_friend_model_csv_files(results_dir, poi_at_end_only, models=(f'{m}1', f'{m}2'),
+            create_cognate_or_false_friend_model_csv_files(results_dir, models=(f'{m}1', f'{m}2'),
                                                            false_friends=True if 'ff' in m else False)
 
     for m in models:
@@ -242,13 +217,16 @@ def create_all_model_csv_files(results_dir, create_csv=True, models=('ff',), onl
                 if only_last_epoch:
                     df = df[df.epoch == df.epoch.max()]
                 all_df.append(df)
-        pd.concat(all_df, sort=False).to_csv(f'{results_dir}/{m}_models_merged.csv', index=False,
-                                             columns=['epoch', 'network_num', 'sentence_idx', 'model', 'meaning',
-                                                      'switch_from', 'is_code_switched', 'switched_type',
-                                                      'switched_before', 'switched_at', 'switched_right_after',
-                                                      'switched_second_after', 'switched_after_anywhere',
-                                                      'first_switch_position', 'concept_position',
-                                                      'produced_sentence_length'])
+
+        columns = ['epoch', 'network_num', 'sentence_idx', 'model', 'meaning',
+                   'is_code_switched', 'switched_type',
+                   'switched_before', 'switched_at', 'switched_right_after',
+                   'switched_second_after', 'switched_after_anywhere',
+                   'first_switch_position', 'concept_position',
+                   'produced_sentence_length']
+        if per_switch_direction:
+            columns.append('switch_from')
+        pd.concat(all_df, sort=False).to_csv(f'{results_dir}/{m}_models_merged.csv', index=False, columns=columns)
         if create_group:
             group_models(results_dir, f'{m}_models_merged.csv')
 
@@ -256,8 +234,8 @@ def create_all_model_csv_files(results_dir, create_csv=True, models=('ff',), onl
 def pairwise_cross_model_comparison(results_dir, models=('10cog', '20cog', '30cog'), only_last_epoch=True,
                                     only_common_sentences=False, create_files=False):
     if create_files:
-        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=True if 'eos' in results_dir else False,
-                                   create_csv=False, create_group=True, only_last_epoch=only_last_epoch)
+        create_all_model_csv_files(results_dir, models=models, create_csv=False, create_group=True,
+                                   only_last_epoch=only_last_epoch)
 
     all_df = []
     for m in models:
@@ -297,8 +275,8 @@ def non_pairwise_cross_model_comparison(results_dir, create_files=True):
 
 def cognate_simulations(results_dir, models, create_files=True, plot_items=True, only_last_epoch=False):
     if create_files:
-        create_all_model_csv_files(results_dir, models=models, poi_at_end_only=True if 'eos' in results_dir else False,
-                                   create_csv=True, create_group=True, only_last_epoch=only_last_epoch)
+        create_all_model_csv_files(results_dir, models=models, create_csv=True, create_group=True,
+                                   only_last_epoch=only_last_epoch)
 
     if plot_items:
         plt = Plotter(results_dir=results_dir)
@@ -347,6 +325,7 @@ def code_switching_patterns_model_comparison():
         # plt.plot_code_switch_types_per_model()
         # plt.plot_code_switche_types_per_pos_for_all_models()
 
+
 def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/messageless_balanced',
                                languages=['en', 'es']):
     df = pd.read_csv(f'{results_dir}/performance_per_lang.csv',
@@ -359,9 +338,9 @@ def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/mess
 cognate_list_fname = None  # 'all_cognates.in'
 
 if __name__ == "__main__":
-    code_switching_patterns_model_comparison()
-    # cognate_simulations(create_files=True,
-    #                    results_dir='../../simulations/cognates_paper/within_model/balanced_results/generic_test',
-    #                    models=('cog',))
+    # code_switching_patterns_model_comparison()
+    cognate_simulations(create_files=True,
+                        results_dir='../../simulations/cognate_minimal_30/evaluation/generic/enes/enes/',
+                        models=('cog',))
     # non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')

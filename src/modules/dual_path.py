@@ -383,9 +383,9 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = 'the guitar está pateando the cushion .'
-                        target_sentence = 'the man is kicking the cushion .'
-                        target_lang = 'en'
+                        produced_sentence = 'un padre da la llave to una girl .'
+                        target_sentence = 'una girl da la llave a_ un padre .'
+                        target_lang = 'es'
                         logging.info(f'Debugging sentence pair: {produced_sentence} target: {target_sentence}')
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
