@@ -436,9 +436,9 @@ class DualPath:
                                                                                          pos_interest)
                                     elif self.inputs.concepts_to_evaluate:
                                         evaluated_concept_idx = next(iter(set(produced_idx).intersection(
-                                            self.inputs.concepts_to_evaluate)))
-                                        concept_position = produced_idx.index(evaluated_concept_idx)
+                                            self.inputs.concepts_to_evaluate)), None)
                                         if evaluated_concept_idx:
+                                            concept_position = produced_idx.index(evaluated_concept_idx)
                                             (switched_before, switched_at, switched_right_after,
                                              switched_second_after, switched_after_anywhere, switched_before_es_en,
                                              switched_at_es_en, switched_right_after_es_en, switched_second_after_es_en,

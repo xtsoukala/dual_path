@@ -337,6 +337,18 @@ def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/mess
 
 cognate_list_fname = None  # 'all_cognates.in'
 
+
+def plot_l1_l2_performance_cognate_models(results_dir='simulations/cognate_minimal_30/evaluation/generic/enes/enes'):
+    plt = Plotter(results_dir=results_dir)
+    for m in ['cog1', 'cog2']:
+        df = pd.read_csv(f'{results_dir}/{m}/performance_per_lang.csv',
+                         index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
+        l2_lang = results_dir[-2:]
+        lang = results_dir[-4:-2]
+        plt.performance(df[df.switch_from == lang], fname=f'l1_performance_{m}_{lang}', include_code_switches=True)
+        plt.l2_performance(df, l2_lang=l2_lang, fname=f'l2_performance_{m}_{l2_lang}', include_code_switches=True)
+
+
 if __name__ == "__main__":
     # code_switching_patterns_model_comparison()
     cognate_simulations(create_files=True,

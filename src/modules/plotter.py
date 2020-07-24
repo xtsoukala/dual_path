@@ -426,7 +426,7 @@ class Plotter:
         plot_labels = {'l2_performance_enes_es': 'L1 English model tested on Spanish',
                        'l2_performance_esen_en': 'L1 Spanish model tested on English'}
         plt.xlabel('epochs')
-        plt.ylabel(plot_labels[fname])
+        plt.ylabel(plot_labels.get(fname, ''))
         plt.ylim([0, ylim])
         plt.yticks(pd.np.arange(0, ylim + 1, step=10))
         plt.xlim([ax.get_xticks()[0], ax.get_xticks()[-1]])
