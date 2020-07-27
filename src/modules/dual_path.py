@@ -383,9 +383,9 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = 'the brother has un cojín .'
-                        target_sentence = 'the brother pushes a cushion .'
-                        target_lang = 'en'
+                        produced_sentence = 'a mother has the toy .'
+                        target_sentence = 'una madre tiene el toy .'
+                        target_lang = 'es'
                         logging.info(f'Debugging sentence pair: {produced_sentence} target: {target_sentence}')
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
                         produced_pos = self.inputs.sentence_pos(produced_idx)
@@ -424,9 +424,10 @@ class DualPath:
                                                                                            target_sentence_idx,
                                                                                            target_lang,
                                                                                            top_down_language_activation)
-                                if top_down_language_activation and cs_type == "inter-sentential":
+                                if cs_type == "inter-sentential":  # and top_down_language_activation?
                                     correct_meaning = True
-                                elif cs_type:  # TODO: check the failed sentences too
+                                    code_switched = False  # Assumption: we are not interested in inter-sentential
+                                elif cs_type:  # Correct CS only. TODO: check the failed sentences too
                                     correct_meaning = True
                                     if pos_interest and pos_interest in produced_pos:
                                         (switched_before, switched_right_before, switched_right_after,

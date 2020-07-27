@@ -216,13 +216,13 @@ class InputFormatter:
         return not is_grammatical, not has_flex_order
 
     def test_for_flexible_order(self, out_sentence_idx, trg_sentence_idx, ignore_det=False,
-                                restrict_subject_position=False):
+                                num_subject_positions_to_test_separately=0):
         """
         :param out_sentence_idx:
         :param trg_sentence_idx:
         :param ignore_det: Whether to count article definiteness (a/the) and gender (e.g., la, el) as a mistake
-        :param restrict_subject_position: When scrumbling the sentence position, the model may produce the subject
-        position at the end, which changes the meaning (e.g., "the son throws the key to a woman" instead of
+        :param num_subject_positions_to_test_separately: When scrumbling the sentence position, the model may produce
+        the subject position at the end, which changes the meaning (e.g., "the son throws the key to a woman" instead of
         "the woman throws the key to the son"). We need to restrict this by checking the subject position separately.
         :return: if produced sentence was not identical to the target one, check if the meaning was correct but
         expressed with a different syntactic structure (due to, e.g., priming)
@@ -231,13 +231,14 @@ class InputFormatter:
         ignore_idx = self.to_prepositions_idx
         if ignore_det:
             ignore_idx.extend(self.determiners)
-        if restrict_subject_position and len(trg_sentence_idx) > 2:  # arbitrarily remove 2 first words for now
-            subject_trg = trg_sentence_idx[:2]
-            subject_out = out_sentence_idx[:2]
+        if (num_subject_positions_to_test_separately and
+                len(trg_sentence_idx) > num_subject_positions_to_test_separately):
+            subject_trg = trg_sentence_idx[:num_subject_positions_to_test_separately]
+            subject_out = out_sentence_idx[:num_subject_positions_to_test_separately]
             correct_subject_position = self.same_unordered_lists(filter(lambda i: i not in ignore_idx, subject_out),
                                                                  filter(lambda i: i not in ignore_idx, subject_trg))
-            trg_sentence_idx = trg_sentence_idx[2:]
-            out_sentence_idx = out_sentence_idx[2:]
+            trg_sentence_idx = trg_sentence_idx[num_subject_positions_to_test_separately:]
+            out_sentence_idx = out_sentence_idx[num_subject_positions_to_test_separately:]
         else:
             correct_subject_position = True
         if (correct_subject_position and
@@ -287,7 +288,8 @@ class InputFormatter:
             if switch_type:
                 for translated_sentence_idx in translated_sentence_candidates:  # check translation validity
                     if self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx,
-                                                    restrict_subject_position=True):
+                                                    num_subject_positions_to_test_separately=(1 if 'pron' in out_pos
+                                                    else 3 if 'adj' in out_pos else 2)):
                         cache = switch_type, switch_pos
                         self.code_switched_type_cache[out_idx] = cache
                         return cache
@@ -312,7 +314,7 @@ class InputFormatter:
         non_shared_idx = list(filter(lambda i: i not in trg_sentence_idx, out_sentence_idx))
         check_idx = [i for i in non_shared_idx if (i in self.false_friend_idx or
                                                    target_lang not in self.lang_indices[i])]
-        if target_lang and (not check_idx or check_idx + [0] == out_sentence_idx):
+        if target_lang and (not check_idx or check_idx == [i for i in out_sentence_idx if i not in self.shared_idx]):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
             return "inter-sentential", False
@@ -333,6 +335,8 @@ class InputFormatter:
         return None
 
     def translate_idx_into_monolingual_candidates(self, out_sentence_idx, trg_sentence_idx, trg_lang):
+        # FIXME: This translates a sentence word-by-word. It only works if the syntactic structures can be aligned.
+        # For instance, "a busy uncle" will be translated as "un ocupado tío", not "un tío ocupado". Create rules?
         out_idx = repr(out_sentence_idx)
         cache = self.query_cache(out_idx, self.translation_cache)
         if not cache:
@@ -343,7 +347,9 @@ class InputFormatter:
         return cache
 
     def examine_sentences_for_cs_type(self, translated_sentence_idx, out_sentence_idx, out_pos, trg_sentence_idx):
-        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx, restrict_subject_position=True):
+        if not self.test_for_flexible_order(translated_sentence_idx, trg_sentence_idx,
+                                            num_subject_positions_to_test_separately=(1 if 'pron' in out_pos else
+                                            3 if 'adj' in out_pos else 2)):
             return False  # output and translated messages are not (flex-)identical, code-switch has wrong meaning
         check_idx = list(filter(lambda i: (i not in trg_sentence_idx and i not in self.shared_idx_no_false_friends),
                                 out_sentence_idx))
@@ -636,12 +642,12 @@ class InputFormatter:
                             concept, input_activation = concept.split(':')
                         if concept in self.identifiability:
                             weights_role_identif[self.roles_idx[role]][self.identifiability_idx[concept]] = (
-                                self.fixed_identif * float(input_activation) if input_activation
-                                else self.fixed_identif)
+                                self.fixed_identif * float(input_activation)
+                                if input_activation else self.fixed_identif)
                         elif concept in self.concepts:
                             weights_role_concept[self.roles_idx[role]][self.concept_idx[concept]] = (
-                                    self.fixed_weights * float(input_activation)
-                                    if input_activation else self.fixed_weights)
+                                self.fixed_weights * float(input_activation)
+                                if input_activation else self.fixed_weights)
                         elif concept not in ['COG', 'FF']:
                             sys.exit(f"No concept found: {concept} ({message})")
         return (event_sem_activations, target_lang_activations, target_language, weights_role_concept,
