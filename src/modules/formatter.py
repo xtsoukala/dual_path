@@ -221,6 +221,9 @@ class InputFormatter:
         :param out_sentence_idx:
         :param trg_sentence_idx:
         :param ignore_det: Whether to count article definiteness (a/the) and gender (e.g., la, el) as a mistake
+        :param restrict_subject_position: When scrumbling the sentence position, the model may produce the subject
+        position at the end, which changes the meaning (e.g., "the son throws the key to a woman" instead of
+        "the woman throws the key to the son"). We need to restrict this by checking the subject position separately.
         :return: if produced sentence was not identical to the target one, check if the meaning was correct but
         expressed with a different syntactic structure (due to, e.g., priming)
         """
@@ -229,10 +232,17 @@ class InputFormatter:
         if ignore_det:
             ignore_idx.extend(self.determiners)
         if restrict_subject_position and len(trg_sentence_idx) > 2:  # arbitrarily remove 2 first words for now
+            subject_trg = trg_sentence_idx[:2]
+            subject_out = out_sentence_idx[:2]
+            correct_subject_position = self.same_unordered_lists(filter(lambda i: i not in ignore_idx, subject_out),
+                                                                 filter(lambda i: i not in ignore_idx, subject_trg))
             trg_sentence_idx = trg_sentence_idx[2:]
             out_sentence_idx = out_sentence_idx[2:]
-        if self.same_unordered_lists(filter(lambda i: i not in ignore_idx, out_sentence_idx),
-                                     filter(lambda i: i not in ignore_idx, trg_sentence_idx)):
+        else:
+            correct_subject_position = True
+        if (correct_subject_position and
+                self.same_unordered_lists(filter(lambda i: i not in ignore_idx, out_sentence_idx),
+                                          filter(lambda i: i not in ignore_idx, trg_sentence_idx))):
             flexible_order = True
         return flexible_order
 
@@ -299,11 +309,9 @@ class InputFormatter:
         # Check if switch is after the first word:
         if shared_idx == out_sentence_idx[0]:
             return "alternational", out_pos[1]
-
         non_shared_idx = list(filter(lambda i: i not in trg_sentence_idx, out_sentence_idx))
         check_idx = [i for i in non_shared_idx if (i in self.false_friend_idx or
                                                    target_lang not in self.lang_indices[i])]
-
         if target_lang and (not check_idx or check_idx + [0] == out_sentence_idx):
             # all words were in the "non-target" language. It doesn't really count as inter-sentential as
             # no language was set at the beginning of the sentence
@@ -561,7 +569,7 @@ class InputFormatter:
     @staticmethod
     def map_to_sentence_pos(word_idx_list, sentence_idx, sentence_pos):
         idx = [sentence_idx.index(v) for v in word_idx_list]
-        return list(map(lambda x: sentence_pos[x], idx))
+        return [sentence_pos[x] for x in idx]
 
     def sentence_from_indices(self, sentence_idx):
         """

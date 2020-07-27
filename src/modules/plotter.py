@@ -358,6 +358,8 @@ class Plotter:
 
     def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True,
                     include_code_switches=False, max_epochs=None):
+        if df.empty:
+            import sys; sys.exit("Cannot plot performance, the dataframe is empty")
         if max_epochs:
             df = df[df.epoch < max_epochs + 1]
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,

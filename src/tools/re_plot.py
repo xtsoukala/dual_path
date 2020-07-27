@@ -338,21 +338,35 @@ def plot_l1_with_code_switches(results_dir = '../../simulations/messageless/mess
 cognate_list_fname = None  # 'all_cognates.in'
 
 
-def plot_l1_l2_performance_cognate_models(results_dir='simulations/cognate_minimal_30/evaluation/generic/enes/enes'):
+def plot_l1_l2_performance_cognate_models(results_dir='../../simulations/cognates/evaluation'):
     plt = Plotter(results_dir=results_dir)
-    for m in ['cog1', 'cog2']:
-        df = pd.read_csv(f'{results_dir}/{m}/performance_per_lang.csv',
-                         index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
-        l2_lang = results_dir[-2:]
-        lang = results_dir[-4:-2]
-        plt.performance(df[df.switch_from == lang], fname=f'l1_performance_{m}_{lang}', include_code_switches=True)
-        plt.l2_performance(df, l2_lang=l2_lang, fname=f'l2_performance_{m}_{l2_lang}', include_code_switches=True)
+    for testset in ['bos', 'eos', 'generic']:
+        for model in ['balanced', 'enes', 'esen']:
+            for m in ['cog1', 'cog2']:
+                print(f'{results_dir}/{testset}/{model}/{m}/performance_per_lang.csv')
+                df = pd.read_csv(f'{results_dir}/{testset}/{model}/{m}/performance_per_lang.csv',
+                                 index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
+                l2_lang = model[-2:] if model != 'balanced' else None
+                lang = [model[-4:-2]] if model != 'balanced' else ['en', 'es']
+                if model != 'balanced':
+                    df.l2_epoch = 10
+                print(lang, l2_lang)
+                for l in lang:
+                    plt.performance(df[df.switch_from == l], fname=f'l1_{testset}_{model}_{m}_{l}',
+                                    include_code_switches=True)
+                if l2_lang:
+                    plt.l2_performance(df, l2_lang=l2_lang, fname=f'l2_{testset}_{model}_{m}_{l2_lang}',
+                                       include_code_switches=True)
 
 
 if __name__ == "__main__":
+    # plot_l1_l2_performance_cognate_models()
     # code_switching_patterns_model_comparison()
-    cognate_simulations(create_files=True,
-                        results_dir='../../simulations/cognate_minimal_30/evaluation/generic/enes/enes/',
-                        models=('cog',))
+    results_dir = '../../simulations/cognates/evaluation'
+    for testset in ['bos', 'eos', 'generic']:
+        for model in ['balanced', 'enes', 'esen']:
+            cognate_simulations(create_files=True,
+                                results_dir=f'{results_dir}/{testset}/{model}',
+                                models=('cog',))
     # non_pairwise_cross_model_comparison(create_files=False,
     #                                    results_dir='../../simulations/cognates_paper/cross_model_non_pairwise/')
