@@ -66,6 +66,8 @@ if __name__ == "__main__":
     parser.add_argument('--trainingset', '--training', default="training.in",
                         help='File name that contains the message-sentence pair for training.')
     parser.add_argument('--testset', help='Test set file name')
+    parser.add_argument('--primingset', 
+                        help='File name that contains the message-sentence pairs for the priming experiment.')
     parser.add_argument('--languages', help='To generate a new set, specify the languages (e.g., en, es)', nargs='*',
                         default=['en', 'es'], type=str.lower)
     parser.add_argument('--target_lang', nargs='*', help='Values for the target language node. It may differ from the '
@@ -159,6 +161,8 @@ if __name__ == "__main__":
                         help='Run false friends experiment', default=False)
     parser.add_argument('--aux', dest='auxiliary_experiment', action='store_true', default=False,
                         help='Run auxiliary asymmetry experiment')
+    parser.add_argument('--priming', dest='priming_experiment', action='store_true',
+                        help='Run priming experiment')
     parser.add_argument('--tener', dest='replace_haber', action='store_true', default=False,
                         help='Run auxiliary asymmetry experiment and replace all instances of "haber" with "tener"')
     parser.add_argument('--synonym', dest='test_haber_frequency', action='store_true', default=False,
@@ -218,6 +222,10 @@ if __name__ == "__main__":
 
     if auxiliary_experiment or cognate_experiment or args.false_friends:
         args.activate_both_lang = True
+
+    if args.priming_experiment:
+        args.eval_test = False
+        args.only_evaluate = True
 
     cognate_list = []
     if args.cognate_list:
@@ -313,7 +321,8 @@ if __name__ == "__main__":
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
                                      false_friends_lexicon=args.false_friends_lexicon, determinerpronoun=args.defpro,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction)
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction, 
+                                     priming_experiment=args.priming_experiment, priming_set = args.primingset)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
@@ -326,7 +335,7 @@ if __name__ == "__main__":
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
-                     epoch_deviation=args.epoch_dev, srn_only=args.srn_only)
+                     epoch_deviation=args.epoch_dev, srn_only=args.srn_only, priming_experiment=args.priming_experiment)
 
     Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 

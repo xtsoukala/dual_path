@@ -2,14 +2,15 @@
 from operator import lt, ge, itemgetter
 import shutil
 from itertools import product, zip_longest
-from . import defaultdict, Counter, pd, os, zeros, subprocess, sys, logging
+from . import defaultdict, Counter, pd, os, zeros, subprocess, sys, logging, np
 
 
 class InputFormatter:
     def __init__(self, directory, fixed_weights, fixed_weights_identif, language, training_set_name, test_set_name,
                  overt_pronouns, use_semantic_gender, prodrop, use_word_embeddings, replace_haber_tener,
                  test_haber_frequency, num_training, messageless_decimal_fraction, auxiliary_experiment,
-                 cognate_list, false_friends_lexicon, concepts_to_evaluate, determinerpronoun):
+                 cognate_list, false_friends_lexicon, concepts_to_evaluate, determinerpronoun, priming_experiment,
+                 priming_set):
         """ This class mostly contains helper functions that set the I/O for the Dual-path model (SRN)."""
         self.L = self.get_languages_with_idx(language)
         self.directory = directory  # folder that contains input files and where the results are saved
@@ -114,6 +115,8 @@ class InputFormatter:
         self.trainlines_df, self.allowed_structures, self.num_test = None, None, None
         self.testlines_df, self.test_sentences_with_pronoun = None, None
         self.same_unordered_lists = lambda x, y: Counter(x) == Counter(y)
+        self.priming_experiment = priming_experiment
+        self.priming_set = priming_set
 
     def get_languages_with_idx(self, languages):
         return {k + 1: v for k, v in enumerate(languages)}
@@ -505,7 +508,12 @@ class InputFormatter:
 
     def read_set_to_df(self, test=False):
         set_name = self.testset if test else self.training_set
-        df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
+
+        if self.priming_set:
+            df = pd.read_csv(self.priming_set, names=['target_sentence', 'message'],
+                         sep='##', engine='python')
+        else:
+            df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
                          sep='##', engine='python')
         df.message = df.message.str.strip()  # strip whitespace
         if self.cognate_list:
@@ -533,6 +541,24 @@ class InputFormatter:
         df['target_pos'] = df.target_sentence_idx.apply(self.sentence_pos)
         (event_sem_activations, target_lang_act, df['lang'], weights_role_concept, weights_role_identif,
          df['event_sem_message']) = zip_longest(*df.message.apply(self.get_message_info))
+
+        if self.priming_experiment and test:
+            df['trans_verb_idx'] = None
+            
+            df['alt_sentence_idx'] = df.apply(lambda x: self.active_to_passive(x.target_sentence_idx, x.message), axis=1)
+            df['alt_sentence'] = df.alt_sentence_idx.apply(self.sentence_from_indices)
+
+            # After generating alt_sentences, delete messages for prime sentences
+            df.iloc[::2,df.columns.get_loc('message')] = np.nan
+            
+            df_half_idx = int(len(df)/2)
+
+            # For the second half of prime sentences, change from active to passive
+            df.iloc[df_half_idx::2, df.columns.get_loc('target_sentence')] = df.iloc[df_half_idx::2, df.columns.get_loc('alt_sentence')]
+            df.iloc[df_half_idx::2, df.columns.get_loc('target_sentence_idx')] = df.iloc[df_half_idx::2, df.columns.get_loc('alt_sentence_idx')]
+
+            df['sentence_structure'] = df.target_sentence_idx.apply(self.get_sentence_structure)
+            
         return df, weights_role_concept, weights_role_identif, event_sem_activations, target_lang_act
 
     def read_allowed_pos(self):
@@ -571,6 +597,73 @@ class InputFormatter:
         :return: the category of the word (noun, verb etc)
         """
         return self.pos[word_idx]
+
+    def active_to_passive(self, active_sentence_idx, message=''):
+        """
+        :param active_sentence_idx: list with sentence indices
+        :param message: string
+        :return: list with indices of passive sentence
+        """
+
+        # Get language from message info
+        (event_sem_activations, target_lang_activations, lang, weights_role_concept,
+                weights_role_identif, event_sem_message) = self.get_message_info(message)
+        
+        passive_sentence_idx = active_sentence_idx
+        
+        self.transitive_idx = self.df_query_to_idx("type == 'transitive'")
+        self.past_idx = self.df_query_to_idx("pos == 'past'", lang)
+        self.par_idx = self.df_query_to_idx("pos == 'prf'", lang)
+        self.by_idx = self.df_query_to_idx("pos == 'by'", lang)
+        self.is_idx = self.df_query_to_idx("pos == 'aux' and tense == 'present' and aspect == 'perfect_pass'", lang)
+        self.was_idx = self.df_query_to_idx("pos == 'aux' and tense == 'past' and aspect == 'perfect_pass'", lang)
+        self.she_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'F' and type == 'subject'", lang)
+        self.he_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'M' and type == 'subject'", lang)
+        self.her_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'F' and type == 'prep-object'", lang)
+        self.him_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'M' and type == 'prep-object'", lang)
+        
+        
+        trans_verb_idx = None
+        
+        for i in range(len(active_sentence_idx)):
+            if active_sentence_idx[i] in self.transitive_idx:
+                trans_verb_idx = i
+        
+        # Passive sentence starts with object of active sentence
+        passive_sentence_idx = active_sentence_idx[trans_verb_idx+1:-1]
+        
+        # Append auxiliary verb
+        if active_sentence_idx[trans_verb_idx+1] == self.past_idx[0]:
+            del passive_sentence_idx[0]
+            passive_sentence_idx += self.was_idx
+        else:
+            passive_sentence_idx += self.is_idx
+            
+        # Append transitive verb, '-par' and 'by'  
+        passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx + self.by_idx
+        
+        # Passive sentence ends with subject (and optional adjective) of active sentence and period
+        passive_sentence_idx += active_sentence_idx[:trans_verb_idx] + [active_sentence_idx[-1]]
+                 
+        # Change pronoun from subject to object
+        if passive_sentence_idx[-2] == self.she_idx[0]:
+            passive_sentence_idx[-2] = self.her_idx[0]
+        elif passive_sentence_idx[-2] == self.he_idx[0]:
+            passive_sentence_idx[-2] = self.him_idx[0]
+
+        return passive_sentence_idx
+
+    def get_sentence_structure(self, sentence_idx):
+        """
+        :param sentence_idx: list with sentence indices
+        :return: sentence structure, either active or passive
+        """
+        self.by_idx = self.df_query_to_idx("pos == 'by'")
+        
+        if any(idx in self.by_idx for idx in sentence_idx):
+            return 'passive'
+               
+        return 'active'
 
     @staticmethod
     def map_to_sentence_pos(word_idx_list, sentence_idx, sentence_pos):
