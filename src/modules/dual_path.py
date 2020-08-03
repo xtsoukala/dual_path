@@ -93,11 +93,9 @@ class DualPath:
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # no stdout to console
         if name == 'test_priming':
-            #print(f'self.set_weights_folder: {self.set_weights_folder}')
             set_weights_folder = self.set_weights_folder.replace('./simulations/', '')
             filename = f'{set_weights_folder[:19]}-{self.simulation_num}-{name}'
             filename = filename.replace('/', '-')
-            #print(f'filename: {filename}')
             logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{filename}.csv"))
         else:
             logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
