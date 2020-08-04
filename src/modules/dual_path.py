@@ -562,10 +562,9 @@ class DualPath:
 
                 # We ignore periods. Quite a few sentences without periods are produced that are 
                 # otherwise correct
-                period_idx = self.inputs.df_query_to_idx("pos == '.'")
-                produced_idx_no_period = list(filter(lambda i: i not in period_idx, produced_idx))
-                target_sentence_idx_no_period = list(filter(lambda i: i not in period_idx, target_sentence_idx))
-                alt_sentence_idx_no_period = list(filter(lambda i: i not in period_idx, alt_sentence_idx))
+                produced_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], produced_idx))
+                target_sentence_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], target_sentence_idx))
+                alt_sentence_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], alt_sentence_idx))
                     
                 target_pos_no_period = self.inputs.sentence_pos(target_sentence_idx_no_period)
                 alt_pos_no_period = self.inputs.sentence_pos(alt_sentence_idx_no_period)
@@ -574,12 +573,10 @@ class DualPath:
                 has_correct_pos, has_wrong_det, has_wrong_tense, correct_meaning, cs_type = (False, False, False,
                                                                                              False, None)
                 correct_alternative_meaning, alt_has_wrong_det, alt_has_wrong_tense = (False, False, False)
+                is_grammatical, alt_is_grammatical = (False, False)
 
                 # check for zero length to prevent list index error in is_sentence_gramatical_or_flex()
-                if len(produced_pos_no_period) == 0:
-                    is_grammatical = False
-                    alt_is_grammatical = False
-                else:
+                if produced_pos_no_period:
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos_no_period,
                                                                                             target_pos_no_period,
                                                                                             produced_pos_no_period)

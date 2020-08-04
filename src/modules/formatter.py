@@ -2,7 +2,7 @@
 from operator import lt, ge, itemgetter
 import shutil
 from itertools import product, zip_longest
-from . import defaultdict, Counter, pd, os, zeros, subprocess, sys, logging, np
+from . import defaultdict, Counter, pd, os, zeros, subprocess, sys, logging
 
 
 class InputFormatter:
@@ -549,7 +549,7 @@ class InputFormatter:
             df['alt_sentence'] = df.alt_sentence_idx.apply(self.sentence_from_indices)
 
             # After generating alt_sentences, delete messages for prime sentences
-            df.iloc[::2,df.columns.get_loc('message')] = np.nan
+            df.iloc[::2,df.columns.get_loc('message')] = pd.np.nan
             
             df_half_idx = int(len(df)/2)
 
