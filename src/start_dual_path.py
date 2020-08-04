@@ -322,7 +322,7 @@ if __name__ == "__main__":
                                      false_friends_lexicon=args.false_friends_lexicon, determinerpronoun=args.defpro,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
                                      messageless_decimal_fraction=args.messageless_decimal_fraction, 
-                                     priming_experiment=args.priming_experiment, priming_set = args.primingset)
+                                     priming_experiment=args.priming_experiment, priming_set=args.primingset)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
     dualp = DualPath(hidden_size=args.hidden, learn_rate=args.lrate, final_learn_rate=args.final_lrate,
