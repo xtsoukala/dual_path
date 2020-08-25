@@ -617,10 +617,10 @@ class InputFormatter:
         self.by_idx = self.df_query_to_idx("pos == 'by'", lang)
         self.is_idx = self.df_query_to_idx("pos == 'aux' and tense == 'present' and aspect == 'perfect_pass'", lang)
         self.was_idx = self.df_query_to_idx("pos == 'aux' and tense == 'past' and aspect == 'perfect_pass'", lang)
-        self.she_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'F' and type == 'subject'", lang)
-        self.he_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'M' and type == 'subject'", lang)
-        self.her_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'F' and type == 'prep-object'", lang)
-        self.him_idx = self.df_query_to_idx("pos == 'pron' and semantic_gender == 'M' and type == 'prep-object'", lang)
+        self.she_idx = self.df_query_to_idx(f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'F' and type == 'subject'", lang)
+        self.he_idx = self.df_query_to_idx(f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'M' and type == 'subject'", lang)
+        self.her_idx = self.df_query_to_idx(f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'F' and type == 'prep-object'", lang)
+        self.him_idx = self.df_query_to_idx(f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'M' and type == 'prep-object'", lang)
         
         
         trans_verb_idx = None
@@ -638,7 +638,27 @@ class InputFormatter:
             passive_sentence_idx += self.was_idx
         else:
             passive_sentence_idx += self.is_idx
-            
+
+        if lang != 'nl':    
+            # Append transitive verb, '-par' and   
+            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
+        
+        # Add 'by' and subject (and optional adjective) of active sentence up to period
+        passive_sentence_idx += self.by_idx + active_sentence_idx[:trans_verb_idx]
+                 
+        # Change pronoun from subject to object
+        if passive_sentence_idx[-1] == self.she_idx[0]:
+            passive_sentence_idx[-1] = self.her_idx[0]
+        elif passive_sentence_idx[-1] == self.he_idx[0]:
+            passive_sentence_idx[-1] = self.him_idx[0]
+
+        if lang == 'nl':    
+            # Append transitive verb, '-par' and 'by'  
+            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
+
+        passive_sentence_idx.append(self.period_idx)
+
+        '''    
         # Append transitive verb, '-par' and 'by'  
         passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx + self.by_idx
         
@@ -650,7 +670,7 @@ class InputFormatter:
             passive_sentence_idx[-2] = self.her_idx[0]
         elif passive_sentence_idx[-2] == self.he_idx[0]:
             passive_sentence_idx[-2] = self.him_idx[0]
-
+        '''
         return passive_sentence_idx
 
     def get_sentence_structure(self, sentence_idx):
