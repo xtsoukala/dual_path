@@ -615,20 +615,21 @@ class SetsGenerator:
 
     def generate_cognate_experiment_test_sets(self, simulation_range, num_models, cognate_decimal_fraction,
                                               num_test_sentences, cognate_list=None, excluded_concepts=None):
-        if not cognate_list:
+        if cognate_list is None:
             cognate_list = []
             for m in range(num_models):
                 cognate_list.extend(self.convert_nouns_to_cognates(cognate_decimal_fraction=cognate_decimal_fraction,
                                                                    excluded_concepts=cognate_list,
                                                                    only_report_values=True))
         self.lexicon_df.loc[self.lexicon_df.concept.isin(cognate_list), 'is_cognate'] = True
-        print(cognate_list)
         if excluded_concepts:
             # awk NF 'FNR==1{print ""}1' *0cog*/input/cognates.in | sort | uniq > exclude_cognates.in
             self.excluded_concepts = list(set(excluded_concepts).difference(cognate_list))
+        print('cognate list:', cognate_list, 'excluded cognates:', excluded_concepts)
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
-        self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
+        if cognate_list:
+            self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
         Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim, num_test_sentences)
                             for sim in simulation_range)
 

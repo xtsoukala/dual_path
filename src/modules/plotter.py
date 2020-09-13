@@ -41,20 +41,26 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
-    def plot_cognate_last_epoch(self, df_name=None, xrow='model_name', hue='model', epoch=20, include_annotations=False,
+    @staticmethod
+    def plot_merged_cognate_csv(df_name='cog_balanced_enes_esen_sim'):
+        df = pd.read_csv(df_name)
+        ax = sns.barplot(x="tip", y="day", data=df)
+
+    def plot_cognate_last_epoch(self, df_name='count_all_models_merged.csv', xrow='model_name', hue='model',
+                                include_annotations=False,
                                 info_to_plot=('code_switched',), ci=95, ylim=None, lineplot=False,
                                 bbox_to_anchor=(0.5, 1.1)):
-        if not df_name:
-            df_name = 'count_all_models_merged.csv'
-        print('plot_cognate_last_epoch:', df_name)
+        print('plot_cognate_last_epoch:', df_name, f'{self.results_dir}/{df_name}')
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
-        df = df[df.epoch == epoch]
+        df = df[df.epoch == df.epoch.max()]
         for label in info_to_plot:
             if lineplot:
                 ax = sns.lineplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000, data=df)
-                plt.xlim(['10cog', '70cog'])
-                plt.ylim([0, 35])
+                plt.xlim(df[xrow].min(), df[xrow].max())
+                plt.xticks(pd.np.arange(df[xrow].min(), df[xrow].max()+1, step=5))
+                plt.ylim([0, 30])
                 bbox_to_anchor = (0.5, 1.05)
+                plt.xlabel('percentage of cognates')
                 plt.ylabel('code-switched percentage')
             else:
                 xrow = 'model' if xrow not in list(df) else xrow
@@ -64,23 +70,21 @@ class Plotter:
                     ax = sns.barplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000,
                                      data=df, errcolor='gray', errwidth=1.5)
                 else:
-                    ax = sns.barplot(x=xrow, y=f'{label}_percentage', ci=ci, n_boot=1000,
-                                     data=df, errcolor='gray', errwidth=1.5)
+                    ax = sns.barplot(x=xrow, y=f'{label}_percentage', data=df,
+                                     ci=ci, n_boot=1000, errcolor='gray', errwidth=1.5)
                 if include_annotations:
-                    self.autolabels(ax, [int(df.loc[df.model_name == modname, 'total_sentences'].sum())
-                                         for modname in df.model_name.unique()])
-            plt.xlabel('')
+                    self.autolabels(ax, [int(df.loc[df[xrow] == modname, 'total_sentences'].sum())
+                                         for modname in df[xrow].unique()])
+                plt.xlabel('')
             if ylim:
                 plt.ylim([0, ylim])
-            #plt.ylabel('Percentage of sentences with code-switches')
-            #ax.set_xticklabels([x.replace('cog', '% cognates') for x in df.model_name])
             handles, labels = ax.get_legend_handles_labels()
             if len(labels) > 1:
                 plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=bbox_to_anchor,
-                           handles=handles, labels=labels)
+                           handles=handles[1:], labels=labels[1:])
             plt.savefig(self.get_plot_path(df.network_num.max(),
                                            f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("_models_merged", "")}'
-                                           f'epoch{epoch}{"_line" if lineplot else ""}_'
+                                           f'epoch{df.epoch.max()}{"_line" if lineplot else ""}_'
                                            f'sent{int(df.total_sentences.sum())}{hue if hue else ""}'))
             plt.close()
 
@@ -183,8 +187,6 @@ class Plotter:
                     switches = grouped[(grouped.switched_type == switch_type) &
                                        (grouped.pos_of_switch_point == switch_point) &
                                        (grouped.switch_from == lang)].code_switched
-                    print(switches)
-                    print(mean_correct_sentences)
 
                     switches_percentage = switches * 100 / mean_correct_sentences
                     switches_percentage_mean = switches_percentage.mean()
@@ -481,9 +483,9 @@ class Plotter:
                                  index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
                 df = df[df.epoch == (l2_epoch if m == 'early' else df.epoch.max())]
                 print(df.epoch.max())
-                sum = df[f'alternational_percentage'] + df[f'insertional_percentage'] + df[f'ambiguous_percentage']
-                low, high = boot.ci(sum, n_samples=n_sample)
-                print('TOTAL', round(sum.mean(), 1), 'CI:', round(low, 1), round(high, 1))
+                cs_sum = df[f'alternational_percentage'] + df[f'insertional_percentage'] + df[f'ambiguous_percentage']
+                low, high = boot.ci(cs_sum, n_samples=n_sample)
+                print('TOTAL', round(cs_sum.mean(), 1), 'CI:', round(low, 1), round(high, 1))
                 for stype in switch_type:
                     low, high = boot.ci(df[f'{stype}_percentage'], n_samples=n_sample)
                     print(stype, round(df[f'{stype}_percentage'].mean(), 1), 'CI:', round(low, 1), round(high, 1))
@@ -496,49 +498,15 @@ class Plotter:
                     print('per lang:', lang)
                     df_lang = df[df.switch_from == lang]
 
-                    sum = (df_lang[f'alternational_percentage'] + df_lang[f'insertional_percentage']
-                           + df_lang[f'ambiguous_percentage'])
-                    low, high = boot.ci(sum, n_samples=n_sample)
-                    print('TOTAL per lang', round(sum.mean(), 1), 'CI:', round(low, 1), round(high, 1))
+                    cs_sum = (df_lang[f'alternational_percentage'] + df_lang[f'insertional_percentage']
+                              + df_lang[f'ambiguous_percentage'])
+                    low, high = boot.ci(cs_sum, n_samples=n_sample)
+                    print('TOTAL per lang', round(cs_sum.mean(), 1), 'CI:', round(low, 1), round(high, 1))
 
                     for stype in switch_type:
                         low, high = boot.ci(df_lang[f'{stype}_percentage'], n_samples=n_sample)
                         print(stype, round(df_lang[f'{stype}_percentage'].mean(), 1),
                               'CI:', round(low, 1), round(high, 1))
-
-    def print_switches_per_model_OLD(self, models=('early', 'enes', 'esen'), l2_epoch=25,
-                                     print_per_lang=False, switch_type=('alternational', 'insertional', 'ambiguous')):
-        lang_sum = {}
-        for m in models:
-            lang_sum[m] = {'en': [], 'es': []}
-            df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/all_results.csv',
-                             index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
-            print('----------------------\n', m)
-            df = df[df.epoch == (l2_epoch if m == 'early' else df.epoch.max())]
-            correct_sentences = df.meaning.sum()
-            if print_per_lang:
-                for lang in self.languages:
-                    ll = df[df.switch_from == lang]
-                    print(lang, '->')
-                    for stype in switch_type:
-                        percentage = round(
-                            ll[ll.switched_type == stype].is_code_switched.sum() * 100 / correct_sentences,
-                            1)
-                        for pos in ll[ll.switched_type == stype].pos_of_switch_point.unique():
-                            print(stype, pos,
-                                  ll[(ll.switched_type == stype) & (
-                                              ll.pos_of_switch_point == pos)].is_code_switched.sum(),
-                                  round(ll[(ll.switched_type == stype) &
-                                           (ll.pos_of_switch_point == pos)].is_code_switched.sum() * 100 /
-                                        df[df.switch_from == lang].meaning.sum(), 1))
-                        lang_sum[m][lang].append(percentage)
-                        print(stype, percentage)
-
-        if print_per_lang:
-            print(lang_sum)
-            for m in models:
-                for lang in self.languages:
-                    print(m, lang, round(sum(lang_sum[m][lang]), 1))
 
     @staticmethod
     def get_ci(df, ci, n_samples=10000):
