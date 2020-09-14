@@ -7,8 +7,8 @@ import re
 
 class SetsGenerator:
     def __init__(self, allow_free_structure_production, lang, lexicon_csv, structures_csv, num_training,
-                 randomize, l2_decimal, l2_decimal_dev, root_simulations_path, auxiliary_experiment=False,
-                 cognate_experiment=False, input_dir=None, sim_results_dir=None, generator_timeout=60):
+                 randomize, l2_decimal, l2_decimal_dev, root_simulations_path, generator_timeout,
+                 auxiliary_experiment=False, cognate_experiment=False, input_dir=None, sim_results_dir=None):
         """
         :param allow_free_structure_production:
         """
@@ -63,7 +63,7 @@ class SetsGenerator:
         self.random.seed(simulation_number)  # set new seed each time we run a new simulation
         if self.randomize and self.l2_decimal:
             self.l2_decimal = around(self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2)
-            print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+            print(f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
                   f"L2 decimal fraction: {self.l2_decimal}")
         test_set, training_set = self.generate_general()
         if self.auxiliary_experiment:
@@ -78,23 +78,14 @@ class SetsGenerator:
         """
         return int((num_training * 100 / 80) * test_set_decimal)
 
-    def generate_general(self, num_training=None, num_test=None):
-        """
-        :param num_training: number of training sentences to be generated
-        :param num_test: number of test sentences
-        """
-        if not num_training:
-            num_training = self.num_training
-        if not num_test:
-            num_test = self.num_test
-
-        sentence_structures_train = self.generate_sentence_structures(num_training)
-        sentence_structures_test = self.generate_sentence_structures(num_test)
+    def generate_general(self):
+        sentence_structures_train = self.generate_sentence_structures(self.num_training)
+        sentence_structures_test = self.generate_sentence_structures(self.num_test)
         # save only training set if we're selecting sentences for the cognate experiment
         test_set = self.generate_sentences(sentence_structures_test, fname="test.in")
         training_set = self.generate_sentences(sentence_structures_train, fname="training.in",
                                                exclude_test_sentences=test_set)
-        assert num_test == len(test_set) and num_training == len(training_set)
+        assert self.num_test == len(test_set) and self.num_training == len(training_set)
         if self.input_dir_empty:
             self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
             self.save_lexicon_and_structures_to_csv()
@@ -628,8 +619,7 @@ class SetsGenerator:
         print('cognate list:', cognate_list, 'excluded cognates:', excluded_concepts)
         self.list_to_file("all_cognates", cognate_list)
         self.unique_cognate_per_sentence = True
-        if cognate_list:
-            self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
+        self.structures_df = self.structures_df[~self.structures_df.message.str.contains('=pron')]
         Parallel(n_jobs=-1)(delayed(self.generate_cognate_test_set)(sim, num_test_sentences)
                             for sim in simulation_range)
 
@@ -638,7 +628,7 @@ class SetsGenerator:
         self.random.seed(simulation_number)  # set new seed each time we run a new simulation
         if self.randomize and self.l2_decimal:
             self.l2_decimal = around(self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2)
-            print(f"Simulation {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+            print(f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
                   f"L2 decimal fraction: {self.l2_decimal}")
         sentence_structures_test = self.generate_sentence_structures(num_test_sentences)
         existing_training_set_sentences = self.file_set_to_list(f"{self.root_simulations_path}/"
@@ -646,6 +636,23 @@ class SetsGenerator:
         test_set = self.generate_sentences(sentence_structures_test, fname="test_cog.in",
                                            exclude_test_sentences=existing_training_set_sentences,
                                            exclude_eos_cognate=False)
+        assert num_test_sentences == len(test_set)
+
+    def generate_test_set(self, simulation_number, num_test_sentences, path_to_exclude_training_files=None):
+        self.set_new_results_dir(f"{self.root_simulations_path}/{simulation_number}", mk_new_dir=True)
+        self.random.seed(simulation_number)  # set new seed each time we run a new simulation
+        if self.randomize and self.l2_decimal:
+            self.l2_decimal = around(self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2)
+            print(f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                  f"L2 decimal fraction: {self.l2_decimal}")
+        sentence_structures_test = self.generate_sentence_structures(num_test_sentences)
+        if path_to_exclude_training_files:
+            existing_training_set_sentences = self.file_set_to_list(f"{path_to_exclude_training_files}/"
+                                                                    f"{simulation_number}/training.in")
+        else:
+            existing_training_set_sentences = None
+        test_set = self.generate_sentences(sentence_structures_test, fname="test.in",
+                                           exclude_test_sentences=existing_training_set_sentences)
         assert num_test_sentences == len(test_set)
 
     @staticmethod

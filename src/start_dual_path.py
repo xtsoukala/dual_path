@@ -100,6 +100,8 @@ if __name__ == "__main__":
     parser.add_argument('--generate_training_num', type=int, default=2000, help='Sum of test/training sentences to be '
                                                                                 'generated (only if no input was set)')
     parser.add_argument('--generate_test_num', type=int, default=600, help='Total test sentences for experiments')
+    parser.add_argument('--training_files_path', help='When generating test sentences, exclude the training.in files '
+                                                      'under this path.')
     parser.add_argument('--title', help='Title for the plots')
     parser.add_argument('--sim', type=positive_int, default=2,
                         help="training several simulations at once to take the results' average (Monte Carlo approach)")
@@ -148,6 +150,7 @@ if __name__ == "__main__":
                         help='Evaluate training sets')
     parser.add_argument('--evaluate', dest='only_evaluate', action='store_true',
                         help='Do not train, only evaluate test sets', default=False)
+    parser.add_argument('--only_generate_test', action='store_true', help='Do not run simulations', default=False)
     parser.add_argument('--continue_training', dest='continue_training', action='store_true',
                         help='Continue training for more epochs', default=False)
     parser.add_argument('--allow-free-structure', '--af', dest='free_pos', action='store_true', default=False,
@@ -214,7 +217,7 @@ if __name__ == "__main__":
                        f"{datetime.now().strftime('%H.%M')}_{''.join(args.languages)}_sim{args.sim}_h{args.hidden}_"
                        f"c{args.compress}_fw{args.fw}_e{args.epochs}")
     if os.path.exists(results_dir):
-        results_dir += datetime.now().strftime('%M.%S')
+        sys.exit(f"\nThe results path ({results_dir}) already exists, please select a different folder name.")
     os.makedirs(results_dir)
 
     if args.replace_haber or args.test_haber_frequency:
@@ -261,8 +264,8 @@ if __name__ == "__main__":
             with open(f'{given_input_path}/target_lang.in', 'w', encoding='utf-8') as f:
                 f.write(f"%s" % "\n".join(args.target_lang))
 
-    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):  # generate a set
-        from modules import SetsGenerator
+    if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):
+        from modules import SetsGenerator  # generate a set
 
         experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
                           "cognate/" if (cognate_experiment or args.false_friends or
@@ -281,8 +284,11 @@ if __name__ == "__main__":
                                    randomize=args.randomize, l2_decimal=l2_decimal, l2_decimal_dev=args.l2_decimal_dev,
                                    cognate_experiment=cognate_experiment, auxiliary_experiment=auxiliary_experiment)
 
+        excluded_concepts = set(file_to_list(args.exclude_cognates) if args.exclude_cognates else [])
+        logging.debug(excluded_concepts)
+        input_sets.excluded_concepts = excluded_concepts
+
         if args.num_cognate_models_for_test_set > 0:
-            excluded_concepts = file_to_list(args.exclude_cognates) if args.exclude_cognates else []
             input_sets.generate_cognate_experiment_test_sets(simulation_range,
                                                              cognate_decimal_fraction=args.cognate_decimal_fraction,
                                                              num_models=args.num_cognate_models_for_test_set,
@@ -290,11 +296,18 @@ if __name__ == "__main__":
                                                              num_test_sentences=args.generate_test_num,
                                                              excluded_concepts=excluded_concepts)
             quit()
+
+        if args.only_generate_test:
+            Parallel(n_jobs=-1)(delayed(input_sets.generate_test_set)(sim, args.generate_test_num,
+                                                                      args.training_files_path)
+                                for sim in simulation_range)
+            quit()
+
         if cognate_experiment:
-            input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, file_to_list(args.exclude_cognates))
+            input_sets.convert_nouns_to_cognates(args.cognate_decimal_fraction, excluded_concepts)
         elif args.false_friends:
             input_sets.convert_nouns_to_false_friends(args.cognate_decimal_fraction,
-                                                      file_to_list(args.exclude_cognates))
+                                                      excluded_concepts)
 
         Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
 
