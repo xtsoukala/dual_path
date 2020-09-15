@@ -258,7 +258,11 @@ if __name__ == "__main__":
         for sim in simulation_range:
             copy_files(src=os.path.join(existing_input_path, str(sim)),
                        dest=f"{results_dir}/{sim}", ends_with=".in")
-        num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}", encoding='utf-8'))
+
+        if os.path.exists(f"{results_dir}/{sim}/{args.trainingset}"):
+            num_training = sum(1 for line in open(f"{results_dir}/{sim}/{args.trainingset}", encoding='utf-8'))
+        else:
+            num_training = None
 
         if args.target_lang:  # replace with given target language
             with open(f'{given_input_path}/target_lang.in', 'w', encoding='utf-8') as f:
