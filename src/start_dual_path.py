@@ -301,6 +301,11 @@ if __name__ == "__main__":
                                                              excluded_concepts=excluded_concepts)
             quit()
 
+        if not args.target_lang:
+            args.target_lang = args.languages
+        with open(f'{input_dir}/target_lang.in', 'w', encoding='utf-8') as f:
+            f.write("%s" % "\n".join(args.target_lang))
+
         if args.only_generate_test:
             Parallel(n_jobs=-1)(delayed(input_sets.generate_test_set)(sim, args.generate_test_num,
                                                                       args.training_files_path)
@@ -314,11 +319,6 @@ if __name__ == "__main__":
                                                       excluded_concepts)
 
         Parallel(n_jobs=-1)(delayed(input_sets.create_input_for_simulation)(sim, ) for sim in simulation_range)
-
-        if not args.target_lang:
-            args.target_lang = args.languages
-        with open(f'{input_dir}/target_lang.in', 'w', encoding='utf-8') as f:
-            f.write("%s" % "\n".join(args.target_lang))
 
     if not args.decrease_lrate or args.continue_training:  # assumption: when training continues, lrate is NOT reduced
         logging.info(f"Learning rate will NOT be decreased, it is set to {args.final_lrate}")
