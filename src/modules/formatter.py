@@ -109,8 +109,8 @@ class InputFormatter:
         self.weights_identif_role = {'training': [], 'test': []}
         self.event_sem_activations = {'training': [], 'test': []}
         self.target_lang_act = {'training': [], 'test': []}
-        self.training_set = training_set_name
-        self.testset = test_set_name
+        self.training_set = training_set_name   #  default: training.in
+        self.testset = test_set_name  # default: test.in
         self.num_training = num_training
         self.trainlines_df, self.allowed_structures, self.num_test = None, None, None
         self.testlines_df, self.test_sentences_with_pronoun = None, None
@@ -136,11 +136,12 @@ class InputFormatter:
         elif self.test_haber_frequency:
             self.make_haber_and_tener_synonyms(new_directory)
 
-        (self.trainlines_df, self.weights_role_concept['training'], self.weights_role_identif['training'],
-         self.event_sem_activations['training'], self.target_lang_act['training']) = self.read_set_to_df()
-        self.weights_concept_role['training'] = [x.t() for x in self.weights_role_concept['training']]
-        self.weights_identif_role['training'] = [x.t() for x in self.weights_role_identif['training']]
-        self.num_training = len(self.trainlines_df)
+        if os.path.exists(os.path.join(self.directory, self.training_set)):
+            (self.trainlines_df, self.weights_role_concept['training'], self.weights_role_identif['training'],
+             self.event_sem_activations['training'], self.target_lang_act['training']) = self.read_set_to_df()
+            self.weights_concept_role['training'] = [x.t() for x in self.weights_role_concept['training']]
+            self.weights_identif_role['training'] = [x.t() for x in self.weights_role_identif['training']]
+            self.num_training = len(self.trainlines_df)
         (self.testlines_df, self.weights_role_concept['test'], self.weights_role_identif['test'],
          self.event_sem_activations['test'], self.target_lang_act['test']) = self.read_set_to_df(test=True)
         self.weights_concept_role['test'] = [x.t() for x in self.weights_role_concept['test']]
@@ -148,12 +149,12 @@ class InputFormatter:
 
         if self.messageless_decimal_fraction:
             # Create a backup of training data with all messages
-            os.system(f"mv {new_directory}/training.in {new_directory}/training_full.in")
+            os.system(f"mv {new_directory}/{self.training_set} {new_directory}/training_full.in")
             # Remove messages from randomly sampled fraction of sentences in training set
             messageless_indices = self.trainlines_df.sample(frac=self.messageless_decimal_fraction).index.values
             self.trainlines_df.loc[messageless_indices, 'message'] = ''
             # Can't use df.to_csv, because separater must be a 1-character string
-            with open(f'{new_directory}/training.in', 'w', encoding='utf-8') as f:
+            with open(f'{new_directory}/{self.training_set}', 'w', encoding='utf-8') as f:
                 for row in list(zip(self.trainlines_df['target_sentence'], self.trainlines_df['message'])):
                     f.write(f'{row[0]}## {row[1]}\n')
 
@@ -164,7 +165,7 @@ class InputFormatter:
 
     @staticmethod
     def make_haber_and_tener_synonyms(directory):
-        fname = f"{directory}/training.in"
+        fname = f"{directory}/{self.training_set}"
         sim = directory.split('/')[-1]
         num = int(subprocess.check_output(f"cat {fname} | grep -w ha | wc -l", shell=True))
         os.system(f"sed -i -e 's/ ha / tiene /g' {fname}")  # convert all "haber" to "tener"
@@ -509,12 +510,8 @@ class InputFormatter:
     def read_set_to_df(self, test=False):
         set_name = self.testset if test else self.training_set
 
-        if self.priming_set:
-            df = pd.read_csv(self.priming_set, names=['target_sentence', 'message'],
-                         sep='##', engine='python')
-        else:
-            df = pd.read_csv(os.path.join(self.directory, set_name), names=['target_sentence', 'message'],
-                         sep='##', engine='python')
+        df = pd.read_csv(os.path.join(self.directory, set_name) if not self.priming_set else self.priming_set,
+                         names=['target_sentence', 'message'], sep='##', engine='python')
         df.message = df.message.str.strip()  # strip whitespace
         if self.cognate_list:
             cognate_translation = self.lexicon_df.loc[self.lexicon_df.is_cognate == True, 'morpheme_es'].unique()
@@ -563,7 +560,8 @@ class InputFormatter:
 
     def read_allowed_pos(self):
         """ returns all (distinct) allowed POS structures in the training file (list of lists) """
-        allowed = list(map(list, set(map(tuple, self.trainlines_df.target_pos))))
+        allowed = list(map(list, set(map(tuple,
+                                         self.trainlines_df.target_pos if self.trainlines_df else self.testlines_df))))
         allowed.extend([x[:-1] for x in allowed])
         return allowed
 
