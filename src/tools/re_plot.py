@@ -93,7 +93,7 @@ def create_model_csv_files(results_dir, models=('cog1', 'cog2'), model_name='cog
         # sentences that are correctly produced among all models
         fname = f'all_epochs_{"_".join(model_pair).replace("/", "_")}.csv'
 
-        # remove sentences that have not been produced for both cognate/non-cognate
+        # remove sentences that have not been produced by both cognate/non-cognate models
         count_correct = sentences_to_test.groupby('sentence_idx').count()
         sentences_to_test = sentences_to_test.loc[sentences_to_test['sentence_idx'].isin(
             count_correct[count_correct['model'] == len(model_pair)].index)]
@@ -126,7 +126,8 @@ def group_models(results_dir, fname, make_exclusive=False, per_switch_direction=
             lambda x: (0 if (x['switched_at'] == 1) or (x['switched_before'] == 1)
                        else x['switched_right_after']), axis=1)
         df['switched_at'] = df.apply(lambda x: 0 if x['switched_before'] == 1 else x['switched_at'], axis=1)
-    df.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}{fname}')
+    df.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}{"per_lang" if per_switch_direction else ""}'
+              f'{fname}')
 
     groups = ['epoch', 'network_num', 'model']
     if 'model_name' in df:
@@ -153,7 +154,8 @@ def group_models(results_dir, fname, make_exclusive=False, per_switch_direction=
          'switched_after_anywhere_percentage': (dft.switched_after_anywhere.sum() * 100 / len(dft.meaning))
          }))
 
-    gb.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}count_{fname}')
+    gb.to_csv(f'{results_dir}/{"exclusive_" if make_exclusive else ""}{"per_lang" if per_switch_direction else ""}'
+              f'count_{fname}')
 
 
 def hash_string(message):
@@ -180,11 +182,10 @@ def create_all_model_csv_files(results_dir, only_last_epoch=True, create_csv=Tru
                    'is_code_switched', 'switched_type',
                    'switched_before', 'switched_at', 'switched_right_after',
                    'switched_second_after', 'switched_after_anywhere',
-                   'first_switch_position']
-        if per_switch_direction:
-            columns.append('switch_from')
-        pd.concat(all_df, sort=False).to_csv(f'{results_dir}/{m}_models_merged.csv', index=False, columns=columns)
-        group_models(results_dir, f'{m}_models_merged.csv')
+                   'first_switch_position', 'switch_from',
+                   'produced_sentence', 'target_sentence', 'produced_pos', 'target_pos']
+        pd.concat(all_df, sort=False).to_csv(f'{results_dir}/{m}_full_models_merged.csv', index=False, columns=columns)
+        group_models(results_dir, f'{m}_models_merged.csv', per_switch_direction=per_switch_direction)
 
 
 def pairwise_cross_model_comparison(create_files, fname='cog_models_merged', only_last_epoch=True,
@@ -215,54 +216,64 @@ def pairwise_cross_model_comparison(create_files, fname='cog_models_merged', onl
     group_models(results_dir, f'{fname}.csv')
 
     plt = Plotter(results_dir=results_dir)
-    plt.plot_cognate_last_epoch(df_name=f'count_{fname}.csv', ci=68,
+    plt.plot_cognate_last_epoch(df_name=f'count_{fname}.csv', ci=68, xaxis_step=5,
                                 info_to_plot=('code_switched',), lineplot=True)
 
 
 def non_pairwise_cross_model_comparison(results_dir='../../simulations/cog_paper/cognate_percentage/'
-                                                    'non_pairwise_training/evaluation',
-                                        create_csv=True, num_simulations=70):
+                                                    'non_pairwise_training/',
+                                        create_csv=True, num_simulations=70, remove_incorrect_meaning=True):
     if create_csv:
-        models = [i for i in range(0, num_simulations + 1, 10)]
-        num_per_unique_sentence = len(models)
-        fname = 'non_pairwise_models'
-        all_dfs = []
-        for m in models:
-            print(m)
-            df = pd.read_csv(f'{results_dir}/{m}/all_results.csv')
-            df = df[df.epoch == df.epoch.max()]
-            df.drop(df.loc[df.meaning == 0].index, inplace=True)
-            if m > 0:
-                assert len(df) == len(df[df.target_has_cognate == True])
-            df['model_name'] = m
-            df['sentence_idx'] = df.apply(lambda x: hash_string(f'{x.message}{x.network_num}'), axis=1)
-            all_dfs.append(df)
-        non_pairwise_merged = pd.concat(all_dfs, sort=False)
+        df_per_test_set = []
+        for fname in ['non_cognate_evaluation', 'cognate_evaluation']:
+            models = [i for i in range(0 if 'non' in fname else 10, num_simulations + 1, 10)]
+            num_per_unique_sentence = len(models)
+            all_dfs = []
+            for m in models:
+                print(m)
+                df = pd.read_csv(f'{results_dir}/{fname}/{m}/all_results.csv')
+                df = df[df.epoch == df.epoch.max()]
+                if remove_incorrect_meaning:
+                    df.drop(df.loc[df.meaning == 0].index, inplace=True)
+                if fname == 'cognate_evaluation':
+                    assert len(df) == len(df[df.target_has_cognate == True])
+                df['model_name'] = m
+                df['sentence_idx'] = df.apply(lambda x: hash_string(f'{x.message}{x.network_num}'), axis=1)
+                df['test_set'] = fname
+                all_dfs.append(df)
+            non_pairwise_merged = pd.concat(all_dfs, sort=False)
 
-        only_common_sentences = True
-        if only_common_sentences:
-            count_correct = non_pairwise_merged.groupby('sentence_idx').count()
-            print(num_per_unique_sentence, 'total:', len(non_pairwise_merged))
-            non_pairwise_merged = non_pairwise_merged.loc[non_pairwise_merged['sentence_idx'].isin(
-                count_correct[count_correct['model_name'] == num_per_unique_sentence].index)]
-            print('clean:', len(non_pairwise_merged))
+            only_common_sentences = True
+            if only_common_sentences:
+                count_correct = non_pairwise_merged.groupby('sentence_idx').count()
+                print(num_per_unique_sentence, 'total:', len(non_pairwise_merged))
+                non_pairwise_merged = non_pairwise_merged.loc[non_pairwise_merged['sentence_idx'].isin(
+                    count_correct[count_correct['model_name'] == num_per_unique_sentence].index)]
+                print('clean:', len(non_pairwise_merged))
 
-        gb = non_pairwise_merged.groupby(['epoch', 'network_num', 'model_name']).apply(lambda dft: pd.Series(
-            {'code_switched': dft.is_code_switched.sum(),
-             'total_sentences': len(dft.meaning),
-             'code_switched_percentage': dft.is_code_switched.sum() * 100 / len(dft.meaning)
-             }))
-        gb.to_csv(f'{results_dir}/{fname}_grouped.csv')
+            df_per_test_set.append(non_pairwise_merged)
+
+        test_sets_merged = pd.concat(df_per_test_set, sort=False)
+        test_sets_merged.to_csv(f'{results_dir}/non_pairwise_cognate_non_cognate.csv')
+
+        gb = test_sets_merged.groupby(['epoch', 'network_num', 'model_name', 'test_set']).apply(
+            lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum(),
+                                   'total_sentences': len(dft.meaning),
+                                   'code_switched_percentage': dft.is_code_switched.sum() * 100 / len(dft.meaning)
+                                   }))
+        gb.to_csv(f'{results_dir}/non_pairwise_test_sets_grouped'
+                  f'{f"_include_incorrect" if not remove_incorrect_meaning else ""}.csv')
 
     plt = Plotter(results_dir=results_dir)
-    plt.plot_cognate_last_epoch(df_name='non_pairwise_models_grouped.csv', hue=None, epoch=20,
-                                include_annotations=False, lineplot=True, ci=68)
+    plt.plot_cognate_last_epoch(df_name='non_pairwise_test_sets_grouped.csv', hue='test_set',
+                                include_annotations=False, lineplot=True, ci=68, xrow='model_name')
 
 
-def cognate_simulations(results_dir, models, only_last_epoch, create_files=True, plot_items=True):
+def cognate_simulations(results_dir, models, only_last_epoch, create_files, create_csv,
+                        plot_items, per_switch_direction):
     if create_files:
-        create_all_model_csv_files(results_dir, models=models, create_csv=True,
-                                   only_last_epoch=only_last_epoch)
+        create_all_model_csv_files(results_dir, models=models, create_csv=create_csv,
+                                   per_switch_direction=per_switch_direction, only_last_epoch=only_last_epoch)
 
     if plot_items:
         plt = Plotter(results_dir=results_dir)
@@ -286,7 +297,8 @@ def cognate_simulations(results_dir, models, only_last_epoch, create_files=True,
                              'switched_second_after', 'switched_after_anywhere') if ('eos' in results_dir or
                                                                                      'bos' in results_dir) else
                             ('code_switched',))
-            plt.plot_cognate_last_epoch(df_name=f'count_{i}_models_merged.csv', ci=68,
+            plt.plot_cognate_last_epoch(df_name=f'{"per_lang" if per_switch_direction else ""}'
+                                                f'count_{i}_models_merged.csv', ci=68,
                                         info_to_plot=info_to_plot, lineplot=False)
             # plt.plot_cognate_last_epoch(df_name=f'count_{i}_models_merged.csv', ci=68, xrow='model', hue=None,
             #                            info_to_plot=('code_switched',) + info_to_plot, epoch=30)
@@ -347,14 +359,28 @@ def plot_l1_l2_performance_cognate_models(results_dir='../../simulations/cog_pap
                                        include_code_switches=True)
 
 
+def generate_and_plot_cognate_files(per_switch_direction, results_dir='../../simulations/cog_paper', testset='generic',
+                                    simulations=['balanced', 'enes', 'esen'], create_files=True, create_csv=True,
+                                    only_last_epoch=True, plot_items=True, ):
+    for model in simulations:
+        cognate_simulations(create_files=create_files, create_csv=create_csv,
+                            only_last_epoch=only_last_epoch,
+                            results_dir=f'{results_dir}/{testset}/{model}',
+                            models=('cog',), plot_items=plot_items, per_switch_direction=per_switch_direction)
+
+
+def plot_regression_analysis_results(results_dir='../../mixed_effects_regression_analysis'):
+    plt = Plotter(results_dir=results_dir)
+    for fname, ylim in [('cog_enes_esen_sim_per_L1', 3)]:#, ('cog_enes_esen_sim_per_L2', 30),
+                        #('cog_balanced_enes_esen_sim', 26)]:
+        plt.plot_merged_cognate_csv(df_name=fname, ylim=ylim)  # cog_enes_all_esen_all_sim_per_L1')#_per_L2
+
+
 if __name__ == "__main__":
+    # Uncomment the functions below to generate new plots
     # plot_l1_l2_performance_cognate_models()
     # code_switching_patterns_model_comparison()
     # pairwise_cross_model_comparison(create_files=False)
-    results_dir = '../../simulations/cog_paper'
-    for testset in ['generic', 'eos', 'bos']:
-        for model in ['balanced', 'enes', 'esen']:
-            cognate_simulations(create_files=True,
-                                only_last_epoch=True,
-                                results_dir=f'{results_dir}/{testset}/{model}',
-                                models=('cog',))
+    # non_pairwise_cross_model_comparison(create_csv=False, remove_incorrect_meaning=True)
+    #generate_and_plot_cognate_files(per_switch_direction=True, create_files=False)
+    plot_regression_analysis_results()

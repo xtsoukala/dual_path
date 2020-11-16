@@ -41,27 +41,89 @@ class Plotter:
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), fname))
         plt.close()
 
-    @staticmethod
-    def plot_merged_cognate_csv(df_name='cog_balanced_enes_esen_sim'):
-        df = pd.read_csv(df_name)
-        ax = sns.barplot(x="tip", y="day", data=df)
+    def plot_merged_cognate_csv(self, df_name, ylim):
+        df = pd.read_csv(f'{self.results_dir}/{df_name}.csv')
+        if '_L1' in df_name:
+            sns.set_style("white")
+        groups = ['epoch', 'network_num', 'model', 'simulation']
+        if '_L' in df_name:  # L1 or L2
+            groups.append('switch_from')
+        print('enes:', len(df[df.simulation == 'enes']), ', esen', len(df[df.simulation == 'esen']),
+              ', balanced:', len(df[df.simulation == 'balanced']))
+        #print('cognate enes:', len(df[(df.simulation == 'enes')&(df.model=='cognate')]), ', esen',
+        #      len((df[df.simulation == 'esen'])&(df.model=='cognate'))))
+
+        gb = df.groupby(groups).apply(lambda dft: pd.Series(
+            {'code_switched': dft.is_code_switched.sum(),
+             'total_sentences': len(dft.meaning),
+             'switched_at': dft.switched_at.sum(),
+             'code_switched_percentage': dft.is_code_switched.sum() * 100 / len(dft.meaning),
+             'switched_at_percentage': dft.switched_at.sum() * 100 / len(dft.meaning)
+             }))
+
+        gb.to_csv(f'{self.results_dir}/count_{df_name}.csv')
+        df = pd.read_csv(f'{self.results_dir}/count_{df_name}.csv')
+
+        ax = sns.barplot(x="simulation", y="code_switched_percentage", hue="model", data=df, ci=68, n_boot=1000)
+
+        labels = ['L1 English', 'L1 Spanish'] if '_L' in df_name else ['Balanced', 'L1 English', 'L1 Spanish']
+        ax.set_xticklabels(labels)
+
+        # statistical annotation
+        x1, x2 = -0.19, 0.2  # first two columns, center of both: 0
+        x3, x4 = .8, 1.18  #
+        y = df['code_switched_percentage'].mean() + (1.7 if '_L1' in df_name else 13 if '_L2' in df_name else 12)
+        h = .1 if '_L1' in df_name else 0.5
+        col = 'k'
+        plt.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.5, c=col)  # lw: linewidth
+        plt.text((x1 + x2) * .5, y + (0.1 if '_L1' in df_name else 0.5), "***" if len(labels) == 2 else "n.s.",
+                 ha='center', va='bottom', color=col)
+
+        y -= 16 if '_L2' in df_name else 2.2 if '_L1' in df_name else 9
+        plt.plot([x3, x3, x4, x4], [y, y + h, y + h, y], lw=1.5, c=col)
+        plt.text((x3 + x4) * .5, y + (0.1 if '_L1' in df_name else 0.7), "n.s.",
+                 ha='center', va='bottom', color=col)
+
+        if len(labels) == 3:
+            x5, x6 = 1.8, 2.18
+            y -= 9
+            plt.plot([x5, x5, x6, x6], [y, y + h, y + h, y], lw=1.5, c=col)
+            plt.text((x5 + x6) * .5, y + .7, "n.s.", ha='center', va='bottom', color=col)
+
+        handles, labels = ax.get_legend_handles_labels()
+        caption = {'non_cognate': 'non-cognate'}
+        plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True,
+                   bbox_to_anchor=(0.5, 1.11), handles=handles, labels=[caption.get(i, i) for i in labels])
+        plt.xlabel('Bilingual simulations')
+        plt.ylabel(f'code-switched percentage '
+                   f'{f"(L1 sentences)" if "L1" in df_name else "(L2 sentences)" if "L2" in df_name else ""}')
+        plt.ylim([0, ylim])
+        plt.savefig(f'{self.results_dir}/test_{df_name}')
+        plt.close()
 
     def plot_cognate_last_epoch(self, df_name='count_all_models_merged.csv', xrow='model_name', hue='model',
-                                include_annotations=False,
+                                include_annotations=False, xaxis_step=10,
                                 info_to_plot=('code_switched',), ci=95, ylim=None, lineplot=False,
-                                bbox_to_anchor=(0.5, 1.1)):
+                                bbox_to_anchor=(0.5, 1.1), plot_percentage=True):
         print('plot_cognate_last_epoch:', df_name, f'{self.results_dir}/{df_name}')
         df = pd.read_csv(f'{self.results_dir}/{df_name}')
         df = df[df.epoch == df.epoch.max()]
         for label in info_to_plot:
             if lineplot:
-                ax = sns.lineplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000, data=df)
+                if plot_percentage:
+                    ax = sns.lineplot(x=xrow, y=f'{label}_percentage', hue=hue, ci=ci, n_boot=1000, data=df,
+                                      palette=['#de8f05', '#0173b2'])
+                    plt.ylim([0, 35])
+                    plt.ylabel('code-switched percentage (incl. incorrect)')
+                else:
+                    ax = sns.lineplot(x=xrow, y=f'{label}', hue=hue, ci=ci, n_boot=1000, data=df,
+                                      palette=['#de8f05', '#0173b2'])
+                    plt.ylabel('mean number of code-switched sentences')
+                    plt.ylim([20, 90])
                 plt.xlim(df[xrow].min(), df[xrow].max())
-                plt.xticks(pd.np.arange(df[xrow].min(), df[xrow].max()+1, step=5))
-                plt.ylim([0, 30])
+                plt.xticks(pd.np.arange(df[xrow].min(), df[xrow].max()+1, step=xaxis_step))
                 bbox_to_anchor = (0.5, 1.05)
                 plt.xlabel('percentage of cognates')
-                plt.ylabel('code-switched percentage')
             else:
                 xrow = 'model' if xrow not in list(df) else xrow
                 if xrow == 'model':
@@ -80,8 +142,13 @@ class Plotter:
                 plt.ylim([0, ylim])
             handles, labels = ax.get_legend_handles_labels()
             if len(labels) > 1:
-                plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True, bbox_to_anchor=bbox_to_anchor,
-                           handles=handles[1:], labels=labels[1:])
+                caption = {'non_cognate_evaluation': 'non-cognate sentences',
+                           'cognate_evaluation': 'cognate sentences', 'non_cognate': 'non-cognate'}
+                print(labels)
+                plt.legend(loc='upper center', fancybox=True, ncol=2, shadow=True,
+                           bbox_to_anchor=bbox_to_anchor, handles=handles[1:],
+                           labels=[caption.get(l, l) for l in (labels[1:] if 'pairwise_training'
+                                                                             in self.results_dir else labels)])
             plt.savefig(self.get_plot_path(df.network_num.max(),
                                            f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("_models_merged", "")}'
                                            f'epoch{df.epoch.max()}{"_line" if lineplot else ""}_'
