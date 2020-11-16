@@ -564,7 +564,7 @@ class InputFormatter:
     def read_allowed_pos(self):
         """ returns all (distinct) allowed POS structures in the training file (list of lists) """
         allowed = list(map(list, set(map(tuple,
-                                         self.trainlines_df.target_pos if self.trainlines_df else self.testlines_df))))
+                                         self.trainlines_df.target_pos if not self.trainlines_df.empty else self.testlines_df))))
         allowed.extend([x[:-1] for x in allowed])
         return allowed
 

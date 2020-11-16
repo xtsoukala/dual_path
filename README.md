@@ -14,18 +14,24 @@ weight step vector is bounded so that its length cannot exceed 1.0 (Rohde, 1999)
 The output and role units use the softmax activation function. All other units use the logistic activation function.
 ```
 
-It it recommended to run the Bilingual Dual-path model using Python3.6 and above. To install requirements:
+It it recommended to run the Bilingual Dual-path model using Python3.6 and above. It has been tested on MacOS and Ubuntu
+ and seems to have encoding issues on Windows.
+ 
+To install the requirements:
 
 ```
 pip3 install -r requirements.txt
 ```
 
-To run 4 simulations of the Spanish-English auxiliary phrase experiment with 80 hidden units and 60 compress for 20 epochs units you can run:
+To run 4 simulations for 20 epochs that generate Spanish-English code-switched sentences you can run:
 ```
-python3 src/start_dual_path.py --sim 4 --aux --hidden 80 --compress 60 
+python3 src/start_dual_path.py --sim 4 --cs 
 ```
 
-The results will be under the folder "simulations/year-month-day/hour_minutes_seconds_esen_sim4_h80_c60_fw10_e20, where "esen" is the language pair, sim4 the number of simulations, h80 the number of hidden units and c60 the number of compress units. fw is the fixed weight between concepts and roles, and e20 the number of epochs.
+The results will be under the folder:
+"simulations/year-month-day/hour_minutes_seconds_esen_sim4_h<number_hidden>_c<number_compressed_units>_fw10_e20, 
+where "esen" is the language pair, sim4 the number of simulations, h the number of hidden units and c the number of 
+compress units. fw is the fixed weight between concepts and roles, and e20 the number of epochs.
 
 To see all the parameters of the model: 
 
@@ -36,44 +42,63 @@ python3 src/start_dual_path.py -h
 
 ```
 usage: start_dual_path.py [-h] [--hidden HIDDEN] [--compress COMPRESS]
-                          [--epochs EPOCHS] [--l2_epochs L2_EPOCHS]
-                          [--l2_percentage L2_PERCENTAGE] [--input INPUT]
+                          [--epochs EPOCHS] [--l2_epoch L2_EPOCH]
+                          [--l2_decimal_fraction L2_DECIMAL_FRACTION]
+                          [--input INPUT] [--resdir RESDIR]
                           [--lexicon LEXICON] [--structures STRUCTURES]
                           [--trainingset TRAININGSET] [--testset TESTSET]
-                          [--resdir RESDIR] [--lang LANG] [--lrate LRATE]
-                          [--final_lrate FINAL_LRATE] [--momentum MOMENTUM]
-                          [--set_weights SET_WEIGHTS]
+                          [--primingset PRIMINGSET]
+                          [--languages [LANGUAGES [LANGUAGES ...]]]
+                          [--target_lang [TARGET_LANG [TARGET_LANG ...]]]
+                          [--lrate LRATE] [--final_lrate FINAL_LRATE]
+                          [--momentum MOMENTUM] [--set_weights SET_WEIGHTS]
                           [--set_weights_epoch SET_WEIGHTS_EPOCH] [--fw FW]
                           [--fwi FWI]
-                          [--cognate_percentage COGNATE_PERCENTAGE]
+                          [--cognate_decimal_fraction COGNATE_DECIMAL_FRACTION]
+                          [--exclude_cognates EXCLUDE_COGNATES]
+                          [--cognate_list COGNATE_LIST]
+                          [--false_friends_lexicon FALSE_FRIENDS_LEXICON]
+                          [--concepts_to_evaluate CONCEPTS_TO_EVALUATE]
+                          [--pron OVERT_PRONOUNS]
+                          [--messageless_decimal_fraction MESSAGELESS_DECIMAL_FRACTION]
                           [--generate_training_num GENERATE_TRAINING_NUM]
+                          [--generate_test_num GENERATE_TEST_NUM]
+                          [--training_files_path TRAINING_FILES_PATH]
                           [--title TITLE] [--sim SIM] [--sim_from SIM_FROM]
-                          [--sim_to SIM_TO] [--pron OVERT_PRONOUNS]
-                          [--threshold THRESHOLD] [--config CONFIG]
+                          [--sim_to SIM_TO] [--threshold THRESHOLD]
+                          [--config_file CONFIG_FILE]
+                          [--generator_timeout GENERATOR_TIMEOUT]
+                          [--hidden_dev HIDDEN_DEV]
+                          [--compress_dev COMPRESS_DEV] [--fw_dev FW_DEV]
+                          [--epoch_dev EPOCH_DEV]
+                          [--l2_decimal_dev L2_DECIMAL_DEV]
+                          [--num_cognate_models_for_test_set NUM_COGNATE_MODELS_FOR_TEST_SET]
                           [--prodrop] [--crole] [--cinput] [--debug] [--cs]
-                          [--nodlr] [--gender] [--monolingual] [--comb-sem]
-                          [--noeval] [--eval_training] [--evaluate]
+                          [--nodlr] [--gender] [--noeval] [--eval_training]
+                          [--evaluate] [--only_generate_test]
                           [--continue_training] [--allow-free-structure]
-                          [--emb] [--cognates] [--aux] [--tener]
-                          [--haber_frequency] [--gender_error_experiment]
-                          [--flex_eval] [--separate]
+                          [--emb] [--cognates] [--false_friends] [--aux]
+                          [--priming] [--tener] [--synonym]
+                          [--gender_error_experiment] [--flex_eval]
+                          [--separate] [--norandomization] [--defpro]
+                          [--srn_only]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --hidden HIDDEN       Number of hidden layer units. (default: 70)
+  --hidden HIDDEN       Number of hidden layer units. (default: 80)
   --compress COMPRESS, -c COMPRESS
                         Number of compress layer units. The size should be
-                        approximately 2/3 of the hidden one (default: 60)
-  --epochs EPOCHS, --total_epochs EPOCHS
-                        Number of training set iterations during (total)
+                        approximately 2/3 of the hidden one (default: None)
+  --epochs EPOCHS       Number of total training set iterations during (full)
                         training. (default: 20)
-  --l2_epochs L2_EPOCHS, --l2e L2_EPOCHS
-                        # of epoch when L2 input gets introduced (default:
+  --l2_epoch L2_EPOCH   # of epoch when L2 input gets introduced (default:
                         None)
-  --l2_percentage L2_PERCENTAGE, --l2_perc L2_PERCENTAGE
-                        % of L2 input (default: 0.5)
+  --l2_decimal_fraction L2_DECIMAL_FRACTION
+                        Decimal fraction of L2 input (0.0-1.0) (default: 0.5)
   --input INPUT         (Input) folder that contains all input files (lexicon,
                         concepts etc) (default: None)
+  --resdir RESDIR       Name of results folder, where the simulations will be
+                        stored (default: None)
   --lexicon LEXICON     CSV file that contains lexicon and concepts (default:
                         None)
   --structures STRUCTURES
@@ -81,15 +106,17 @@ optional arguments:
   --trainingset TRAININGSET, --training TRAININGSET
                         File name that contains the message-sentence pair for
                         training. (default: training.in)
-  --testset TESTSET, --test TESTSET
-                        Test set file name (default: None)
-  --resdir RESDIR, -r RESDIR
-                        Prefix of results folder name; will be stored under
-                        folder "simulations" and a timestamp will be added
-                        (default: None)
-  --lang LANG           In case we want to generate a new set, we need to
-                        specify the language (en, es or any combination [enes,
-                        esen] for bilingual) (default: esen)
+  --testset TESTSET     Test set file name (default: None)
+  --primingset PRIMINGSET
+                        File name that contains the message-sentence pairs for
+                        the priming experiment. (default: None)
+  --languages [LANGUAGES [LANGUAGES ...]]
+                        To generate a new set, specify the languages (e.g.,
+                        en, es) (default: ['en', 'es'])
+  --target_lang [TARGET_LANG [TARGET_LANG ...]]
+                        Values for the target language node. It may differ
+                        from the input languages (e.g., lang=en but
+                        target_lang=en es) (default: None)
   --lrate LRATE         Learning rate (default: 0.1)
   --final_lrate FINAL_LRATE, --flrate FINAL_LRATE
                         Final learning rate after linear decrease. If not set,
@@ -101,34 +128,82 @@ optional arguments:
                         initial weights for simulations (default: None)
   --set_weights_epoch SET_WEIGHTS_EPOCH, --swe SET_WEIGHTS_EPOCH
                         In case of pre-trained weights we can also specify num
-                        of epochs (stage of training) (default: 0)
+                        of epochs (stage of training) (default: None)
   --fw FW, --fixed_weights FW
                         Fixed weight value for concept-role connections
-                        (default: 10)
+                        (default: 15)
   --fwi FWI, --fixed_weights_identif FWI
                         Fixed weight value for identif-role connections
                         (default: 10)
-  --cognate_percentage COGNATE_PERCENTAGE
+  --cognate_decimal_fraction COGNATE_DECIMAL_FRACTION
                         Amount of sentences with cognates in test/training
-                        sets (default: 0.35)
+                        sets (default: 0.3)
+  --exclude_cognates EXCLUDE_COGNATES
+                        Filename with concepts; exclude from cognate selection
+                        the concepts of this list (default: None)
+  --cognate_list COGNATE_LIST
+                        Filename with concepts; use these instead of ones in
+                        lexicon.csv (default: None)
+  --false_friends_lexicon FALSE_FRIENDS_LEXICON
+                        Csv file with false friends lexicon; use these in
+                        lexicon.csv (default: None)
+  --concepts_to_evaluate CONCEPTS_TO_EVALUATE
+                        Filename with concepts of words that will become the
+                        focus around code-switched points (e.g., cognates of
+                        all models) (default: None)
+  --pron OVERT_PRONOUNS
+                        Decimal_fraction of overt Spanish pronouns (default:
+                        0)
+  --messageless_decimal_fraction MESSAGELESS_DECIMAL_FRACTION
+                        Fraction of messageless sentences in training set
+                        (default: 0)
   --generate_training_num GENERATE_TRAINING_NUM
                         Sum of test/training sentences to be generated (only
                         if no input was set) (default: 2000)
+  --generate_test_num GENERATE_TEST_NUM
+                        Total test sentences for experiments (default: 600)
+  --training_files_path TRAINING_FILES_PATH
+                        When generating test sentences, exclude the
+                        training.in files under this path. (default: None)
   --title TITLE         Title for the plots (default: None)
   --sim SIM             training several simulations at once to take the
                         results' average (Monte Carlo approach) (default: 2)
   --sim_from SIM_FROM   To train several simulations with range other than (0,
                         number_of_simulations) you need to set the sim_from
-                        and sim_to values (default: None)
-  --sim_to SIM_TO       See sim_from (the simulations includes sim_to)
+                        and sim_to values (the simulations include sim_from
+                        and sim_to) (default: None)
+  --sim_to SIM_TO       See sim_from (the simulations include sim_to)
                         (default: None)
-  --pron OVERT_PRONOUNS
-                        Percentage of overt pronouns in es (default: 0)
   --threshold THRESHOLD
                         Threshold for performance of simulations. Any
                         simulations that performs has a percentage of correct
                         sentences < threshold are discarded (default: 0)
-  --config CONFIG       Read arguments from file (default: False)
+  --config_file CONFIG_FILE
+                        Read arguments from file (default: False)
+  --generator_timeout GENERATOR_TIMEOUT
+                        Number of seconds before the sentence generation
+                        process times out (default: 240)
+  --hidden_dev HIDDEN_DEV
+                        Maximum deviation for the number of hidden layer units
+                        when randomization is used. Defaults to 10. (default:
+                        10)
+  --compress_dev COMPRESS_DEV
+                        Maximum deviation for the number of compress layer
+                        units when randomization is used. Defaults to 10.
+                        (default: 10)
+  --fw_dev FW_DEV       Maximum deviation for the fixed weight value for
+                        concept-role connections when randomization is used.
+                        Defaults to 5. (default: 5)
+  --epoch_dev EPOCH_DEV
+                        Maximum deviation for the starting epoch/l2_epoch
+                        value. Defaults to 2. (default: 2)
+  --l2_decimal_dev L2_DECIMAL_DEV
+                        Standard deviation for the decimal fraction of L2
+                        input when randomization is used. Defaults to 0.08.
+                        (default: 0.08)
+  --num_cognate_models_for_test_set NUM_COGNATE_MODELS_FOR_TEST_SET
+                        Number of cognate models to generate test sets for.
+                        (default: 0)
   --prodrop             Indicates that it is a pro-drop lang (default: False)
   --crole               If (role copy) is set, the produced role layer is
                         copied back to the comprehension layer (default:
@@ -142,14 +217,11 @@ optional arguments:
                         False)
   --nodlr               Keep lrate stable (final_lrate) (default: True)
   --gender              Include semantic gender for nouns (default: False)
-  --monolingual         Do not include L2 lexicon (default: False)
-  --comb-sem            Produce combined concepts instead of simple ones
-                        (e.g., PARENT+M instead of FATHER) (default: True)
   --noeval              Do not evaluate test set (default: True)
   --eval_training       Evaluate training sets (default: False)
   --evaluate            Do not train, only evaluate test sets (default: False)
-  --continue_training, --continue
-                        Continue training for more epochs (default: False)
+  --only_generate_test  Do not run simulations (default: False)
+  --continue_training   Continue training for more epochs (default: False)
   --allow-free-structure, --af
                         The model is not given role information in the event
                         semantics and it is therefore allowed to use any
@@ -158,10 +230,13 @@ optional arguments:
   --emb                 Represent semantics using word embeddings instead of
                         one-hot vectors. (default: False)
   --cognates            Run cognate experiment (default: False)
+  --false_friends, --ff
+                        Run false friends experiment (default: False)
   --aux                 Run auxiliary asymmetry experiment (default: False)
+  --priming             Run priming experiment (default: False)
   --tener               Run auxiliary asymmetry experiment and replace all
                         instances of "haber" with "tener" (default: False)
-  --haber_frequency     Run auxiliary asymmetry experiment making haber and
+  --synonym             Run auxiliary asymmetry experiment making haber and
                         tener perfect synonyms (default: False)
   --gender_error_experiment
                         Evaluate pronoun production (default: False)
@@ -169,6 +244,14 @@ optional arguments:
                         tense (past, present) (default: False)
   --separate            Two hidden layers instead of one; separate hidden
                         layer of semantic and syntactic path (default: False)
+  --norandomization     By default, we sample the free parameters (fixed
+                        weight, hidden/compress size, l2 decimal) within a
+                        certain standard deviation. Using this flag
+                        deactivates this setting. (default: True)
+  --defpro              Merge def/indef/pron into a single unitwith different
+                        activations (default: False)
+  --srn_only            Run the SRN alone, without the semantic path (default:
+                        False)
 ```
 
 The output is stored under the given results folder (-resdir, or by default "simulations/") in a csv format:
