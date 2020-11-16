@@ -3,7 +3,7 @@ from torch import ones, zeros, cat, stack, empty
 from torch.multiprocessing import Pool, Process, cpu_count, set_start_method
 import lz4.frame as lz4
 import numpy as np
-import pandas as pd
+import pandas as pd   # future tip: check modin for speed
 import os
 import sys
 import logging
