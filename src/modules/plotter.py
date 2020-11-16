@@ -1,4 +1,4 @@
-from . import pd
+from . import pd, np
 from operator import truediv
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -31,8 +31,8 @@ class Plotter:
         plt.xlabel('epochs')
         plt.ylabel('')
         plt.ylim([0, ylim])
-        plt.yticks(pd.np.arange(0, ylim, step=1))
-        xticks = pd.np.arange(df.epoch.min(), df.epoch.max() + 1, step=4)
+        plt.yticks(np.arange(0, ylim, step=1))
+        xticks = np.arange(df.epoch.min(), df.epoch.max() + 1, step=4)
         plt.xticks(xticks, xticks)
 
         plt.xlim([df.epoch.min(), df.epoch.max()])
@@ -121,7 +121,7 @@ class Plotter:
                     plt.ylabel('mean number of code-switched sentences')
                     plt.ylim([20, 90])
                 plt.xlim(df[xrow].min(), df[xrow].max())
-                plt.xticks(pd.np.arange(df[xrow].min(), df[xrow].max()+1, step=xaxis_step))
+                plt.xticks(np.arange(df[xrow].min(), df[xrow].max()+1, step=xaxis_step))
                 bbox_to_anchor = (0.5, 1.05)
                 plt.xlabel('percentage of cognates')
             else:
@@ -217,9 +217,9 @@ class Plotter:
         plt.xlabel('epochs')
         plt.ylabel('')
         plt.ylim([0, ylim])
-        plt.yticks(pd.np.arange(0, ylim + 1, step=10))
+        plt.yticks(np.arange(0, ylim + 1, step=10))
 
-        xticks = pd.np.arange(df.epoch.min(), df.epoch.max() + 1, step=2)
+        xticks = np.arange(df.epoch.min(), df.epoch.max() + 1, step=2)
         plt.xticks(xticks, xticks)
 
         plt.xlim([df.epoch.min(), df.epoch.max()])
@@ -232,7 +232,7 @@ class Plotter:
         df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/all_results.csv')
         grouped = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/all_results.csv')
         all_labels = grouped.pos_of_switch_point.unique().tolist()
-        index_size = pd.np.arange(len(all_labels))
+        index_size = np.arange(len(all_labels))
 
         mean_correct_sentences = []
         for switch_point in all_labels:
@@ -310,7 +310,7 @@ class Plotter:
                                                                                ].is_code_switched  # .sum()
 
         for switch_type in code_switch_types:  # one plot per switch_type and lang
-            index_size = pd.np.arange(len(labels[switch_type]))
+            index_size = np.arange(len(labels[switch_type]))
             bar_width = 0.15 if switch_type == 'ambiguous' else self.bar_width
             for lang in self.languages:
                 fig, ax = plt.subplots()
@@ -372,7 +372,7 @@ class Plotter:
             all_dfs[m] = temp_df
         network_num = temp_df.network_num.max()
 
-        index_size = pd.np.arange(len(code_switch_types))
+        index_size = np.arange(len(code_switch_types))
         for lang in self.languages:
             annotate_labels = []
             fig, ax = plt.subplots()
@@ -455,9 +455,9 @@ class Plotter:
             ylabel = plot_label[fname]
         plt.ylabel(ylabel)
         plt.ylim([0, ylim])
-        plt.yticks(pd.np.arange(0, ylim + 1, step=10))
+        plt.yticks(np.arange(0, ylim + 1, step=10))
 
-        xticks = pd.np.arange(df.epoch.min(), df.epoch.max() + 1, step=2)
+        xticks = np.arange(df.epoch.min(), df.epoch.max() + 1, step=2)
         plt.xticks(xticks, xticks)
 
         plt.xlim([df.epoch.min(), df.epoch.max()])
@@ -499,7 +499,7 @@ class Plotter:
         plt.xlabel('epochs')
         plt.ylabel(plot_labels.get(fname, ''))
         plt.ylim([0, ylim])
-        plt.yticks(pd.np.arange(0, ylim + 1, step=10))
+        plt.yticks(np.arange(0, ylim + 1, step=10))
         plt.xlim([ax.get_xticks()[0], ax.get_xticks()[-1]])
         plt.legend(loc='upper center', fancybox=True, ncol=3, shadow=True, bbox_to_anchor=(0.5, 1.11))
         plt.tight_layout()  # make room for labels

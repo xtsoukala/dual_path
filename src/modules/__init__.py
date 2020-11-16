@@ -17,7 +17,7 @@ from .dual_path import DualPath
 from .plotter import Plotter
 from .corpus_generator import SetsGenerator
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 
 def str2bool(v):
