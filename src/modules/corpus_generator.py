@@ -586,7 +586,11 @@ class SetsGenerator:
                 return self.random.choice(morpheme_df['semantic_gender'].split('-'))
         elif not prev_gender and lang not in self.languages_with_syntactic_gender and morpheme_df['pos'] == 'pron':
             # this is a HACK for pronouns, in case the language has no syntactic gender information
-            other_lang = [l for l in self.L.values() if l not in lang][0]
+            other_lang = [l for l in self.L.values() if l not in lang]
+            if other_lang:
+                other_lang = other_lang[0]
+            else:
+                other_lang = 'es'  # temporary fix: get Spanish gender for pronouns
             return morpheme_df[f'syntactic_gender_{other_lang}']
         return prev_gender
 
