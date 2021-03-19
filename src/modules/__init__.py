@@ -26,7 +26,7 @@ def str2bool(v):
     return int(v.lower() in ("yes", "true", "t", "1", "flex-true", "flex-false"))
 
 
-def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_range):
+def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_range, l2_decimal):
     if not os.path.exists(results_dir):
         sys.exit(f"{results_dir} is not an existing path.")
 
@@ -46,8 +46,10 @@ def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_ra
     df = pd.read_csv(f'{results_dir}/all_results.csv')
 
     df['strict_grammaticality'] = df.target_pos == df.produced_pos    # FIXME
-
-    for idx, group in enumerate([['epoch', 'network_num'], ['epoch', 'network_num', 'switch_from']]):
+    column_names = [['epoch', 'network_num']]
+    if l2_decimal > 0:
+        column_names.append(['epoch', 'network_num', 'switch_from'])
+    for idx, group in enumerate(column_names):
         df_performance = df.groupby(group).apply(lambda dft: pd.Series(
             {'meaning': dft.meaning.sum(),
              'code_switched': dft[(dft.meaning == 1) & (dft.switched_type != 'inter-sentential')
@@ -77,7 +79,8 @@ def create_dataframes_for_plots(results_dir, epoch_from, epoch_to, simulation_ra
         fname = 'performance' if idx == 0 else 'performance_per_lang'
         df_performance.to_csv(f'{results_dir}/{fname}.csv')
 
-    gb = df[df.switched_type != 'False'].groupby(
-        ['epoch', 'switched_type', 'pos_of_switch_point', 'switch_from']).apply(
-        lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum()}))
-    gb.to_csv(f'{results_dir}/code_switch_types.csv')
+    if l2_decimal > 0:  # only save CS-related info if the model is bilingual
+        gb = df[df.switched_type != 'False'].groupby(
+            ['epoch', 'switched_type', 'pos_of_switch_point', 'switch_from']).apply(
+            lambda dft: pd.Series({'code_switched': dft.is_code_switched.sum()}))
+        gb.to_csv(f'{results_dir}/code_switch_types.csv')

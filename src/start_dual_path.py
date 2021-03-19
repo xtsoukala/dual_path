@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser.add_argument('--trainingset', '--training', default="training.in",
                         help='File name that contains the message-sentence pair for training.')
     parser.add_argument('--testset', help='Test set file name')
-    parser.add_argument('--primingset', 
+    parser.add_argument('--primingset',
                         help='File name that contains the message-sentence pairs for the priming experiment.')
     parser.add_argument('--languages', help='To generate a new set, specify the languages (e.g., en, es)', nargs='*',
                         default=['en', 'es'], type=str.lower)
@@ -114,7 +114,7 @@ if __name__ == "__main__":
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
-    parser.add_argument('--generator_timeout', type=positive_int, default=240,
+    parser.add_argument('--generator_timeout', type=positive_int, default=60,#240,
                         help="Number of seconds before the sentence generation process times out")
     parser.add_argument('--hidden_dev', type=non_negative_int, default=10,
                         help='Maximum deviation for the number of hidden layer units when randomization is used. '
@@ -338,7 +338,7 @@ if __name__ == "__main__":
                                      auxiliary_experiment=auxiliary_experiment, cognate_list=cognate_list,
                                      false_friends_lexicon=args.false_friends_lexicon, determinerpronoun=args.defpro,
                                      concepts_to_evaluate=concepts_to_evaluate, prodrop=args.prodrop,
-                                     messageless_decimal_fraction=args.messageless_decimal_fraction, 
+                                     messageless_decimal_fraction=args.messageless_decimal_fraction,
                                      priming_experiment=args.priming_experiment, priming_set=args.primingset)
 
     starting_epoch = 0 if not args.continue_training else args.set_weights_epoch
@@ -357,7 +357,7 @@ if __name__ == "__main__":
     Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range)
+        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range, l2_decimal)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
-        plot.performance(df)
+        plot.performance(df, include_code_switches=args.activate_both_lang)
