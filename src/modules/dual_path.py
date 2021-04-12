@@ -92,32 +92,32 @@ class DualPath:
         logger = logging.getLogger(f"{name}_{self.simulation_num}")
         logger.setLevel(logging.DEBUG)
         logger.propagate = False  # no stdout to console
-        if name == 'test_priming':
+        if name == 'test_priming':  # @Yung: check if you can use self.priming_experiment
             set_weights_folder = self.set_weights_folder.replace('./simulations/', '')
             filename = f'{set_weights_folder[:19]}-{self.simulation_num}-{name}'
             filename = filename.replace('/', '-')
             logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{filename}.csv"))
+
+            header = ("epoch,produced_sentence,target_sentence,alternative_sentence,"
+                      "is_grammatical,meaning,alt_meaning,same_as_prime,prime_sentence,prime_structure,"
+                      "target_structure,prime_lang,target_lang,prime_id,target_id,")
+            header += "participant,produced_pos,target_pos,correct_tense,correct_definiteness,message"
+            # ,produced_idx,alt_sentence_idx
         else:
             logger.addHandler(logging.FileHandler(f"{self.inputs.directory}/{name}.csv"))
-        header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
-                  "is_code_switched,switched_type,pos_of_switch_point,first_switch_position")
-        if self.auxiliary_experiment:
-            header += (",switched_before,switched_right_before,switched_right_after,switched_after_anywhere,"
-                       "switched_before_es_en,switched_right_before_es_en,switched_right_after_es_en, "
-                       "switched_after_anywhere_es_en")
-        elif self.inputs.concepts_to_evaluate:
-            header += (",switched_before,switched_at,switched_right_after,switched_second_after,"
-                       "switched_after_anywhere,switched_before_es_en,switched_at_es_en,switched_right_after_es_en,"
-                       "switched_second_after_es_en,switched_after_anywhere_es_en,point_of_interest_produced_last,"
-                       "concept_position")
-        if self.pronoun_experiment:
-            header += ",pronoun_error,pronoun_error_flex"
-        header += (",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch,"
-                   "target_has_cognate,target_has_false_friend")
-        if name == 'test_priming':
-            header = ("epoch,produced_sentence,target_sentence,alternative_sentence,"
-                      "is_grammatical,meaning,alt_meaning,same_as_prime,prime_sentence,prime_structure,target_structure,prime_lang,target_lang,prime_id,target_id,")
-            header += "participant,produced_pos,target_pos,correct_tense,correct_definiteness,message" # ,produced_idx,alt_sentence_idx
+            header = ("epoch,produced_sentence,target_sentence,is_grammatical,meaning,"
+                      "is_code_switched,switched_type,pos_of_switch_point,first_switch_position")
+
+            if self.auxiliary_experiment or self.inputs.concepts_to_evaluate:
+                header += (",switched_before,switched_at,switched_right_after,switched_second_after,"
+                           "switched_after_anywhere,switched_before_es_en,switched_at_es_en,switched_right_after_es_en,"
+                           "switched_second_after_es_en,switched_after_anywhere_es_en")
+                if self.inputs.concepts_to_evaluate:
+                    header += ",point_of_interest_produced_last,concept_position"
+            if self.pronoun_experiment:
+                header += ",pronoun_error,pronoun_error_flex"
+            header += (",produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch,"
+                       "target_has_cognate,target_has_false_friend")
         logger.info(header)
         return logger
 
@@ -397,8 +397,8 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = 'a mother has the toy .'
-                        target_sentence = 'una madre tiene el toy .'
+                        produced_sentence = 'el señor is llevando la silla .'
+                        target_sentence = 'el señor está llevando la silla .'
                         target_lang = 'es'
                         logging.info(f'Debugging sentence pair: {produced_sentence} target: {target_sentence}')
                         produced_idx = self.inputs.sentence_indices(produced_sentence)
@@ -440,13 +440,16 @@ class DualPath:
                                                                                            top_down_language_activation)
                                 if cs_type == "inter-sentential":  # and top_down_language_activation?
                                     correct_meaning = True
-                                    code_switched = False  # Assumption: we are not interested in inter-sentential
+                                    # Assumption: we are not interested in inter-sentential,
+                                    # i.e., Spanish sentence when the target language was English
+                                    code_switched = False
                                 elif cs_type:  # Correct CS only. TODO: check the failed sentences too
                                     correct_meaning = True
-                                    if pos_interest and pos_interest in produced_pos:
-                                        (switched_before, switched_right_before, switched_right_after,
-                                         switched_after_anywhere, switched_before_es_en, switched_right_before_es_en,
-                                         switched_right_after_es_en, switched_after_anywhere_es_en
+                                    if pos_interest and pos_interest in produced_pos:  # auxiliary phrase asymmetry
+                                        (switched_before, switched_at, switched_right_after, switched_second_after,
+                                         switched_after_anywhere, switched_before_es_en, switched_at_es_en,
+                                         switched_right_after_es_en, switched_second_after_es_en,
+                                         switched_after_anywhere_es_en
                                          ) = self.inputs.check_cs_around_pos_of_interest(produced_idx, produced_pos,
                                                                                          pos_interest)
                                     elif self.inputs.concepts_to_evaluate:
@@ -479,17 +482,14 @@ class DualPath:
 
                     log_info = [epoch, produced_sentence, line.target_sentence, pos, meaning, code_switched,
                                 cs_type, cs_pos_point, first_switch_position]
-                    if pos_interest:
-                        log_info.extend(
-                            [switched_before, switched_right_before, switched_right_after, switched_after_anywhere,
-                             switched_before_es_en, switched_right_before_es_en, switched_right_after_es_en,
-                             switched_after_anywhere_es_en])
-                    elif self.inputs.concepts_to_evaluate:
+
+                    if pos_interest or self.inputs.concepts_to_evaluate:
                         log_info.extend([switched_before, switched_at, switched_right_after,
                                          switched_second_after, switched_after_anywhere, switched_before_es_en,
                                          switched_at_es_en, switched_right_after_es_en, switched_second_after_es_en,
-                                         switched_after_anywhere_es_en, point_of_interest_produced_last,
-                                         concept_position])
+                                         switched_after_anywhere_es_en])
+                        if self.inputs.concepts_to_evaluate:
+                            log_info.extend([point_of_interest_produced_last, concept_position])
                     if self.pronoun_experiment:
                         log_info.extend([has_pronoun_error, has_pronoun_error_flex])
                     log_info.extend([' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
@@ -497,16 +497,12 @@ class DualPath:
                                      self.starting_epoch, has_cognate, has_false_friend])
                     logger.info(",".join(str(x) for x in log_info))
 
-
     def evaluate_priming(self):
-        
-        set_names = ['test']
-        set_name = 'test'
         self.set_weights_folder = self.inputs.directory
         self.test_priming_logger = self.init_logger('test_priming')
         self.set_level_priming_logger = self.init_logger('set_level_priming')
         logger = self.test_priming_logger
-        
+
         weights_role_concept = self.inputs.weights_role_concept['test']
         weights_concept_role = self.inputs.weights_concept_role['test']
         weights_role_identif = self.inputs.weights_role_identif['test']
@@ -517,9 +513,8 @@ class DualPath:
         num_sentences = self.inputs.num_test
         directory = self.inputs.directory
         epoch_range = range(self.starting_epoch, self.epochs)
-        buffer_to_produce = [None] * 2 
+        buffer_to_produce = [None] * 2
         top_down_language_activation = False
-
 
         # Only test priming for last epoch
         epoch = self.epochs
@@ -542,30 +537,31 @@ class DualPath:
                                weights_identif_role[line_idx],
                                event_semantics[line_idx],
                                backpropagate=True, activate_target_lang=True)
-                
+
             # Process target as if testing
             else:
                 target_pos, target_sentence_idx, target_lang = line.target_pos, line.target_sentence_idx, line.lang
                 alt_sentence_idx, alternative_sentence = line.alt_sentence_idx, line.alt_sentence
                 produced_idx, entropy_idx = self.feed_line(line.target_sentence_idx + buffer_to_produce,
-                                                       target_lang_act[line_idx],
-                                                       weights_role_concept[line_idx],
-                                                       weights_concept_role[line_idx],
-                                                       weights_role_identif[line_idx],
-                                                       weights_identif_role[line_idx],
-                                                       event_semantics[line_idx],
-                                                       activate_target_lang=not top_down_language_activation)
+                                                           target_lang_act[line_idx],
+                                                           weights_role_concept[line_idx],
+                                                           weights_concept_role[line_idx],
+                                                           weights_role_identif[line_idx],
+                                                           weights_identif_role[line_idx],
+                                                           event_semantics[line_idx],
+                                                           activate_target_lang=not top_down_language_activation)
 
                 produced_sentence = self.inputs.sentence_from_indices(produced_idx)
                 produced_pos = self.inputs.sentence_pos(produced_idx)
                 alt_pos = self.inputs.sentence_pos(alt_sentence_idx)
 
-                # We ignore periods. Quite a few sentences without periods are produced that are 
+                # We ignore periods. Quite a few sentences without periods are produced that are
                 # otherwise correct
                 produced_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], produced_idx))
-                target_sentence_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], target_sentence_idx))
+                target_sentence_idx_no_period = list(
+                    filter(lambda i: i not in [self.inputs.period_idx], target_sentence_idx))
                 alt_sentence_idx_no_period = list(filter(lambda i: i not in [self.inputs.period_idx], alt_sentence_idx))
-                    
+
                 target_pos_no_period = self.inputs.sentence_pos(target_sentence_idx_no_period)
                 alt_pos_no_period = self.inputs.sentence_pos(alt_sentence_idx_no_period)
                 produced_pos_no_period = self.inputs.sentence_pos(produced_idx_no_period)
@@ -578,56 +574,59 @@ class DualPath:
                 # check for zero length to prevent list index error in is_sentence_gramatical_or_flex()
                 if produced_pos_no_period:
                     is_grammatical, flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos_no_period,
-                                                                                            target_pos_no_period,
-                                                                                            produced_pos_no_period)
-                    alt_is_grammatical, alt_flexible_order = self.inputs.is_sentence_gramatical_or_flex(produced_pos_no_period,
-                                                                                            alt_pos_no_period,
-                                                                                            produced_pos_no_period)
+                                                                                                target_pos_no_period,
+                                                                                                produced_pos_no_period)
+                    alt_is_grammatical, alt_flexible_order = self.inputs.is_sentence_gramatical_or_flex(
+                        produced_pos_no_period,
+                        alt_pos_no_period,
+                        produced_pos_no_period)
                 if is_grammatical:
                     has_correct_pos = True
-                    
-                    correct_meaning = self.inputs.has_correct_meaning(produced_idx_no_period, target_sentence_idx_no_period)
+
+                    correct_meaning = self.inputs.has_correct_meaning(produced_idx_no_period,
+                                                                      target_sentence_idx_no_period)
 
                     if self.ignore_tense_and_det:
-                        has_wrong_det = self.inputs.test_without_feature(produced_idx_no_period, target_sentence_idx_no_period,
+                        has_wrong_det = self.inputs.test_without_feature(produced_idx_no_period,
+                                                                         target_sentence_idx_no_period,
                                                                          feature="determiners")
 
-                        if (has_wrong_det):
+                        if has_wrong_det:
                             correct_meaning = True
-                            
+
                 if alt_is_grammatical:
                     correct_alternative_meaning = self.inputs.has_correct_meaning(produced_idx_no_period,
                                                                                   alt_sentence_idx_no_period)
                     if self.ignore_tense_and_det:
-                        alt_has_wrong_det = self.inputs.test_without_feature(produced_idx_no_period, alt_sentence_idx_no_period,
+                        alt_has_wrong_det = self.inputs.test_without_feature(produced_idx_no_period,
+                                                                             alt_sentence_idx_no_period,
                                                                              feature="determiners")
-                        if (alt_has_wrong_det):
+                        if alt_has_wrong_det:
                             correct_alternative_meaning = True
-                     
-                
+
                 # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
                 meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
                 pos = f'{"flex-" if flexible_order else ""}{has_correct_pos or flexible_order}'
-                
+
                 target_structure = None
                 if correct_alternative_meaning:
                     target_structure = 'passive'
                 elif correct_meaning:
                     target_structure = 'active'
 
-                if target_structure == None:
+                if target_structure is None:
                     same_as_prime = None
                 else:
                     same_as_prime = int(target_structure == prime_structure)
-                
+
                 log_info = (epoch, produced_sentence, line.target_sentence, alternative_sentence,
                             pos, meaning, correct_alternative_meaning, same_as_prime,)
                 log_info += (prime_sentence, prime_structure, target_structure, prime_lang, target_lang,
-                             f'p{line_idx-1}',f't{line_idx}', self.simulation_num)
+                             f'p{line_idx - 1}', f't{line_idx}', self.simulation_num)
                 log_info += (' '.join(produced_pos), ' '.join(target_pos), not has_wrong_tense,
                              not has_wrong_det, f'"{line.message}"',)
-                
+
                 logger.info(",".join(str(x) for x in log_info))
 
                 # Reload trained weights for next prime-target pair
-                self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)                
+                self.srn.load_weights(set_weights_folder=directory, set_weights_epoch=epoch)

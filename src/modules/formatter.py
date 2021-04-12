@@ -163,8 +163,7 @@ class InputFormatter:
         if not self.allowed_structures:
             self.allowed_structures = self.read_allowed_pos()
 
-    @staticmethod
-    def make_haber_and_tener_synonyms(directory):
+    def make_haber_and_tener_synonyms(self, directory):
         fname = f"{directory}/{self.training_set}"
         sim = directory.split('/')[-1]
         num = int(subprocess.check_output(f"cat {fname} | grep -w ha | wc -l", shell=True))
@@ -370,6 +369,8 @@ class InputFormatter:
                          return_position=False, srn_only=False):
         """ This function only checks whether words from different languages were used.
             It doesn't verify the validity of the expressed message """
+        if isinstance(target_lang, list):
+            target_lang = target_lang[0]  # or change check_cs_around_pos_of_interest() to send str
         first_cs_position = None
         if sentence_idx == target_sentence_idx:
             return False, first_cs_position
@@ -386,37 +387,45 @@ class InputFormatter:
             return True if not srn_only else False, first_cs_position
         return False, first_cs_position
 
-    def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest='aux'):
+    def check_cs_around_pos_of_interest(self, sentence_indices, sentence_pos, pos_of_interest):
         out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.switch_points_cache)
         if not cache:
-            (at, right_after, after, at_esen, right_after_esen, after_esen, after_anywhere,
-             after_anywhere_esen) = (False, False, False, False, False, False, False, False)
+            (before, at, right_after, after, after_anywhere, before_esen, at_esen, right_after_esen,
+             after_esen, after_anywhere_esen) = (False, False, False, False, False, False, False, False, False, False)
             pos_idx = None
             if pos_of_interest in sentence_pos:
                 pos_idx = sentence_pos.index(pos_of_interest)
             if pos_idx:
-                # check switch before pos_of_interest   # FIXME: check if target_lang is the intended one
-                at, point = self.is_code_switched(sentence_indices[:pos_idx + 1],
-                                                  target_lang=self.lang_indices[sentence_indices[0]])
-                # check Spanish-to-English direction
-                at_esen = True if at and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
+                language_of_pos_of_interest = self.lang_indices[sentence_indices[pos_idx]][0]
+                if len(sentence_indices[:pos_idx]) > 1:  # otherwise it's just one word, cannot be code-switched
+                    before, point = self.is_code_switched(sentence_indices[:pos_idx],
+                                                          target_lang=self.lang_indices[sentence_indices[0]])
+                    # check Spanish-to-English direction
+                    before_esen = True if before and language_of_pos_of_interest == 'en' else False
+                if before is False:
+                    at, point = self.is_code_switched(sentence_indices[0:pos_idx+1],
+                                                      target_lang=self.lang_indices[sentence_indices[0]])
+                    # check Spanish-to-English direction
+                    at_esen = True if at and language_of_pos_of_interest == 'en' else False
+
                 # check switch right after (e.g. between aux and participle)
                 right_after, point = self.is_code_switched(sentence_indices[pos_idx:pos_idx + 2],
-                                                           target_lang=self.lang_indices[sentence_indices[pos_idx]])
-                right_after_esen = (True if right_after and self.lang_indices[sentence_indices[pos_idx]] == 'en'
+                                                           target_lang=language_of_pos_of_interest)
+                right_after_esen = (True if right_after and language_of_pos_of_interest == 'en'
                                     else False)
                 # check switch at the end (e.g. after aux and participle)
+                language_after_pos_of_interest = self.lang_indices[sentence_indices[pos_idx+1]][0]
+
                 after, point = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
-                                                     target_lang=self.lang_indices[sentence_indices[pos_idx + 1]])
+                                                     target_lang=language_after_pos_of_interest)
                 after_esen = True if after and self.lang_indices[sentence_indices[pos_idx + 1]] == 'en' else False
 
                 after_anywhere, point = self.is_code_switched(sentence_indices[pos_idx + 1:],
-                                                              target_lang=self.lang_indices[
-                                                                  sentence_indices[pos_idx + 1]])
+                                                              target_lang=language_after_pos_of_interest)
                 after_anywhere_esen = (True if (after_anywhere and
-                                                self.lang_indices[sentence_indices[pos_idx + 1]] == 'en') else False)
-            cache = (at, right_after, after, after_anywhere, at_esen, right_after_esen,
+                                                language_after_pos_of_interest == 'en') else False)
+            cache = (before, at, right_after, after, after_anywhere, before_esen, at_esen, right_after_esen,
                      after_esen, after_anywhere_esen)
             self.switch_points_cache[out_idx] = cache
         return cache
@@ -425,12 +434,6 @@ class InputFormatter:
         out_idx = repr(sentence_indices)
         cache = self.query_cache(out_idx, self.idx_points_cache)
         if not cache:
-            # FIXME: current assumption: lexicon contains first EN and then ES words
-            (switched_before, switched_at, switched_right_after, switched_one_after, switched_after_anywhere,
-             switched_before_es_en, switched_at_es_en, switched_right_after_es_en, switched_one_after_es_en,
-             switched_after_anywhere_es_en,
-             point_of_interest_produced_last) = (False, False, False, False, False,
-                                                 False, False, False, False, False, False)
             target_idx = sentence_indices.index(idx_of_interest)
             switched_before, point = self.is_code_switched(sentence_indices[:target_idx], target_lang=target_lang,
                                                            target_sentence_idx=target_sentence_idx)
@@ -644,7 +647,7 @@ class InputFormatter:
             passive_sentence_idx += self.is_idx
 
         if lang != 'nl':
-            # Append transitive verb, '-par' and   
+            # Append transitive verb, '-par' and
             passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
 
         # Add 'by' and subject (and optional adjective) of active sentence up to period
@@ -657,7 +660,7 @@ class InputFormatter:
             passive_sentence_idx[-1] = self.him_idx[0]
 
         if lang == 'nl':
-            # Append transitive verb, '-par' and 'by'  
+            # Append transitive verb, '-par' and 'by'
             passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
 
         passive_sentence_idx.append(self.period_idx)

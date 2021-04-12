@@ -292,6 +292,7 @@ class SetsGenerator:
                                         exclude_cognates=False, exclude_false_friends=False, use_semantic_gender=False):
         params = repr(locals().values())
         cache = self.get_query_cache(params)
+        query = []
         if cache is False:
             if gender and not any([x in pos for x in ['noun', 'adj']]):
                 gender = None

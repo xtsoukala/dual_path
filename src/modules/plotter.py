@@ -20,9 +20,19 @@ class Plotter:
                              'switched_participle_prog': 'progressive participle',
                              'switched_aux_prog': 'progressive auxiliary', 'switched_aux_perfect': 'perfect auxiliary'}
 
-    def lineplot_items(self, df, ci, n_boot=1000, ylim=17.5, fname='auxiliary_participle_switches',
-                       items=['switched_aux_prog', 'switched_aux_perfect',
-                              'switched_participle_prog', 'switched_participle_perfect']):
+    # specific to auxiliary phrase asymmetry experiment
+    def lineplot_participle_switches_all_models(self, ci, n_boot, ylim=5, models=('haber', 'tener', 'synonym')):
+        for m in models:
+            df = pd.read_csv(f'{self.results_dir}/{m}{self.fname_suffix}/performance.csv',
+                             index_col=None, header=0, skipinitialspace=True, dtype={'epoch': int})
+            self.lineplot_items(df, fname=f'participle_switches_{m}_{ci}', ylim=ylim, ci=ci, n_boot=n_boot,
+                                items=['switched_participle_prog', 'switched_participle_perfect'])
+
+    def lineplot_auxiliary_phrase_experiment(self, ci, n_boot=1000, ylim=17.5, fname='auxiliary_participle_switches',
+                                             items=['switched_aux_prog', 'switched_aux_perfect',
+                                                    'switched_participle_prog', 'switched_participle_perfect']):
+        df = pd.read_csv(f'{self.results_dir}/performance.csv', index_col=None,
+                         header=0, skipinitialspace=True, dtype={'epoch': int})
         for i, item in enumerate(items):
             ax = sns.lineplot(x='epoch', y=item, data=df, ci=ci, n_boot=n_boot, label=self.rename_label[item],
                               color=('#de8f05' if 'perfect' in item else '#0173b2'))
@@ -50,7 +60,7 @@ class Plotter:
             groups.append('switch_from')
         print('enes:', len(df[df.simulation == 'enes']), ', esen', len(df[df.simulation == 'esen']),
               ', balanced:', len(df[df.simulation == 'balanced']))
-        #print('cognate enes:', len(df[(df.simulation == 'enes')&(df.model=='cognate')]), ', esen',
+        # print('cognate enes:', len(df[(df.simulation == 'enes')&(df.model=='cognate')]), ', esen',
         #      len((df[df.simulation == 'esen'])&(df.model=='cognate'))))
 
         gb = df.groupby(groups).apply(lambda dft: pd.Series(
@@ -121,7 +131,7 @@ class Plotter:
                     plt.ylabel('mean number of code-switched sentences')
                     plt.ylim([20, 90])
                 plt.xlim(df[xrow].min(), df[xrow].max())
-                plt.xticks(np.arange(df[xrow].min(), df[xrow].max()+1, step=xaxis_step))
+                plt.xticks(np.arange(df[xrow].min(), df[xrow].max() + 1, step=xaxis_step))
                 bbox_to_anchor = (0.5, 1.05)
                 plt.xlabel('percentage of cognates')
             else:
@@ -428,7 +438,8 @@ class Plotter:
     def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True,
                     include_code_switches=False, max_epochs=None):
         if df.empty:
-            import sys; sys.exit("Cannot plot performance, the dataframe is empty")
+            import sys;
+            sys.exit("Cannot plot performance, the dataframe is empty")
         if max_epochs:
             df = df[df.epoch < max_epochs + 1]
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,
@@ -492,7 +503,7 @@ class Plotter:
         if include_code_switches and df.code_switched_percentage.sum() > 0:
             sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, color='#029E73', size=2, alpha=.7)
             plt.plot(xaxis, [df[df.epoch == ep].code_switched_percentage.mean() for ep in epoch_range],
-                     label='code-switching', color='#029E73',  marker='v', markersize=4)
+                     label='code-switching', color='#029E73', marker='v', markersize=4)
 
         plot_labels = {'l2_performance_enes_es': 'L1 English model tested on Spanish',
                        'l2_performance_esen_en': 'L1 Spanish model tested on English'}
@@ -515,7 +526,7 @@ class Plotter:
             df = df[df.switch_from == m[2:]]
             df['model'] = m
             frames.append(df)
-            #color_model = {'early': '#0173b2', 'enes': '#de8f05', 'esen': '#029E73'}
+            # color_model = {'early': '#0173b2', 'enes': '#de8f05', 'esen': '#029E73'}
             color_model = {'enes': '#0173b2', 'esen': '#de8f05'}
             if include_swarmplot:
                 ax = sns.swarmplot(x='epoch', y='code_switched_percentage', data=df, size=2, alpha=.7,
@@ -531,8 +542,8 @@ class Plotter:
                    shadow=True, bbox_to_anchor=(0.5, 1.11))
         xrange = range(0, 40)
 
-        #plt.xticks([])
-        #plt.xticks(xrange)
+        # plt.xticks([])
+        # plt.xticks(xrange)
         plt.xlabel('epochs')
         plt.ylabel('')
         plt.savefig(self.get_plot_path(len(df.network_num.unique()), f'{fname}_Ls'))

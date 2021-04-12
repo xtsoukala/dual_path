@@ -244,7 +244,7 @@ if __name__ == "__main__":
             args.testset = 'test_cog.in'
 
     if not args.testset:
-        args.testset = ('test_aux.in' if args.auxiliary_experiment else 'test.in')
+        args.testset = ('test_aux.in' if auxiliary_experiment else 'test.in')
 
     input_dir = f"{results_dir}/input"
     num_training = args.generate_training_num
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):
         from modules import SetsGenerator  # generate a set
 
-        experiment_dir = ("auxiliary_phrase/" if args.auxiliary_experiment else
+        experiment_dir = ("auxiliary_phrase/" if auxiliary_experiment else
                           "cognate/" if (cognate_experiment or args.false_friends or
                                          args.num_cognate_models_for_test_set > 0) else
                           "code-switching/" if args.activate_both_lang else "")
@@ -348,7 +348,7 @@ if __name__ == "__main__":
                      input_class=formatted_input, starting_epoch=starting_epoch, epochs=args.epochs,
                      set_weights_folder=args.set_weights, set_weights_epoch=set_weights_epoch, l2_epoch=args.l2_epoch,
                      ignore_tense_and_det=args.ignore_tense_and_det, pronoun_experiment=args.pronoun_experiment,
-                     auxiliary_experiment=args.auxiliary_experiment, only_evaluate=args.only_evaluate,
+                     auxiliary_experiment=auxiliary_experiment, only_evaluate=args.only_evaluate,
                      continue_training=args.continue_training, separate_hidden_layers=args.separate_hidden_layers,
                      evaluate_test_set=args.eval_test, evaluate_training_set=args.eval_training,
                      hidden_deviation=args.hidden_dev, compress_deviation=args.compress_dev, fw_deviation=args.fw_dev,
@@ -357,7 +357,10 @@ if __name__ == "__main__":
     Parallel(n_jobs=-1)(delayed(dualp.start_network)(sim, ) for sim in simulation_range)
 
     if args.eval_test:  # plot results
-        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range, l2_decimal)
+        create_dataframes_for_plots(results_dir, starting_epoch, args.epochs, simulation_range,
+                                    l2_decimal, auxiliary_experiment)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
         plot.performance(df, include_code_switches=args.activate_both_lang)
+        if auxiliary_experiment:
+            plot.lineplot_auxiliary_phrase_experiment(ci=95, ylim=35)
