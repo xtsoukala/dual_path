@@ -436,12 +436,13 @@ class Plotter:
                                  include_code_switches=True)
 
     def performance(self, df, fname='performance', ylim=100, legend_loc='upper center', include_individual_points=True,
-                    include_code_switches=False, max_epochs=None):
+                    include_code_switches=False, max_epochs=None, threshold=0):
         if df.empty:
             import sys;
             sys.exit("Cannot plot performance, the dataframe is empty")
         if max_epochs:
             df = df[df.epoch < max_epochs + 1]
+        df = df[df.meaning > threshold]  # remove simulations that did not succeed
         sns.lineplot(x='epoch', y='grammaticality_percentage', data=df, color='#0173b2', ci=None,
                      label='grammaticality')
         sns.lineplot(x='epoch', y='meaning_percentage', data=df, color='#de8f05', ci=None, label='meaning',

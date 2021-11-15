@@ -114,7 +114,7 @@ if __name__ == "__main__":
                         help='Threshold for performance of simulations. Any simulations that performs has a percentage '
                              'of correct sentences < threshold are discarded')
     parser.add_argument('--config_file', default=False, help='Read arguments from file')
-    parser.add_argument('--generator_timeout', type=positive_int, default=60,#240,
+    parser.add_argument('--generator_timeout', type=positive_int, default=120,
                         help="Number of seconds before the sentence generation process times out")
     parser.add_argument('--hidden_dev', type=non_negative_int, default=10,
                         help='Maximum deviation for the number of hidden layer units when randomization is used. '
@@ -361,6 +361,6 @@ if __name__ == "__main__":
                                     l2_decimal, auxiliary_experiment)
         df = pd.read_csv(f'{results_dir}/performance.csv')
         plot = Plotter(results_dir=results_dir)
-        plot.performance(df, include_code_switches=args.activate_both_lang)
+        plot.performance(df, include_code_switches=args.activate_both_lang, threshold=args.threshold)
         if auxiliary_experiment:
-            plot.lineplot_auxiliary_phrase_experiment(ci=95, ylim=35)
+            plot.lineplot_auxiliary_phrase_experiment(ci=95, ylim=20)

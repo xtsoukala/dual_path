@@ -38,9 +38,12 @@ class SetsGenerator:
         self.concepts = self.lexicon_df.concept.dropna().unique()
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
+        self.event_semantic_string = 'EVENT-SEM'
         self.structures_df = self.get_structures(structures_csv)
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
-        self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=;)')[1].unique()  # AGENT etc
+        self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=)')[1].unique().tolist()  # AGENT etc
+        # exclude event semantics from the roles:
+        self.roles = [role for role in self.roles if role != self.event_semantic_string]
         self.df_cache = {}
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
@@ -346,7 +349,7 @@ class SetsGenerator:
         # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
         event_semantics = []
         for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
-            for evsem in event_semantic_str.split("EVENT-SEM=")[1].split(','):
+            for evsem in event_semantic_str.split(f"{self.event_semantic_string}=")[1].split(','):
                 if ':' in evsem:
                     evsem = evsem.split(':')[0]  # remove activation
                 if evsem and evsem not in event_semantics:
@@ -502,9 +505,8 @@ class SetsGenerator:
         w = self.lexicon_df.query(f"concept == '{concept}'")
         return w[[f'morpheme_{lang}', 'pos', f'syntactic_gender_{lang}', 'semantic_gender', 'type']].values[0]
 
-    @staticmethod
-    def remove_roles_from_event_semantics(msg_str):
-        for event in msg_str.split("EVENT-SEM=")[1].split(','):
+    def remove_roles_from_event_semantics(self, msg_str):
+        for event in msg_str.split(f"{self.event_semantic_string}=")[1].split(','):
             if ':' in event:  # the user has the option to set the activation, e.g.: 'PATIENT:0.7,AGENT:0.9'
                 core_event = event.split(':')[0]
             else:

@@ -56,6 +56,7 @@ class InputFormatter:
         if concepts_to_evaluate:
             self.concepts_to_evaluate = self.df_query_to_idx(f"concept.isin({concepts_to_evaluate})")
         self.replace_haber_tener = replace_haber_tener
+        self.auxiliary_possession_attribute_without_concept = False
         self.test_haber_frequency = test_haber_frequency
         self.messageless_decimal_fraction = messageless_decimal_fraction
         if use_word_embeddings:
@@ -69,6 +70,8 @@ class InputFormatter:
         self.roles_size = len(self.roles)
         self.roles_idx = dict(zip(self.roles, range(self.roles_size)))
         self.event_semantics = self._read_file_to_list('event_semantics.in')
+        if self.auxiliary_possession_attribute_without_concept and 'POSSESSION' not in self.event_semantics:
+            self.event_semantics.append("POSSESSION")
         self.event_sem_size = len(self.event_semantics)
         self.event_sem_index = dict(zip(self.event_semantics, range(self.event_sem_size)))
         self.prodrop = prodrop
@@ -123,6 +126,14 @@ class InputFormatter:
 
     def update_sets(self, new_directory):
         self.directory = new_directory
+
+        if self.auxiliary_possession_attribute_without_concept:
+            # remove ACTION-LINKING from event semantics and ACTION-LINKING=BE; from attribute sentences
+            os.system(f"sed -i -e '/ACTION-LINKING=BE;/ s/ACTION-LINKING,//g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/ACTION-LINKING=BE;//g' {new_directory}/t*.in")
+            # similarly for possession sentences (but in this add POSSESSION to event semantics)
+            os.system(f"sed -i -e '/ACTION-LINKING=HAS;/ s/ACTION-LINKING,/POSSESSION,/g' {new_directory}/t*.in")
+            os.system(f"sed -i -e 's/ACTION-LINKING=HAS;//g' {new_directory}/t*.in")
 
         if self.determinerpronoun:
             os.system(f"sed -i -e 's/=indef,/=defpro:0.33,/g' {new_directory}/t*.in")
@@ -404,7 +415,7 @@ class InputFormatter:
                     # check Spanish-to-English direction
                     before_esen = True if before and language_of_pos_of_interest == 'en' else False
                 if before is False:
-                    at, point = self.is_code_switched(sentence_indices[0:pos_idx+1],
+                    at, point = self.is_code_switched(sentence_indices[0:pos_idx + 1],
                                                       target_lang=self.lang_indices[sentence_indices[0]])
                     # check Spanish-to-English direction
                     at_esen = True if at and language_of_pos_of_interest == 'en' else False
@@ -415,7 +426,7 @@ class InputFormatter:
                 right_after_esen = (True if right_after and language_of_pos_of_interest == 'en'
                                     else False)
                 # check switch at the end (e.g. after aux and participle)
-                language_after_pos_of_interest = self.lang_indices[sentence_indices[pos_idx+1]][0]
+                language_after_pos_of_interest = self.lang_indices[sentence_indices[pos_idx + 1]][0]
 
                 after, point = self.is_code_switched(sentence_indices[pos_idx + 1:pos_idx + 3],
                                                      target_lang=language_after_pos_of_interest)
