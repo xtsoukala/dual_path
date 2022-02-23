@@ -43,7 +43,7 @@ class SetsGenerator:
         self.num_structures_L1, self.num_structures_L2 = self.get_num_structures_per_language()
         self.roles = self.structures_df['message'].str.extractall('(;|^)?([A-Z-]*)(=)')[1].unique().tolist()  # AGENT etc
         # exclude event semantics from the roles:
-        self.roles = [role for role in self.roles if role != self.event_semantic_string]
+        self.roles = [role.strip() for role in self.roles if role != self.event_semantic_string]
         self.df_cache = {}
         # TODO: automate
         self.identifiability = ['pron', 'def', 'indef']
@@ -230,6 +230,11 @@ class SetsGenerator:
             for sentence, message in generated_pairs:
                 f.write(u'%s## %s\n' % (sentence, message))
 
+    @staticmethod
+    def get_list_item_by_index(my_list, index):
+        """Returns a list item if the index exists, otherwise it returns an empty string"""
+        return my_list[index] if index < len(my_list) else ""
+
     def structures_to_sentences(self, sentence_structures, generated_pairs, exclude_test_sentences,
                                 replace_aux_sentences, exclude_eos_cognate=False):
         sentence_idx = len(generated_pairs)  # keep track of how many sentences we have generated already
@@ -240,7 +245,7 @@ class SetsGenerator:
             sentence = []
             msg_idx = 0
             gender = None
-            boost_next = False
+            buffer_msg_index = None
             pos_list = pos_full.split()
             sentence_length = len(pos_list) - 1
             for i, pos in enumerate(pos_list):
@@ -263,8 +268,8 @@ class SetsGenerator:
                 if concept:
                     semantic_gender = self.get_semantic_gender(morpheme_df['semantic_gender'], syntactic_gender=gender)
                     message[msg_idx] = self.add_concept_and_gender_info(message[msg_idx], concept, semantic_gender)
-                    next_pos = pos_list[i + 1] if i + 1 < len(pos_list) else None
-                    msg_idx, boost_next = self.alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next)
+                    next_pos = self.get_list_item_by_index(pos_list, i+1)
+                    msg_idx, buffer_msg_index = self.get_next_msg_idx(msg_idx, pos, next_pos, buffer_msg_index)
             sentence = u'%s .' % ' '.join(sentence)
             message = ";".join(message)
             if self.unique_cognate_per_sentence and 'COG' not in message:
@@ -350,6 +355,7 @@ class SetsGenerator:
         event_semantics = []
         for i, event_semantic_str in self.structures_df.message.iteritems():  # slow loop
             for evsem in event_semantic_str.split(f"{self.event_semantic_string}=")[1].split(','):
+                evsem = evsem.strip()
                 if ':' in evsem:
                     evsem = evsem.split(':')[0]  # remove activation
                 if evsem and evsem not in event_semantics:
@@ -522,27 +528,34 @@ class SetsGenerator:
         return msg_str
 
     @staticmethod
-    def alter_msg_idx(msg_idx, pos, lang, next_pos, boost_next=False):
-        """
+    def get_next_msg_idx(msg_idx, pos, next_pos, buffer_msg_index=None):
+        """ Returns the following index of the message list
         :param msg_idx: index of the message list (e.g., ['AGENT', 'AGENT-MOD', 'ACTION', 'PATIENT']
         :param pos: current part of speech (e.g., 'det' for determiner, 'noun:animate' for an animate noun)
-        :param lang: language code (e.g., en, es)
-        :param next_pos: the pos that follows
-        :param boost_next: whether to move two indexes ahead. This hack is because in English we want to use the
-        adjective as 'AGENT-MOD', then go back to 'AGENT' for the noun, and finally move to 'ACTION' for the verb
+        :param next_pos: the following part of speech
+        :param buffer_msg_index: In case it's not None, it's taken into account if we need to skip/go back to a previous
+         index. This hack is because in some languages (e.g., English) we want to use the adjective as 'AGENT-MOD',
+         then go back to 'AGENT' for the noun, and finally move to 'ACTION' for the verb.
         :return:
         """
-        if boost_next:
-            msg_idx += 2
-            boost_next = False
-        elif pos == 'det' and lang in ['en', 'nl'] and 'adj' in next_pos:
-            msg_idx += 1
-        elif lang in ['en', 'nl'] and 'adj' in pos:
-            msg_idx -= 1
-            boost_next = True
-        elif pos != 'det':
-            msg_idx += 1
-        return msg_idx, boost_next
+        if buffer_msg_index and buffer_msg_index > msg_idx:
+            # resets index
+            msg_idx = buffer_msg_index + 1
+            buffer_msg_index = None
+            return msg_idx, buffer_msg_index
+
+        if 'noun' in next_pos and buffer_msg_index is not None:
+            tmp_msg_idx = buffer_msg_index
+            buffer_msg_index = msg_idx
+            msg_idx = tmp_msg_idx
+            return  msg_idx, buffer_msg_index
+
+        if 'det' in pos:
+            if not ('noun' in next_pos or 'gen' in next_pos):
+                buffer_msg_index = msg_idx
+            else:
+                msg_idx = msg_idx - 1
+        return msg_idx + 1, buffer_msg_index
 
     @staticmethod
     def sentence_is_unique(message, exclude_test_sentences, generated_pairs):

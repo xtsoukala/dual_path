@@ -626,68 +626,68 @@ class InputFormatter:
 
         passive_sentence_idx = active_sentence_idx
 
-        self.transitive_idx = self.df_query_to_idx("type == 'transitive'")
-        self.past_idx = self.df_query_to_idx("pos == 'past'", lang)
-        self.par_idx = self.df_query_to_idx("pos == 'prf'", lang)
-        self.by_idx = self.df_query_to_idx("pos == 'by'", lang)
-        self.is_idx = self.df_query_to_idx("pos == 'aux' and tense == 'present' and aspect == 'perfect_pass'", lang)
-        self.was_idx = self.df_query_to_idx("pos == 'aux' and tense == 'past' and aspect == 'perfect_pass'", lang)
-        self.she_idx = self.df_query_to_idx(
-            f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'F' and type == 'subject'", lang)
-        self.he_idx = self.df_query_to_idx(
+        transitive_idx = self.df_query_to_idx("type == 'transitive'")
+        past_idx = self.df_query_to_idx("pos == 'past'", lang)
+        par_idx = self.df_query_to_idx("pos == 'prf'", lang)
+        by_idx = self.df_query_to_idx("pos == 'by'", lang)
+        is_idx = self.df_query_to_idx("pos == 'aux' and tense == 'present' and aspect == 'perfect_pass'", lang)
+        was_idx = self.df_query_to_idx("pos == 'aux' and tense == 'past' and aspect == 'perfect_pass'", lang)
+        she_idx = self.df_query_to_idx(f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'F' and type == 'subject'", 
+                                       lang)
+        he_idx = self.df_query_to_idx(
             f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'M' and type == 'subject'", lang)
-        self.her_idx = self.df_query_to_idx(
+        her_idx = self.df_query_to_idx(
             f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'F' and type == 'prep-object'", lang)
-        self.him_idx = self.df_query_to_idx(
+        him_idx = self.df_query_to_idx(
             f"pos == 'pron' and syntactic_gender_{self.L[2]} == 'M' and type == 'prep-object'", lang)
 
         trans_verb_idx = None
 
         for i in range(len(active_sentence_idx)):
-            if active_sentence_idx[i] in self.transitive_idx:
+            if active_sentence_idx[i] in transitive_idx:
                 trans_verb_idx = i
 
         # Passive sentence starts with object of active sentence
         passive_sentence_idx = active_sentence_idx[trans_verb_idx + 1:-1]
 
         # Append auxiliary verb
-        if active_sentence_idx[trans_verb_idx + 1] == self.past_idx[0]:
+        if active_sentence_idx[trans_verb_idx + 1] == past_idx[0]:
             del passive_sentence_idx[0]
-            passive_sentence_idx += self.was_idx
+            passive_sentence_idx += was_idx
         else:
-            passive_sentence_idx += self.is_idx
+            passive_sentence_idx += is_idx
 
         if lang != 'nl':
             # Append transitive verb, '-par' and
-            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
+            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + par_idx
 
         # Add 'by' and subject (and optional adjective) of active sentence up to period
-        passive_sentence_idx += self.by_idx + active_sentence_idx[:trans_verb_idx]
+        passive_sentence_idx += by_idx + active_sentence_idx[:trans_verb_idx]
 
         # Change pronoun from subject to object
-        if passive_sentence_idx[-1] == self.she_idx[0]:
-            passive_sentence_idx[-1] = self.her_idx[0]
-        elif passive_sentence_idx[-1] == self.he_idx[0]:
-            passive_sentence_idx[-1] = self.him_idx[0]
+        if passive_sentence_idx[-1] == she_idx[0]:
+            passive_sentence_idx[-1] = her_idx[0]
+        elif passive_sentence_idx[-1] == he_idx[0]:
+            passive_sentence_idx[-1] = him_idx[0]
 
         if lang == 'nl':
             # Append transitive verb, '-par' and 'by'
-            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx
+            passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + par_idx
 
         passive_sentence_idx.append(self.period_idx)
 
         '''    
         # Append transitive verb, '-par' and 'by'  
-        passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + self.par_idx + self.by_idx
+        passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + par_idx + by_idx
         
         # Passive sentence ends with subject (and optional adjective) of active sentence and period
         passive_sentence_idx += active_sentence_idx[:trans_verb_idx] + [active_sentence_idx[-1]]
                  
         # Change pronoun from subject to object
-        if passive_sentence_idx[-2] == self.she_idx[0]:
-            passive_sentence_idx[-2] = self.her_idx[0]
-        elif passive_sentence_idx[-2] == self.he_idx[0]:
-            passive_sentence_idx[-2] = self.him_idx[0]
+        if passive_sentence_idx[-2] == she_idx[0]:
+            passive_sentence_idx[-2] = her_idx[0]
+        elif passive_sentence_idx[-2] == he_idx[0]:
+            passive_sentence_idx[-2] = him_idx[0]
         '''
         return passive_sentence_idx
 
@@ -696,9 +696,9 @@ class InputFormatter:
         :param sentence_idx: list with sentence indices
         :return: sentence structure, either active or passive
         """
-        self.by_idx = self.df_query_to_idx("pos == 'by'")
+        by_idx = self.df_query_to_idx("pos == 'by'")
 
-        if any(idx in self.by_idx for idx in sentence_idx):
+        if any(idx in by_idx for idx in sentence_idx):
             return 'passive'
 
         return 'active'
@@ -755,6 +755,8 @@ class InputFormatter:
                             current_event, current_activation = event.split(':')
                             event_sem_activations[self.event_sem_index[current_event]] = float(current_activation)
                         else:
+                            if event not in self.event_sem_index:
+                                logging.error(f'There is an error in the message: {message}')
                             event_sem_activations[self.event_sem_index[event]] = activation
                 elif role == "TARGET-LANG":
                     if what in self.target_lang:
