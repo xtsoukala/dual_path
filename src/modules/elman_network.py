@@ -1,18 +1,33 @@
 # -*- coding: utf-8 -*-
-from scipy.stats import entropy
+import os
 import pickle
-from . import os, sys, torch, zeros, cat, stack, empty, lz4
+import sys
+
+import lz4.frame as lz4
+import torch
+from scipy.stats import entropy
+from torch import cat, empty, stack, zeros
 
 
 class SimpleRecurrentNetwork:
-    def __init__(self, learn_rate, momentum, debug_messages, separate_hidden_layers, role_copy, input_copy):
+    def __init__(
+        self,
+        learn_rate,
+        momentum,
+        debug_messages,
+        separate_hidden_layers,
+        role_copy,
+        input_copy,
+    ):
         self.layers = {}
         self.backpropagated_layers = []
         self.feedforward_layers = []
         self.learn_rate = learn_rate  # learning rate (speed of learning)
         self.momentum = momentum
         self.context_value = 0.5
-        self.initialization_completed = False  # needs to be set to True for the model to start training
+        self.initialization_completed = (
+            False  # needs to be set to True for the model to start training
+        )
         self.debug_messages = debug_messages
         self.include_role_copy = role_copy
         self.include_input_copy = input_copy
@@ -20,22 +35,48 @@ class SimpleRecurrentNetwork:
         # Before producing the first word of each sentence, there is no input from the following layers so init to 0
         self.lesion_syntax = False
         self.lesion_semantics = False
-        self.syntactic_layers = ('compress', 'pred_compress')
-        self.semantic_layers = ('pred_concept', 'role')  # 'pred_identifiability', 'eventsem', 'target_lang']
-        self.initially_deactive_layers = ('compress', 'concept', 'identifiability', 'role')
+        self.syntactic_layers = ("compress", "pred_compress")
+        self.semantic_layers = (
+            "pred_concept",
+            "role",
+        )  # 'pred_identifiability', 'eventsem', 'target_lang']
+        self.initially_deactive_layers = (
+            "compress",
+            "concept",
+            "identifiability",
+            "role",
+        )
         self.current_layer = None
 
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
         self.backpropagated_layers = self.get_backpropagation_layers()
-        for layer in self.layers.values():  # if there are > 1 layers and if at least one has input weights
+        for (
+            layer
+        ) in (
+            self.layers.values()
+        ):  # if there are > 1 layers and if at least one has input weights
             if all(layer.in_weights):
                 self.initialization_completed = True
                 break
 
-    def add_layer(self, name, size, has_bias=False, activation_function="tanh", convert_input=False, recurrent=False):
-        self.layers[name] = NeuronLayer(name=name, size=size, has_bias=has_bias, convert_input=convert_input,
-                                        is_recurrent=recurrent, activation_function=activation_function)
+    def add_layer(
+        self,
+        name,
+        size,
+        has_bias=False,
+        activation_function="tanh",
+        convert_input=False,
+        recurrent=False,
+    ):
+        self.layers[name] = NeuronLayer(
+            name=name,
+            size=size,
+            has_bias=has_bias,
+            convert_input=convert_input,
+            is_recurrent=recurrent,
+            activation_function=activation_function,
+        )
 
     def connect_layers(self, first_layer_name, second_layer_name):
         second = self.layers[second_layer_name]
@@ -45,35 +86,53 @@ class SimpleRecurrentNetwork:
     def load_weights(self, set_weights_folder, set_weights_epoch, simulation_num=None):
         if set_weights_folder:
             if "weights" not in set_weights_folder:
-                weights_fname = os.path.join(set_weights_folder,
-                                             str(simulation_num) if simulation_num is not None else '',
-                                             "weights", f"w{set_weights_epoch}.lz4")
+                weights_fname = os.path.join(
+                    set_weights_folder,
+                    str(simulation_num) if simulation_num is not None else "",
+                    "weights",
+                    f"w{set_weights_epoch}.lz4",
+                )
             else:
-                weights_fname = os.path.join(set_weights_folder, f"w{set_weights_epoch}.lz4")
+                weights_fname = os.path.join(
+                    set_weights_folder, f"w{set_weights_epoch}.lz4"
+                )
 
-            with lz4.open(weights_fname, 'rb') as f:
+            with lz4.open(weights_fname, "rb") as f:
                 self.layers = pickle.load(f)
         else:
             if simulation_num:
-                torch.manual_seed(simulation_num)  # set number of simulation as the seed
+                torch.manual_seed(
+                    simulation_num
+                )  # set number of simulation as the seed
             for layer in self.layers.values():
-                layer.in_weights = torch.nn.init.xavier_normal_(torch.empty([layer.in_size + int(layer.has_bias),
-                                                                             layer.size]))
+                layer.in_weights = torch.nn.init.xavier_normal_(
+                    torch.empty([layer.in_size + int(layer.has_bias), layer.size])
+                )
         self.reset_context_delta_and_crole()
         self._complete_initialization()
 
     def save_weights(self, results_dir, epoch):
         self._create_dir_if_not_exists(results_dir)
         if self.layers:
-            with lz4.open(f"{results_dir}/weights/w{epoch}.lz4", 'wb') as pckl:
+            with lz4.open(f"{results_dir}/weights/w{epoch}.lz4", "wb") as pckl:
                 pickle.dump(self.layers, pckl, protocol=-1)
         else:
             sys.exit(f"The layers haven't been correctly initialized for epoch {epoch}")
 
-    def set_message_reset_context(self, weights_role_concept, weights_concept_role, weights_role_identif,
-                                  weights_identif_role, event_semantics, target_lang_act, activate_language):
+    def set_message_reset_context(
+        self,
+        weights_role_concept,
+        weights_concept_role,
+        weights_role_identif,
+        weights_identif_role,
+        event_semantics,
+        target_lang_act,
+        activate_language,
+    ):
         # FIXME: bias weights?
-        self.set_layer_in_weights("role", cat((weights_identif_role, weights_concept_role)))
+        self.set_layer_in_weights(
+            "role", cat((weights_identif_role, weights_concept_role))
+        )
         self.set_layer_in_weights("pred_identifiability", weights_role_identif)
         self.set_layer_in_weights("pred_concept", weights_role_concept)
 
@@ -87,17 +146,23 @@ class SimpleRecurrentNetwork:
         for layer in self.backpropagated_layers:  # Also reset the previous delta values
             layer.previous_delta = empty([])
 
-        if self.include_role_copy:  # if we're using role_copy, reset that as well (to 0, NOT empty)
+        if (
+            self.include_role_copy
+        ):  # if we're using role_copy, reset that as well (to 0, NOT empty)
             self.initialize_layer_activation("role_copy")
         if self.include_input_copy:
             self.initialize_layer_activation("input_copy")
 
     def set_inputs(self, input_idx, target_idx=None):
-        self.initialize_layer_activation("input", activate_id=[input_idx, 1] if input_idx else None)
+        self.initialize_layer_activation(
+            "input", activate_id=[input_idx, 1] if input_idx else None
+        )
         """if input_layer.convert_input:  # convert the range of the input between -0.9 and 0.9 instead of 0-1
             input_layer.activation = convert_range(input_layer.activation)"""
         if target_idx is not None:  # no need to set target when testing
-            self.initialize_target_activation("output", activate_idx=target_idx, value=1)
+            self.initialize_target_activation(
+                "output", activate_idx=target_idx, value=1
+            )
 
     def initialize_layer_activation(self, layer_name, activate_id=None):
         layer = self.layers[layer_name]
@@ -123,12 +188,18 @@ class SimpleRecurrentNetwork:
 
     def feedforward(self, start_of_sentence=False):
         if not self.initialization_completed:
-            sys.exit('The network was not been initialized correctly. Make sure you have added layers (add_layer), '
-                     'connected them (connect_layers) and (re)set the weights')
+            sys.exit(
+                "The network was not been initialized correctly. Make sure you have added layers (add_layer), "
+                "connected them (connect_layers) and (re)set the weights"
+            )
         for layer in self.feedforward_layers:
             # combines the activation of all previous layers (e.g. role and compress and... to hidden)
-            layer.in_activation = cat([self.layers[incoming_layer_name].activation
-                                       for incoming_layer_name in layer.in_layer_names])
+            layer.in_activation = cat(
+                [
+                    self.layers[incoming_layer_name].activation
+                    for incoming_layer_name in layer.in_layer_names
+                ]
+            )
             """for incoming_layer in layer.in_layers:
                 if (start_of_sentence and self.lesion_syntax and incoming_layer.name in self.syntactic_layers or
                         self.lesion_semantics and incoming_layer.name in self.semantic_layers):
@@ -136,7 +207,9 @@ class SimpleRecurrentNetwork:
                     layer.in_weights[layer.in_activation.size:layer.in_activation.size + incoming_layer.size] = 0
                 layer.in_activation = cat((layer.in_activation, incoming_layer.activation))"""
             if layer.is_recurrent:  # hidden layer only (include context activation)
-                layer.in_activation = cat((layer.in_activation, layer.context_activation))  # , 0)
+                layer.in_activation = cat(
+                    (layer.in_activation, layer.context_activation)
+                )  # , 0)
             if layer.has_bias:  # add bias
                 layer.in_activation = cat((layer.in_activation, torch.tensor(1)))
                 # , 0) #np. append(layer.in_activation, 1)
@@ -144,15 +217,21 @@ class SimpleRecurrentNetwork:
             if start_of_sentence and layer.name in self.initially_deactive_layers:
                 layer.activation = zeros(layer.size)  # set role_copy to zero   # zeros?
                 continue
-            layer.activation = self.activation_function(dot_product=layer.in_activation.matmul(layer.in_weights),
-                                                        activation_function=layer.activation_function)
+            layer.activation = self.activation_function(
+                dot_product=layer.in_activation.matmul(layer.in_weights),
+                activation_function=layer.activation_function,
+            )
         # Copy output of the hidden to "context" (activation of t-1)
         self.set_context_activation("hidden")
 
         if self.include_input_copy:
-            self.set_layer_activation("input_copy", activation=self.get_layer_activation("input").clone())
+            self.set_layer_activation(
+                "input_copy", activation=self.get_layer_activation("input").clone()
+            )
         if self.include_role_copy:
-            self.set_layer_activation("role_copy", activation=self.get_layer_activation("role").clone())
+            self.set_layer_activation(
+                "role_copy", activation=self.get_layer_activation("role").clone()
+            )
 
     @staticmethod
     def activation_function(dot_product, activation_function):
@@ -167,7 +246,9 @@ class SimpleRecurrentNetwork:
     # @profile
     def backpropagate(self):
         self.compute_output_error()
-        for self.current_layer in self.backpropagated_layers:  # Propagate error back to the previous layers
+        for (
+            self.current_layer
+        ) in self.backpropagated_layers:  # Propagate error back to the previous layers
             # self.current_layer = self.layers[layer_name]
             self._compute_current_layer_gradient()
             self._compute_current_delta_weight_matrix()
@@ -177,21 +258,31 @@ class SimpleRecurrentNetwork:
             self._backpropagate_error_to_incoming_layers()
 
     def _compute_current_layer_gradient(self):
-        if self.current_layer.error_out:  # all layers but "output" (which has error and gradient precomputed)
+        if (
+            self.current_layer.error_out
+        ):  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
             error_out = stack(self.current_layer.error_out, dim=0).sum(dim=0)
-            self.current_layer.error_out = []  # initialize for following gradient computation
+            self.current_layer.error_out = (
+                []
+            )  # initialize for following gradient computation
             # Calculate derivative (Do) and gradient δo = Eo • Do  (or Do * Eo)
-            self.current_layer.gradient = error_out * derivative(self.current_layer.activation,
-                                                                 self.current_layer.activation_function)
+            self.current_layer.gradient = error_out * derivative(
+                self.current_layer.activation, self.current_layer.activation_function
+            )
 
     def _compute_current_delta_weight_matrix(self):
         # Compute delta weight matrix Δo = transposed(Io) * δο
         # 2d -> make sure before
-        self.current_layer.delta = self.current_layer.in_activation[None, :].t().mm(self.current_layer.gradient[
-                                                                                    None, :])
+        self.current_layer.delta = (
+            self.current_layer.in_activation[None, :]
+            .t()
+            .mm(self.current_layer.gradient[None, :])
+        )
         # Do bounded descent according to Chang's script (otherwise it can get stuck in local minima)
-        len_delta = self.current_layer.delta.pow(2).sum().sqrt()  # sqrt(sum(self.current_layer.delta ** 2))
+        len_delta = (
+            self.current_layer.delta.pow(2).sum().sqrt()
+        )  # sqrt(sum(self.current_layer.delta ** 2))
         if len_delta > 1:
             self.current_layer.delta.div_(len_delta)
 
@@ -199,7 +290,9 @@ class SimpleRecurrentNetwork:
 
     def _update_total_error_for_backpropagation(self):
         # Update (back propagate) gradient out (δO) to incoming layers. Compute this * before * updating the weights
-        self.current_layer.total_error = self.current_layer.gradient.matmul(self.current_layer.in_weights.t())
+        self.current_layer.total_error = self.current_layer.gradient.matmul(
+            self.current_layer.in_weights.t()
+        )
 
     def _update_current_weights_and_previous_delta(self):
         """
@@ -210,7 +303,9 @@ class SimpleRecurrentNetwork:
         self.current_layer.in_weights.add_(self.current_layer.delta)
         # momentum descent: model continues in same direction as previous weight change
         if len(self.current_layer.previous_delta.size()) > 1:
-            self.current_layer.in_weights.add_(self.momentum * self.current_layer.previous_delta)
+            self.current_layer.in_weights.add_(
+                self.momentum * self.current_layer.previous_delta
+            )
         # Update previous delta. Clone otherwise it keeps reference
         self.current_layer.previous_delta = self.current_layer.delta.clone()
 
@@ -224,15 +319,19 @@ class SimpleRecurrentNetwork:
         for prev_layer_name in self.current_layer.in_layer_names:
             prev_layer = self.layers[prev_layer_name]
             if prev_layer.in_layer_names:
-                prev_layer.error_out.append(self.current_layer.total_error[layer_start:layer_start + prev_layer.size])
+                prev_layer.error_out.append(
+                    self.current_layer.total_error[
+                        layer_start : layer_start + prev_layer.size
+                    ]
+                )
             layer_start += prev_layer.size
 
     @staticmethod
     def _create_dir_if_not_exists(results_dir):
-        if not os.path.isdir(f'{results_dir}/weights'):
+        if not os.path.isdir(f"{results_dir}/weights"):
             # due to multiprocessing and race condition, there are rare cases where os.mkdir throws a "file exists"
             # exception even though we have checked.
-            os.makedirs(f'{results_dir}/weights', exist_ok=True)
+            os.makedirs(f"{results_dir}/weights", exist_ok=True)
 
     def get_layer_activation(self, layer_name):
         return self.layers[layer_name].activation
@@ -246,7 +345,9 @@ class SimpleRecurrentNetwork:
     def set_context_activation(self, layer_name, reset=False):
         layer = self.layers[layer_name]
         if reset:
-            layer.context_activation = layer.context_activation.fill_(self.context_value)
+            layer.context_activation = layer.context_activation.fill_(
+                self.context_value
+            )
         else:
             layer.context_activation = layer.activation.clone()
 
@@ -255,7 +356,9 @@ class SimpleRecurrentNetwork:
 
     def get_max_output_activation_and_entropy(self, layer_name="output"):
         output_activation = self.layers[layer_name].activation
-        return int(output_activation.argmax()), self.calculate_tensor_entropy(output_activation)
+        return int(output_activation.argmax()), self.calculate_tensor_entropy(
+            output_activation
+        )
 
     def compute_output_error(self):
         # Calculate error[Eo](target - output)
@@ -268,7 +371,15 @@ class SimpleRecurrentNetwork:
 
 
 class NeuronLayer:
-    def __init__(self, name, size, has_bias, activation_function, convert_input, is_recurrent=False):
+    def __init__(
+        self,
+        name,
+        size,
+        has_bias,
+        activation_function,
+        convert_input,
+        is_recurrent=False,
+    ):
         """
         :param name: name of the layer (input, hidden etc)
         :param size: layer size

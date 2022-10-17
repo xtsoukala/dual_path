@@ -1,2 +1,4 @@
+__pycache__/
 simulations/
+env/
 .DS_Store
