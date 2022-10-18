@@ -4,71 +4,148 @@
 
 Dual-path is a computational model of (monolingual) sentence production by [Chang, 2002](https://sites.google.com/site/sentenceproductionmodel/Home/chang-2002). Tutorial: https://sites.google.com/site/sentenceproductionmodel/Home/tutorial
 
+The Bilingual Dual-path model is an extension of Dual-path, aiming to simulate bilingual sentence production and code-switching.
 
-From Chang, 2002:
-```
-The learning algorithm is back-propagation, using a modified momentum algorithm (doug momentum)
-Doug momentum: similar to standard momentum descent with the exception that the pre-momentum
-weight step vector is bounded so that its length cannot exceed 1.0 (Rohde, 1999).
+# Installation
 
-The output and role units use the softmax activation function. All other units use the logistic activation function.
-```
-
-It it recommended to run the Bilingual Dual-path model using Python3.6 and above. It has been tested on MacOS and Ubuntu
- and seems to have encoding issues on Windows.
- 
-To install the requirements:
+To run this project you need a Python version >= 3.6. To install the requirements, it it recommended that you first create and activate a virtual environment. There are several ways to create a virtual environment; for instance:
 
 ```
-pip3 install -r requirements.txt
+python3.8 -m venv env
+source env/bin/activate
 ```
 
-To run 4 simulations for 20 epochs that generate Spanish-English code-switched sentences you can run:
-```
-python3 src/start_dual_path.py --sim 4 --cs --resdir results
-```
-
-The results will be under the folder "simulations". If the flag "resdir" is used, the results will be under "simulations/results" (the name given at "resdir") otherwise they will be stored under simulations/year-month-day/hour_minutes_seconds_esen_sim4_h<number_hidden_units>_c<number_compressed_units>_fw<fixed_weights_value>_e<number_epochs>, 
-where "esen" is the language pair, sim4 the number of simulations, h the number of hidden units and c the number of 
-compress units. fw is the fixed weight between concepts and roles, and e20 the number of epochs.
-
-To run a monolingual version you can run:
+Once you are in the virtual environment, install the requirements:
 
 ```
-python3 src/start_dual_path.py --sim 4 --languages en --resdir english
+pip install -r requirements.txt
+```
+
+It has been tested on MacOS, Ubuntu, and WSL on Windows; it seems to have encoding issues on (non-WSL) Windows.
+
+**Note**: If you have issues installing the dependencies on an M1 Mac, try running: `xcodebuild -runFirstLaunch` and repeat the installation process.
+
+# How to run the simulations
+
+To run `4 simulations` for `20 epochs` that generate Spanish-English `code-switched sentences`, and store the results under a folder named `results`, run:
+
+```
+python src/start_dual_path.py --sim 4 --epochs 20 --cs --resdir results
+```
+
+All results are stored under the folder `simulations`. If the flag `--resdir` is used, the results will be under `simulations/results` (the name given at `--resdir`) otherwise they will be stored under:
+
+`simulations/year-month-day/hour_minutes_seconds_esen_sim4_h<number_hidden_units>_c<number_compressed_units>_fw<fixed_weights_value>_e<number_epochs>`
+
+where `esen` is the language pair (Spanish-English in this case), `sim4` the number of simulations, `h` the number of hidden units and `c` the number of 
+compress units. `fw` is the fixed weight between concepts and roles, and `e20` the number of epochs.
+
+## Lexicon and Structures
+
+The default lexicon and structure files are under the `data` folder (`/data/lexicon.csv` and `/data/structures.csv`). These .csv files can be altered, and any .csv file (containing the expected columns) can be given as input:
+
+```
+python src/start_dual_path.py --structures path_to_new_structures --lexicon path_to_new_lexicon
+```
+
+An example of the lexicon headers and content:
+
+```csv
+morpheme_es,morpheme_en,concept,compositional_concept,pos,semantic_gender,syntactic_gender_es,type,tense,aspect,number,inactive,is_cognate,is_false_friend
+la,the,,,det,,F,def,,,,,,
+el,the,,,det,,M,def,,,,,,
+una,a,,,det,,F,indef,,,,,,
+él,he,,,pron,,M,subject,,,,,,
+ella,she,,,pron,,F,subject,,,,,,
+hombre,man,MAN,HUMAN,noun,M,M,,,,,,
+niño,boy,BOY,CHILD,noun,M,M,,,,,,
+```
+
+**Note**: The .csv currently uses comma as the column separator. If you open it with MS Excel you might experience encoding issues. If it's not displayed correctly, I recommend using LibreOffice.
+
+### New language pair
+
+To run the model in a different language pair, one will need to alter the lexicon, structures, and give a new language code (e.g., `el` for Greek and `morpheme_el` for Greek words in the lexicon).
+
+## Monolingual version
+
+To run a monolingual version:
+
+```
+python src/start_dual_path.py --sim 4 --languages en --resdir english
 ```
 
 and 
 
 ```
-python3 src/start_dual_path.py --sim 4 --languages es --resdir spanish
+python src/start_dual_path.py --sim 4 --languages es --resdir spanish
 ```
 
-which use the English-only or Spanish-only columns in /data/lexicon.csv and /data/structures.csv. 
+which use the English-only or Spanish-only columns in the lexicon (`lexicon.csv`) and structures (`structures.csv`). 
 
-If there are not enough resources (words) to generate unique sentences in the structures requested in structures.csv, you will need to do one of the following: i) increase the entries in lexicon.csv, ii) reduce the structures in structures.csv OR the percentage that a specific structure appears in the training/test sets (column: percentage_es or percentage_en, depending on the language) iii) decrease the number of generated sets (default: 2000 unique sentences, reduce to, e.g., 1800). 
+**Note**: If there are not enough resources (words) to generate unique sentences in the structures requested in structures.csv, you will need to do one of the following: 
 
-Example error when generating English-only sentences with the default lexicon.csv and structures.csv: 
+1. increase the entries in lexicon.csv
+2. reduce the structures in structures.csv OR the percentage that a specific structure appears in the training/test sets (column: percentage_es or percentage_en, depending on the language) 
+3. decrease the number of generated sets (default: 2000 unique sentences, reduce to, e.g., 1800)
+
+# Simulation results
+
+As mentioned above, the output is stored under `simulations`, under the given results folder (`--resdir`, or, by default, a time-stamp-derived folder).
+
+A results folder will contain at least the following files:
+
+1. all_results.csv
+2. performance.csv
+3. a collective performance graph, named <num_of_simulations>_performance.png
+4. commandline_args.txt
+5. `input` folder
+6. a numbered folder for each simulation (e.g., `1`, `2`, `3`, if 3 simulations were ran)
+
+- `all_results.csv` contains information such as the epoch and network (simulation) number, the produced and target sentences, whether that sentence is grammatical and expresses the intended meaning etc:
+
+```csv
+epoch,produced_sentence,target_sentence,is_grammatical,meaning,is_code_switched,switched_type,pos_of_switch_point,first_switch_position,produced_pos,target_pos,correct_tense,correct_definiteness,message,entropy,l2_epoch,target_has_cognate,target_has_false_friend,network_num,switch_from
+
+10,he arrives .,he arrives .,True,1,0,False,False,None,pron verb .,pron verb .,True,True,"AGENT=pron,HOST;ACTION-LINKING=ARRIVE;EVENT-SEM=SIMPLE,PRESENT,AGENT,ACTION-LINKING;TARGET-LANG=en",0.08808799 0.104491316 0.00096188975,0,False,False,4,en
+10,a short dog kicks the ball .,a short dog kicks the ball .,True,1,0,False,False,None,det adj noun verb det noun .,det adj noun verb det noun .,True,True,"AGENT=indef,DOG;AGENT-MOD=SHORT;ACTION-LINKING=KICK;PATIENT=def,BALL;EVENT-SEM=SIMPLE,PRESENT,AGENT,AGENT-MOD,ACTION-LINKING,PATIENT;TARGET-LANG=en",0.0016367333 0.10060888 0.10661055 0.07778448 0.0034413738 0.024632895 0.00010319505,0,False,False,4,en
+10,she has swum .,she has swum .,True,1,0,False,False,None,pron aux participle .,pron aux participle .,True,True,"AGENT=pron,GRANDMOTHER;ACTION-LINKING=SWIM;EVENT-SEM=PRESENT,PERFECT,AGENT,ACTION-LINKING;TARGET-LANG=en",0.07822028 0.0007833609 0.6524906 0.0043510366,0,False,False,4,en
+10,the aunt is tired .,the aunt is tired .,True,1,0,False,False,None,det noun verb adverb .,det noun verb adverb .,True,True,"AGENT=def,AUNT;ACTION-LINKING=BE;ATTR=TIRED;EVENT-SEM=SIMPLE,PRESENT,AGENT,ACTION-LINKING,ATTR;TARGET-LANG=en",0.009499092 0.11451133 0.0012939837 0.11942399 6.0327926e-05,0,False,False,4,en
+```
+
+- `performance.csv` contains the same information, but aggregated per epoch and network, and coded so that it can be plotted in `<simulations_num>_performance.png`. The current `performance.csv` headers are:
+
+```csv
+epoch,network_num,meaning,code_switched,intersentential,ambiguous,alternational,insertional,is_grammatical,strict_grammatical,total_sentences,l2_epoch,meaning_percentage,grammaticality_percentage,strict_grammaticality_percentage,code_switched_percentage,insertional_percentage,alternational_percentage,ambiguous_percentage,intersentential_percentage
+```
+
+- `commandline_args.txt` contains the arguments given to the model (see section below).
+
+- the `input` folder 
+
+
+<img width="156" alt="folder_structure" src="https://user-images.githubusercontent.com/3914528/196377836-0576e427-0de7-4c10-99ad-21a95f2ecaac.png">
+
+The `lexicon.csv` and `structures.csv` are the files you provided as `--lexicon` and `--structures`. Based on those, the `*.in` files are generated, and they contain the values of the respective layers. For instance, `roles.in` contains:
 
 ```
-Generating input for 4 simulations using: ./data/lexicon.csv (lexicon) and ./data/structures.csv (structures)
-
-The process timed out (limit: 240s). Remaining structures: 16 more structures: {('AGENT=pron;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE,AGENT,ACTION-LINKING;TARGET-LANG=en', 'pron aux::present:progressive:singular participle:intrans::progressive')} (total: 2000).
+AGENT
+AGENT-MOD
+ACTION-LINKING
+PATIENT
+ATTR
+RECIPIENT
 ```
 
-The lexicon and structures can be altered via the .csv files. The default files used are under the folder "data", but any .csv file (with the correct columns) can be given as input:
+- simulation folders: each network (simulation) contains its own training and test set, and different intialization weights. The simulation folders (e.g., `1` for the first network) contain a `test.in` and `training.in` file with messages and target sentences; a `test.csv` with the results, which are then aggregated into `all_results.csv` mentioned above; and the actual weights, which are stored under the folder `weights` and are numbered per epoch (`w0.lz4` for epoch 0 [the random initialization], `w1.lz4` for the first epoch, `w10.lz4` for the 10th epoch etc.)
+
+
+# Model parameters
+
+To see all the model parameters:
 
 ```
-python3 src/start_dual_path.py --structures path_to_new_structures --lexicon path_to_new_lexicon
-```
-
-To run the model in a different language pair, one will need to alter the lexicon, structures, and give as language a new code (e.g., "el" for Greek and morpheme_el for Greek words in the lexicon).
-
-To see all the parameters of the model: 
-
-
-```
-python3 src/start_dual_path.py -h 
+python src/start_dual_path.py -h 
 ```
 
 ```
@@ -284,21 +361,3 @@ optional arguments:
   --srn_only            Run the SRN alone, without the semantic path (default:
                         False)
 ```
-
-The output is stored under "simulations", under the given results folder (--resdir, or by default a time-stamp-derived folder) in a csv format:
-
-```
-epoch	 produced_sentence	 target_sentence	 is_grammatical	 meaning	 is_code_switched produced_pos
-19	a father has shown una llave .	a father has shown a key .	True	True	True det noun aux participle det noun .
-19	the busy girl está corriendo .	the girl is running .	flex-True	False	True det adj noun aux participle .
-19	she has given a ball .	she has given a ball .	True	True	False pron aux participle det noun .
-
-target_pos	 correct_tense	 correct_definiteness	 message
-det noun aux participle det noun .	True	True AGENT=indef,FATHER;AAL=SHOW;PATIENT=indef,KEY;E=PRESENT,PERFECT,AGENT,AAL,PATIENT,en
-det noun aux participle .	True	True	AGENT=def,GIRL;AAL=RUN;E=PRESENT,PROG,AGENT,AAL,en
-pron aux participle det noun .	True	True	AGENT=pron,GRANDMOTHER;AAL=GIVE;PATIENT=indef,BALL;E=PRESENT,PERFECT,AGENT,AAL,PATIENT,en
-```
-
-The default csv headers are: epoch, produced_sentence, target_sentence, is_grammatical, meaning, is_code_switched, switched_type, produced_pos, target_pos, correct_tense, correct_definiteness, message
-
-Note: The input files for the gender error experiment can be found [here](https://github.com/xtsoukala/gender_error_experiment)
