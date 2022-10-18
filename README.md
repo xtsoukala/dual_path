@@ -30,7 +30,7 @@ It has been tested on MacOS, Ubuntu, and WSL on Windows; it seems to have encodi
 To run `4 simulations` for `20 epochs` that generate Spanish-English `code-switched sentences`, and store the results under a folder named `results`, run:
 
 ```
-python src/start_dual_path.py --sim 4 --epochs 20 --cs --resdir results
+python src/start_dual_path.py --sim 4 --epochs 20 --cs --resdir results --lang es en
 ```
 
 All results are stored under the folder `simulations`. If the flag `--resdir` is used, the results will be under `simulations/results` (the name given at `--resdir`) otherwise they will be stored under:
@@ -88,6 +88,37 @@ which use the English-only or Spanish-only columns in the lexicon (`lexicon.csv`
 1. increase the entries in lexicon.csv
 2. reduce the structures in structures.csv OR the percentage that a specific structure appears in the training/test sets (column: percentage_es or percentage_en, depending on the language) 
 3. decrease the number of generated sets (default: 2000 unique sentences, reduce to, e.g., 1800)
+
+## Late bilingual models
+
+To simulate late bilinguals (that are exposed to the L2 later in life), you must follow a two-step process:
+
+1. train a monolingual version with the L1
+2. Use the weights of the monolingual model to train a bilingual model.
+
+For instance, if you want to train a late bilingual model with L1 English and L2 Spanish for a total of 40 epochs, you first need to train a monolingual English model for the amount of epochs that the speakers are monolingual-only (e.g., 10 for 1/4th of the total epochs). In the monolingual simulation you use the same bilingual lexicon as the final one, but you need to specify that you do not want any L2 input (`--l2_decimal_fraction 0`). In the `--lang` argument the L1 comes first, so in this case provide `--lang en es`, or `--lang es en` for L1 Spanish.
+
+```
+python src/start_dual_path.py --lang en es --lexicon  data/code-switching/lexicon.csv --structures data/code-switching/structures.csv --epochs 10 --sim 4 --l2_decimal_fraction 0 --resdir monolingual_model
+```
+
+After this model is trained:
+- using the `--sw` (`--set_weights`) flag, provide the trained weights from the previous simulations (folder: `simulations/monolingual_model`)
+- provide the same lexicon, structures, and languages as before
+- specify that the L2 epoch (`--l2_epoch`) starts at 10 (the last epoch of the monolingual model)
+- If you want the test the model's code-switching behavior already, use the `--cs` flag.
+
+```
+python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.csv  --structures data/code-switching/structures.csv --sim 4 --l2_epoch 10 --lang en es --sw simulations/monolingual_model --cs
+```
+
+# Continue training a model
+
+If you have trained a model for fewer epochs than you would like, and you want to continue the training process for more epochs, provide the weights (`--sw`), the last epoch of the trained model (`--swe`, meaning the epoch where you want to start training from, e.g., 10 in the monolingual example above), the final epoch you want to reach, and use the `--continue` flag. For instance, to train the monolingual version above to a total of 40 epochs instead of 10, run:
+
+```
+python src/start_dual_path.py --sw simulations/monolingual --swe 10 --epochs 40 --input simulations/monolingual/input --sim 4 --continue --resdir monolingual_40_epochs
+```
 
 # Simulation results
 
