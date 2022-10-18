@@ -112,7 +112,7 @@ After this model is trained:
 python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.csv  --structures data/code-switching/structures.csv --sim 4 --l2_epoch 10 --lang en es --sw simulations/monolingual_model --cs
 ```
 
-# Continue training a model
+## Continue training a model
 
 If you have trained a model for fewer epochs than you would like, and you want to continue the training process for more epochs, provide the weights (`--sw`), the last epoch of the trained model (`--swe`, meaning the epoch where you want to start training from, e.g., 10 in the monolingual example above), the final epoch you want to reach, and use the `--continue` flag. For instance, to train the monolingual version above to a total of 40 epochs instead of 10, run:
 
