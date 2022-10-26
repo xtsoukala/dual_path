@@ -113,6 +113,9 @@ After this model is trained:
 python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.csv  --structures data/code-switching/structures.csv --sim 4 --l2_epoch 10 --lang en es --sw simulations/monolingual_model --cs
 ```
 
+**Note**: The main difference between the `--l2_epoch` and `--swe` flags is that in the latter case, the `swe`-th weight becomes the initial training weight, and training continues for `--epoch` more epochs. Whereas in the case of `--l2_epoch`, the initial model weights stay intact and training continues for `--epoch` minus `--l2_epoch` epochs.
+- For instance, if `epoch` is set to 10, and `l2_epoch` is set to 2, the model will be trained for 8 more epochs. If, instead, `swe` is set to 2, the model will be trained for 10 epochs, using swe 2 as the intial training weights.
+
 ## Continue training a model
 
 If you have trained a model for fewer epochs than you would like, and you want to continue the training process for more epochs with the same input, provide the weights (`--sw`), the last epoch of the trained model (`--swe`, meaning the epoch where you want to start training from, e.g., 10 in the monolingual example above), the final epoch you want to reach, and use the `--continue` flag. The input is implicitly copied and you do not need to specify it. For instance, to train the monolingual version above to a total of 40 epochs instead of 10, run:
