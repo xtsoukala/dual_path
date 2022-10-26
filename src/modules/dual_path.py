@@ -2,7 +2,9 @@
 import os
 import random
 
-from . import copy_files, logging, ones
+from torch import ones
+
+from . import copy_files, logging
 from .elman_network import SimpleRecurrentNetwork
 
 
@@ -378,7 +380,9 @@ class DualPath:
                 self.set_weights_folder, f"{simulation_num}/weights"
             )
             if (
-                self.only_evaluate or self.continue_training or self.l2_epoch > 0
+                self.only_evaluate
+                or self.continue_training
+                or (self.l2_epoch and self.l2_epoch > 0)
             ):  # copy all weights
                 copy_files(src_folder, destination_folder)
             else:  # only copy the starting epoch (such as epoch 0, i.e. the file that ends with 0)
@@ -388,6 +392,13 @@ class DualPath:
                     ends_with=f"{self.set_weights_epoch}.lz4",
                 )
                 if self.set_weights_epoch != 0:  # rename them all to epoch 0
+                    logging.warning(
+                        f"set_weights_epoch is set to {self.set_weights_epoch}. Will copy the weight of this "
+                        "epoch and rename it to 0, to use as initial weights. If you meant to start training "
+                        f"from epoch {self.set_weights_epoch+1} (i.e., for {self.epochs - self.set_weights_epoch} "
+                        f"more epochs instead of {self.epochs} that you set as total epochs), "
+                        "make sure you use the '--l2_epoch' flag."
+                    )
                     weights_path = (
                         f"{self.inputs.root_directory}/{simulation_num}/weights/"
                     )
@@ -398,6 +409,7 @@ class DualPath:
                                 fname.replace(f"w{self.set_weights_epoch}", "w0"),
                             )
                             os.rename(os.path.join(weights_path, fname), new_name)
+                    self.set_weights_epoch = 0
             self.set_weights_folder = destination_folder
 
         if self.randomize:

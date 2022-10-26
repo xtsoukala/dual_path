@@ -5,8 +5,6 @@ import sys
 
 import numpy as np
 import pandas as pd  # future tip: check modin for speed
-from torch import cat, empty, ones, stack, zeros
-from torch.multiprocessing import Pool, Process, cpu_count, set_start_method
 
 logging.basicConfig(level=logging.INFO)
 

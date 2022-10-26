@@ -9,8 +9,9 @@ from operator import itemgetter
 
 import numpy as np
 import pandas as pd
+from torch import zeros
 
-from . import logging, zeros
+from . import logging
 
 
 class InputFormatter:
@@ -184,7 +185,6 @@ class InputFormatter:
             ):  # update lang_id: append Spanish as well
                 self.lang_indices[i].append(self.L[2])
 
-        logging.debug(self.false_friend_idx)
         self.shared_idx = set(
             list([self.period_idx])
             + list(self.cognate_idx)
@@ -617,7 +617,9 @@ class InputFormatter:
             ]  # or change check_cs_around_pos_of_interest() to send str
         first_cs_position = None
         if sentence_idx == target_sentence_idx:
-            return False, first_cs_position
+            if return_position:
+                return False, first_cs_position
+            return False
         # false_friend = set([x for x in sentence_idx if x not in target_sentence_idx]
         #                   ).intersection(self.false_friend_idx) if self.false_friend_idx else None
         sentence_lang = self.sentence_lang_from_indices(sentence_idx)
@@ -630,8 +632,12 @@ class InputFormatter:
                     if target_lang not in x:
                         first_cs_position = sentence_lang.index(x)
                         break
-            return True if not srn_only else False, first_cs_position
-        return False, first_cs_position
+            if return_position:
+                return True if not srn_only else False, first_cs_position
+            return True if not srn_only else False
+        if return_position:
+            return False, first_cs_position
+        return False
 
     def check_cs_around_pos_of_interest(
         self, sentence_indices, sentence_pos, pos_of_interest
@@ -661,7 +667,7 @@ class InputFormatter:
                 if (
                     len(sentence_indices[:pos_idx]) > 1
                 ):  # otherwise it's just one word, cannot be code-switched
-                    before, point = self.is_code_switched(
+                    before = self.is_code_switched(
                         sentence_indices[:pos_idx],
                         target_lang=self.lang_indices[sentence_indices[0]],
                     )
@@ -672,7 +678,7 @@ class InputFormatter:
                         else False
                     )
                 if before is False:
-                    at, point = self.is_code_switched(
+                    at = self.is_code_switched(
                         sentence_indices[0 : pos_idx + 1],
                         target_lang=self.lang_indices[sentence_indices[0]],
                     )
@@ -682,7 +688,7 @@ class InputFormatter:
                     )
 
                 # check switch right after (e.g. between aux and participle)
-                right_after, point = self.is_code_switched(
+                right_after = self.is_code_switched(
                     sentence_indices[pos_idx : pos_idx + 2],
                     target_lang=language_of_pos_of_interest,
                 )
@@ -696,7 +702,7 @@ class InputFormatter:
                     sentence_indices[pos_idx + 1]
                 ][0]
 
-                after, point = self.is_code_switched(
+                after = self.is_code_switched(
                     sentence_indices[pos_idx + 1 : pos_idx + 3],
                     target_lang=language_after_pos_of_interest,
                 )
@@ -707,7 +713,7 @@ class InputFormatter:
                     else False
                 )
 
-                after_anywhere, point = self.is_code_switched(
+                after_anywhere = self.is_code_switched(
                     sentence_indices[pos_idx + 1 :],
                     target_lang=language_after_pos_of_interest,
                 )
@@ -738,7 +744,7 @@ class InputFormatter:
         cache = self.query_cache(out_idx, self.idx_points_cache)
         if not cache:
             target_idx = sentence_indices.index(idx_of_interest)
-            switched_before, point = self.is_code_switched(
+            switched_before = self.is_code_switched(
                 sentence_indices[:target_idx],
                 target_lang=target_lang,
                 target_sentence_idx=target_sentence_idx,
@@ -754,7 +760,7 @@ class InputFormatter:
             logging.debug(f"switched at: {idx_of_interest}, {switched_at}")
             switched_at_es_en = switched_at and target_lang == "es"
 
-            switched_right_after, point = self.is_code_switched(
+            switched_right_after = self.is_code_switched(
                 sentence_indices[target_idx : target_idx + 2],
                 target_lang=target_lang,
                 target_sentence_idx=target_sentence_idx,
@@ -768,7 +774,7 @@ class InputFormatter:
                 True if switched_right_after and target_lang == "es" else False
             )
 
-            switched_one_after, point = self.is_code_switched(
+            switched_one_after = self.is_code_switched(
                 sentence_indices[target_idx + 1 : target_idx + 3],
                 target_lang=target_lang,
                 target_sentence_idx=target_sentence_idx,
@@ -783,7 +789,7 @@ class InputFormatter:
             )
 
             # anywhere after point of interest
-            switched_after_anywhere, point = self.is_code_switched(
+            switched_after_anywhere = self.is_code_switched(
                 sentence_indices[target_idx + 1 :],
                 target_lang=target_lang,
                 target_sentence_idx=target_sentence_idx,

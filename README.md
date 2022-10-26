@@ -37,8 +37,7 @@ All results are stored under the folder `simulations`. If the flag `--resdir` is
 
 `simulations/year-month-day/hour_minutes_seconds_esen_sim4_h<number_hidden_units>_c<number_compressed_units>_fw<fixed_weights_value>_e<number_epochs>`
 
-where `esen` is the language pair (Spanish-English in this case), `sim4` the number of simulations, `h` the number of hidden units and `c` the number of 
-compress units. `fw` is the fixed weight between concepts and roles, and `e20` the number of epochs.
+where `esen` is the language pair (Spanish-English in this case), `sim4` the number of simulations, `h` the number of hidden units and `c` the number of compress units. `fw` is the fixed weight between concepts and roles, and `e20` the number of epochs.
 
 ## Lexicon and Structures
 
@@ -96,7 +95,9 @@ To simulate late bilinguals (that are exposed to the L2 later in life), you must
 1. train a monolingual version with the L1
 2. Use the weights of the monolingual model to train a bilingual model.
 
-For instance, if you want to train a late bilingual model with L1 English and L2 Spanish for a total of 40 epochs, you first need to train a monolingual English model for the amount of epochs that the speakers are monolingual-only (e.g., 10 for 1/4th of the total epochs). In the monolingual simulation you use the same bilingual lexicon as the final one, but you need to specify that you do not want any L2 input (`--l2_decimal_fraction 0`). In the `--lang` argument the L1 comes first, so in this case provide `--lang en es`, or `--lang es en` for L1 Spanish.
+For instance, if you want to train a late bilingual model with L1 English and L2 Spanish for a total of 40 epochs, you first need to train a *monolingual* English model for the amount of epochs that the speakers are monolingual-only (e.g., 10 for 1/4th of the total epochs). In the monolingual simulation you use the same bilingual lexicon as the final one, but you need to specify that you do not want any L2 input (`--l2_decimal_fraction 0`). In the `--lang` argument the L1 comes first, so in this case provide `--lang en es`, or `--lang es en` for L1 Spanish.
+
+For monolingual English:
 
 ```
 python src/start_dual_path.py --lang en es --lexicon  data/code-switching/lexicon.csv --structures data/code-switching/structures.csv --epochs 10 --sim 4 --l2_decimal_fraction 0 --resdir monolingual_model
@@ -114,7 +115,7 @@ python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.
 
 ## Continue training a model
 
-If you have trained a model for fewer epochs than you would like, and you want to continue the training process for more epochs, provide the weights (`--sw`), the last epoch of the trained model (`--swe`, meaning the epoch where you want to start training from, e.g., 10 in the monolingual example above), the final epoch you want to reach, and use the `--continue` flag. For instance, to train the monolingual version above to a total of 40 epochs instead of 10, run:
+If you have trained a model for fewer epochs than you would like, and you want to continue the training process for more epochs with the same input, provide the weights (`--sw`), the last epoch of the trained model (`--swe`, meaning the epoch where you want to start training from, e.g., 10 in the monolingual example above), the final epoch you want to reach, and use the `--continue` flag. The input is implicitly copied and you do not need to specify it. For instance, to train the monolingual version above to a total of 40 epochs instead of 10, run:
 
 ```
 python src/start_dual_path.py --sw simulations/monolingual --swe 10 --epochs 40 --input simulations/monolingual/input --sim 4 --continue --resdir monolingual_40_epochs
