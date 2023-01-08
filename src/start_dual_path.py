@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 import argparse
 import json
 import os
@@ -87,10 +87,10 @@ if __name__ == "__main__":
         help="Number of total training set iterations during (full) training.",
     )
     parser.add_argument(
-        "--l2_epoch", help="# of epoch when L2 input gets introduced", type=positive_int
+        "--l2-epoch", help="# of epoch when L2 input gets introduced", type=positive_int
     )
     parser.add_argument(
-        "--l2_decimal_fraction",
+        "--l2-decimal-fraction",
         help="Decimal fraction of L2 input (0.0-1.0). 0 means no L2 input (monolingual only), 1 means only L2 input.",
         type=decimal_fraction,
         default=0.5,
@@ -124,14 +124,14 @@ if __name__ == "__main__":
         type=str.lower,
     )
     parser.add_argument(
-        "--target_lang",
+        "--target-lang",
         nargs="*",
         help="Values for the target language node. It may differ from the "
         "input languages (e.g., lang=en but target_lang=en es)",
     )
     parser.add_argument("--lrate", help="Learning rate", type=float, default=0.10)
     parser.add_argument(
-        "--final_lrate",
+        "--final-lrate",
         "--flrate",
         type=float,
         default=0.02,
@@ -144,84 +144,77 @@ if __name__ == "__main__":
         default=0.9,
     )
     parser.add_argument(
-        "--set_weights",
+        "--set-weights",
         "--sw",
         default=None,
         help="Set a folder that contains pre-trained weights as initial weights for simulations",
     )
     parser.add_argument(
-        "--set_weights_epoch",
+        "--set-weights-epoch",
         "--swe",
         type=int,
         help="In case of pre-trained weights we can also specify num of epochs (stage of training)",
     )
     parser.add_argument(
         "--fw",
-        "--fixed_weights",
+        "--fixed-weights",
         type=int,
         default=15,
         help="Fixed weight value for concept-role connections",
     )
     parser.add_argument(
         "--fwi",
-        "--fixed_weights_identif",
+        "--fixed-weights-identif",
         type=int,
         default=10,
         help="Fixed weight value for identif-role connections",
     )
     parser.add_argument(
-        "--cognate_decimal_fraction",
+        "--cognate-decimal-fraction",
         help="Amount of sentences with cognates in test/training sets",
         type=float,
         default=0.3,
         dest="cognate_decimal_fraction",
     )
     parser.add_argument(
-        "--exclude_cognates",
+        "--exclude-cognates",
         help="Filename with concepts; exclude from cognate selection the "
         "concepts of this list",
     )
     parser.add_argument(
-        "--cognate_list",
+        "--cognate-list",
         help="Filename with concepts; use these instead of ones in lexicon.csv",
     )
     parser.add_argument(
-        "--false_friends_lexicon",
+        "--false-friends-lexicon",
         help="Csv file with false friends lexicon; use these in lexicon.csv",
     )
     parser.add_argument(
-        "--concepts_to_evaluate",
+        "--concepts-to-evaluate",
         help="Filename with concepts of words that will become the focus "
         "around code-switched points (e.g., cognates of all models)",
     )
     parser.add_argument(
-        "--pron",
-        dest="overt_pronouns",
-        type=decimal_fraction,
-        default=0,
-        help="Decimal_fraction of overt Spanish pronouns",
-    )
-    parser.add_argument(
-        "--messageless_decimal_fraction",
+        "--messageless-decimal-fraction",
         help="Fraction of messageless sentences in training set",
         type=float,
         default=0,
     )
     parser.add_argument(
-        "--generate_training_num",
+        "--generate-training-num",
         type=int,
         default=2000,
         help="Sum of test/training sentences to be "
         "generated (only if no input was set)",
     )
     parser.add_argument(
-        "--generate_test_num",
+        "--generate-test-num",
         type=int,
         default=600,
         help="Total test sentences for experiments",
     )
     parser.add_argument(
-        "--training_files_path",
+        "--training-files-path",
         help="When generating test sentences, exclude the training.in files "
         "under this path.",
     )
@@ -233,7 +226,7 @@ if __name__ == "__main__":
         help="training several simulations at once to take the results' average (Monte Carlo approach)",
     )
     parser.add_argument(
-        "--sim_from",
+        "--sim-from",
         type=positive_int,
         help="To train several simulations with range other than "
         "(0, number_of_simulations) you need to set the "
@@ -241,7 +234,7 @@ if __name__ == "__main__":
         "sim_from and sim_to)",
     )
     parser.add_argument(
-        "--sim_to",
+        "--sim-to",
         type=positive_int,
         help="See sim_from (the simulations include sim_to)",
     )
@@ -252,58 +245,66 @@ if __name__ == "__main__":
         help="Threshold for performance of simulations. Any simulations that performs has a percentage "
         "of correct sentences < threshold are discarded",
     )
-    parser.add_argument("--config_file", default=False, help="Read arguments from file")
+    parser.add_argument("--config-file", default=False, help="Read arguments from file")
     parser.add_argument(
-        "--generator_timeout",
+        "--generator-timeout",
         type=positive_int,
         default=120,
         help="Number of seconds before the sentence generation process times out",
     )
     parser.add_argument(
-        "--hidden_dev",
+        "--hidden-dev",
         type=non_negative_int,
         default=10,
         help="Maximum deviation for the number of hidden layer units when randomization is used.",
     )
     parser.add_argument(
-        "--compress_dev",
+        "--compress-dev",
         type=non_negative_int,
         default=10,
         help="Maximum deviation for the number of compress layer units when randomization is used.",
     )
     parser.add_argument(
-        "--fw_dev",
+        "--fw-dev",
         type=non_negative_int,
         default=5,
         help="Maximum deviation for the fixed weight value for concept-role connections "
         "when randomization is used.",
     )
     parser.add_argument(
-        "--epoch_dev",
+        "--epoch-dev",
         type=non_negative_int,
         default=0,
         help="Maximum deviation for the starting epoch/l2_epoch value.",
     )
     parser.add_argument(
-        "--l2_decimal_dev",
+        "--l2-decimal-dev",
         type=decimal_fraction,
         default=0.08,
         help="Standard deviation for the decimal fraction of L2 input "
         "when randomization is used.",
     )
     parser.add_argument(
-        "--num_cognate_models_for_test_set",
+        "--num-cognate-models-for-test-set",
         type=non_negative_int,
         help="Number of cognate models to generate test sets for.",
         default=0,
     )
-    """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument(
-        "--prodrop",
-        action="store_true",
-        default=False,
-        help="Indicates that it is a pro-drop lang",
+        "--L1-overt-pronouns",
+        type=decimal_fraction,
+        default=1.0,
+        help="Decimal fraction of overt L1 pronouns. By default it's 1.0, "
+        "which indicates that it's a non pro-drop language",
     )
+    parser.add_argument(
+        "--L2-overt-pronouns",
+        type=decimal_fraction,
+        default=1.0,
+        help="Decimal fraction of overt L2 pronouns. By default it's 1.0, "
+        "which indicates that it's a non pro-drop language",
+    )
+    """ !----------------------------------- boolean arguments -----------------------------------! """
     parser.add_argument(
         "--crole",
         action="store_true",
@@ -351,7 +352,7 @@ if __name__ == "__main__":
         help="Do not evaluate test set",
     )
     parser.add_argument(
-        "--eval_training",
+        "--eval-training",
         action="store_true",
         default=False,
         help="Evaluate training sets",
@@ -364,13 +365,13 @@ if __name__ == "__main__":
         default=False,
     )
     parser.add_argument(
-        "--only_generate_test",
+        "--only-generate-test",
         action="store_true",
         help="Do not run simulations",
         default=False,
     )
     parser.add_argument(
-        "--continue_training",
+        "--continue-training",
         dest="continue_training",
         action="store_true",
         help="Continue training for more epochs",
@@ -400,7 +401,7 @@ if __name__ == "__main__":
         default=False,
     )
     parser.add_argument(
-        "--false_friends",
+        "--false-friends",
         "--ff",
         dest="false_friends",
         action="store_true",
@@ -435,14 +436,14 @@ if __name__ == "__main__":
         help="Run auxiliary asymmetry experiment making haber and tener perfect synonyms",
     )
     parser.add_argument(
-        "--gender_error_experiment",
+        "--gender-error-experiment",
         dest="pronoun_experiment",
         action="store_true",
         help="Evaluate pronoun production",
         default=False,
     )
     parser.add_argument(
-        "--flex_eval",
+        "--flex-eval",
         dest="ignore_tense_and_det",
         action="store_true",
         default=False,
@@ -467,13 +468,13 @@ if __name__ == "__main__":
         "--defpro",
         action="store_true",
         default=False,
-        help="Merge def/indef/pron into a single unit" "with different activations",
+        help="Merge def/indef/pron into a single unit with different activations",
     )
     parser.add_argument(
-        "--srn_only",
+        "--srn-only",
         action="store_true",
         default=False,
-        help="Run the SRN alone, without " "the semantic path",
+        help="Run the SRN alone, without the semantic path",
     )
     args = parser.parse_args()
 
@@ -623,6 +624,8 @@ if __name__ == "__main__":
             l2_decimal_dev=args.l2_decimal_dev,
             cognate_experiment=cognate_experiment,
             auxiliary_experiment=auxiliary_experiment,
+            l1_overt_pronouns=args.L1_overt_pronouns,
+            l2_overt_pronouns=args.L2_overt_pronouns,
         )
 
         excluded_concepts = set(
@@ -690,7 +693,6 @@ if __name__ == "__main__":
         directory=input_dir,
         language=args.languages,
         use_semantic_gender=args.gender,
-        overt_pronouns=args.overt_pronouns,
         test_haber_frequency=args.test_haber_frequency,
         num_training=num_training,
         training_set_name=args.trainingset,
@@ -704,7 +706,6 @@ if __name__ == "__main__":
         false_friends_lexicon=args.false_friends_lexicon,
         determinerpronoun=args.defpro,
         concepts_to_evaluate=concepts_to_evaluate,
-        prodrop=args.prodrop,
         messageless_decimal_fraction=args.messageless_decimal_fraction,
         priming_experiment=args.priming_experiment,
         priming_set=args.primingset,

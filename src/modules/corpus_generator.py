@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 import os
+import random
 import re
 import sys
 import time
@@ -30,6 +31,8 @@ class SetsGenerator:
         cognate_experiment=False,
         input_dir=None,
         sim_results_dir=None,
+        l1_overt_pronouns=1.0,
+        l2_overt_pronouns=1.0
     ):
         """
         :param allow_free_structure_production:
@@ -67,10 +70,6 @@ class SetsGenerator:
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
         self.event_semantic_string = "EVENT-SEM"
         self.structures_df = self.get_structures(structures_csv)
-        (
-            self.num_structures_L1,
-            self.num_structures_L2,
-        ) = self.get_num_structures_per_language()
         self.roles = (
             self.structures_df["message"]
             .str.extractall("(;|^)?([A-Z-]*)(=)")[1]
@@ -82,6 +81,8 @@ class SetsGenerator:
             role.strip() for role in self.roles if role != self.event_semantic_string
         ]
         self.df_cache = {}
+        self.l1_overt_pronouns = l1_overt_pronouns
+        self.l2_overt_pronouns = l2_overt_pronouns
         # TODO: automate
         self.identifiability = ["pron", "def", "indef"]
         self.generator_timeout = generator_timeout
@@ -120,6 +121,14 @@ class SetsGenerator:
             )
 
     @staticmethod
+    def convert_to_int(x):
+        """safely converts string into an integer; NaN is converted to 0"""
+        if x != x:
+            # in case it's a NaN value
+            return 0
+        return int(x)
+
+    @staticmethod
     def calculate_testset_size(num_training, test_set_decimal=0.2):
         """
         :param num_training: Number of training sentences
@@ -127,6 +136,15 @@ class SetsGenerator:
         :return: Number of sentences for training and test sets
         """
         return int((num_training * 100 / 80) * test_set_decimal)
+
+    @staticmethod
+    def get_unique_event_semantics(dataset):
+        """1. Extracts the messages from the sentence-message dataset pair
+           2. Extracts all EVENT-SEM contents from the messages
+           3. Returns the unique EVENT-SEM content values"""
+        message_list = [pair[1] for pair in dataset]
+        unique_event_semantics = re.findall(r"EVENT-SEM=(.*?);", "@".join(message_list))
+        return set(",".join(unique_event_semantics).split(','))
 
     def generate_general(self):
         sentence_structures_train = self.generate_sentence_structures(self.num_training)
@@ -141,7 +159,7 @@ class SetsGenerator:
         assert self.num_test == len(test_set) and self.num_training == len(training_set)
         if self.input_dir_empty:
             self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
-            self.save_lexicon_and_structures_to_csv()
+            self.save_lexicon_and_structures_to_csv(event_semantics=self.get_unique_event_semantics(training_set))
         return test_set, training_set
 
     def generate_auxiliary_experiment_sentences(
@@ -187,7 +205,7 @@ class SetsGenerator:
         :param filtered_structures: use given structures (that have been filtered before)
         :return:
         """
-        num_l2 = int(self.l2_decimal * num_sentences)
+        num_l2 = self.convert_to_int(self.l2_decimal * num_sentences)
         num_l1 = num_sentences - num_l2
 
         if filtered_structures is not None:
@@ -226,8 +244,13 @@ class SetsGenerator:
         self.random.shuffle(sentence_structures)
         return sentence_structures
 
+    @staticmethod
+    def get_index_of_pronoun_sentences(structures, lang):
+        """Get all indices of messages that contain a pronoun"""
+        return [idx for idx, message in enumerate(structures) if "=pron" in message[0] and f'={lang}' in message[0]]
+
     def structures_per_lang_and_occurrance(self, df, num_total, lang):
-        occurrences = [int(x) for x in df[f"percentage_{lang}"] * num_total / 100]
+        occurrences = [self.convert_to_int(x) for x in df[f"percentage_{lang}"] * num_total / 100]
         df_copy = df.copy()
         if self.use_message_l2 and lang == self.L[2]:
             df_copy.loc[(pd.notnull(df_copy["message_l2"])), "message"] = df_copy.loc[
@@ -257,7 +280,26 @@ class SetsGenerator:
         sentence_structures[
             :, 0
         ] += f";TARGET-LANG={lang}"  # append language code at the end
+
         return sentence_structures
+
+    def manipulate_pronouns(self, sentence_structures, lang):
+        # manipulate the occurance of overt pronouns for this language
+        overt_pronouns = 1.0
+        if lang == self.L[1] and self.l1_overt_pronouns < 1.0:
+            overt_pronouns = self.l1_overt_pronouns
+        elif lang == self.L[2] and self.l2_overt_pronouns < 1.0:
+            overt_pronouns = self.l2_overt_pronouns
+
+        if overt_pronouns < 1.0:
+            # keep only the list items that have L1 as the target lang plus pronouns
+            sentences_with_pronoun = len(list(filter(lambda x: '=pron;' in x[0], sentence_structures)))
+            pronouns_to_remove = int(sentences_with_pronoun - (sentences_with_pronoun * overt_pronouns))
+            all_pronoun_sentence_idx = self.get_index_of_pronoun_sentences(sentence_structures, lang=lang)
+            # randomly select x items that will become pro-drop
+            idx_to_remove_pron = random.sample(all_pronoun_sentence_idx, pronouns_to_remove)
+            for idx in idx_to_remove_pron:
+                sentence_structures[idx][1] = sentence_structures[idx][1].replace('pron ', '')
 
     def distribute_percentages_equally_if_not_set(self, df):
         keys = [f"percentage_{self.L[1]}"]
@@ -337,6 +379,13 @@ class SetsGenerator:
         """Returns a list item if the index exists, otherwise it returns an empty string"""
         return my_list[index] if index < len(my_list) else ""
 
+    @staticmethod
+    def get_semantic_message_id(messages):
+        sem_id = [idx for idx, mes in enumerate(messages) if mes.startswith('EVENT-SEM=')]
+        if sem_id:
+            return sem_id[0]
+        return None
+
     def structures_to_sentences(
         self,
         sentence_structures,
@@ -351,6 +400,7 @@ class SetsGenerator:
         remaining_structures = []
         for msg, pos_full in sentence_structures:
             message = msg.split(";")
+            event_semantics_id = self.get_semantic_message_id(message)
             lang = message[-1].split("=")[1]
             sentence = []
             msg_idx = 0
@@ -391,6 +441,10 @@ class SetsGenerator:
                         gender=gender,
                         use_semantic_gender=True,
                     )
+                elif "modal" in pos and "type" in morpheme_df and event_semantics_id:
+                    # add the modal verb's "meaning" to the event-semantics
+                    message[event_semantics_id] += f',{morpheme_df["type"].upper()}'
+
                 concept = self.get_concept(morpheme_df)
                 if concept:
                     semantic_gender = self.get_semantic_gender(
@@ -502,7 +556,7 @@ class SetsGenerator:
             sys.exit(f"Error: Empty cache. {params} {cache} {query if query else ''}")
         return cache.iloc[self.get_random_row_idx(cache_size)]
 
-    def save_lexicon_and_structures_to_csv(self):
+    def save_lexicon_and_structures_to_csv(self, event_semantics=None):
         """
         Matches strings between ;EVENT-SEM= or , E.g.: AGENT=;AGENT-MOD=;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE
         "?" is necessary for multiple matches
@@ -510,18 +564,19 @@ class SetsGenerator:
         """
         # if not os.listdir(self.input_dir): mght have to bring back
         # I have a hard time capturing words with a hyphen: ';EVENT-SEM=|,?([A-Z]*(-([A-Z]*))?)(,|$)'
-        event_semantics = []
-        for (
-            event_semantic_str
-        ) in self.structures_df.message.values.tolist():  # slow loop
-            for evsem in event_semantic_str.split(f"{self.event_semantic_string}=")[
-                1
-            ].split(","):
-                evsem = evsem.strip()
-                if ":" in evsem:
-                    evsem = evsem.split(":")[0]  # remove activation
-                if evsem and evsem not in event_semantics:
-                    event_semantics.append(evsem)
+        if not event_semantics:
+            event_semantics = []
+            for (
+                event_semantic_str
+            ) in self.structures_df.message.values.tolist():  # slow loop
+                for evsem in event_semantic_str.split(f"{self.event_semantic_string}=")[
+                    1
+                ].split(","):
+                    evsem = evsem.strip()
+                    if ":" in evsem:
+                        evsem = evsem.split(":")[0]  # remove activation
+                    if evsem and evsem not in event_semantics:
+                        event_semantics.append(evsem)
         self.list_to_file("event_semantics", event_semantics)
         self.list_to_file("identifiability", self.identifiability)
         self.list_to_file("roles", self.roles)
@@ -565,13 +620,6 @@ class SetsGenerator:
                 lambda a: self.remove_roles_from_event_semantics(a)
             )
         return df
-
-    def get_num_structures_per_language(self):
-        l1 = self.structures_df[self.L[1]].count()
-        l2 = None
-        if 2 in self.L:  # if there is an L2
-            l2 = self.structures_df[self.L[2]].count()
-        return l1, l2
 
     @staticmethod
     def get_clean_lexicon(lexicon_csv):
@@ -979,6 +1027,6 @@ class SetsGenerator:
     @staticmethod
     def file_set_to_list(fname):
         """split fname lines by sentence## message"""
-        with open(fname, encoding="utf-8") as file:
+        with open(fname, "w", encoding="utf-8") as file:
             lines = [line.strip().split("## ") for line in file]
         return lines

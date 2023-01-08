@@ -6,6 +6,17 @@ Dual-path is a computational model of (monolingual) sentence production by [Chan
 
 The Bilingual Dual-path model is an extension of Dual-path, aiming to simulate bilingual sentence production and code-switching.
 
+# How it works
+
+The model is trained on pairs of (so far artificially generated) sentences and the corresponding message, which, in turn, contains thematic roles (which I've named AGENT, PATIENT, but you can use a different annotation) that correspond to a concept. For instance, here are two phrases from a training set (the format is: sentence ## message):
+
+```
+a waiter carries a book .## AGENT=indef,WAITER;ACTION-LINKING=CARRY;PATIENT=indef,BOOK;EVENT-SEM=SIMPLE,PRESENT,AGENT,ACTION-LINKING,PATIENT;TARGET-LANG=en
+she is focused .## AGENT=pron,MOTHER;ACTION-LINKING=BE;ATTR=FOCUSED,F;EVENT-SEM=SIMPLE,PRESENT,AGENT,ACTION-LINKING,ATTR;TARGET-LANG=en
+```
+
+The model is trained on these examples in the following manner: it receives a message (e.g.: `AGENT` in the `role` layer is linked to `WAITER` in the `CONCEPT` layer, and also to `indef` in the `identifier` layer; at the same time, `PATIENT` is linked to `BOOK` etc) and it outputs a sentence word-by-word. Each produced word is also given as input (`input` layer), and if the target is different than the produced word, the error is backpropagated. Note that the hidden layer is reset each time there is a new message, so there is no context between sentences.
+
 # Installation
 
 To run this project you need a Python version >= 3.6. To install the requirements, it it recommended that you first create and activate a virtual environment. There are several ways to create a virtual environment; for instance:
@@ -41,7 +52,7 @@ where `esen` is the language pair (Spanish-English in this case), `sim4` the num
 
 ## Lexicon and Structures
 
-The default lexicon and structure files are under the `data` folder (`/data/lexicon.csv` and `/data/structures.csv`). These .csv files can be altered, and any .csv file (containing the expected columns) can be given as input:
+The default lexicon and structure files are under the `data` folder (`/data/lexicon.csv` and `/data/structures.csv`). **These are needed if you want to generate random sentences using specific structures.** The .csv files can be altered, and any .csv file (containing the expected columns) can be given as input:
 
 ```
 python src/start_dual_path.py --structures path_to_new_structures --lexicon path_to_new_lexicon
@@ -60,11 +71,31 @@ hombre,man,MAN,HUMAN,noun,M,M,,,,,,
 niño,boy,BOY,CHILD,noun,M,M,,,,,,
 ```
 
-**Note**: The .csv currently uses comma as the column separator. If you open it with MS Excel you might experience encoding issues. If it's not displayed correctly, I recommend using LibreOffice.
+**Note**: The .csv currently uses comma as the column separator. If you open it with MS Excel you might experience encoding issues. If it's not displayed correctly, I recommend using **[LibreOffice](https://www.libreoffice.org/)**.
+
+### Structures
+
+The basic idea of the model is that it expresses ("converts") a semantic message into a written sentence. The structures.csv file contains a generic message and its generic Part of Speech (POS) equivalent.
+
+Let's take the second example from [this file](data/code-switching/structures.csv):
+
+The generic POS is:
+
+`det noun:animate aux::present:progressive:singular participle:intrans::progressive`
+
+and it corresponds to this generic message:
+
+`AGENT=;ACTION-LINKING=;EVENT-SEM=PRESENT,PROGRESSIVE,AGENT,ACTION-LINKING`
+
+Based on this information and the [lexicon file](data/code-switching/lexicon.csv), the [corpus_generator](src/modules/corpus_generator.py) script [picks a random morpheme](src/modules/corpus_generator.py#369) (word) of that POS and target language.
+
+For instance, to fill the `det` (determiner) position, the script would randomly select one of the [first four items](data/code-switching/lexicon.csv) from the corresponding column; morpheme_en for English, morpheme_es for Spanish.
+
+In some cases, we are interested in restricting the POS. For instance, we might want only animate nouns. In that case, the POS has the filter `noun:animate` and the script only looks for items with a semantic gender (6th column in the lexicon). Some items, such as verbs and participles, have multiple properties: type, tense, aspect, number (see the corresponding lexicon.csv headers). If you notice the POS example above, the auxiliary verb is followed by two colons. This means that the first property (the type) is of no interest, and is therefore left blank, and the second colon refers to the tense, which is "present" in this example.
 
 ### New language pair
 
-To run the model in a different language pair, one will need to alter the lexicon, structures, and give a new language code (e.g., `el` for Greek and `morpheme_el` for Greek words in the lexicon).
+To run the model in a different language pair, one will need to alter the lexicon, structures, and give a new language code (e.g., `el` for Greek and `morpheme_el` for Greek words in the lexicon). Make sure you give a 2-letter language code for each language (e.g., `morpheme_el` in the first column of lexicon.csv if the L1 is Greek, and `morpheme_es` in the second column if the L2 is Spanish.)
 
 ## Monolingual version
 
@@ -80,7 +111,7 @@ and
 python src/start_dual_path.py --sim 4 --languages es --resdir spanish
 ```
 
-which use the English-only or Spanish-only columns in the lexicon (`lexicon.csv`) and structures (`structures.csv`). 
+which use the English-only (`morpheme_en`) or Spanish-only (`morpheme_es`) columns in the lexicon (`lexicon.csv`) and structures (`structures.csv`).
 
 **Note**: If there are not enough resources (words) to generate unique sentences in the structures requested in structures.csv, you will need to do one of the following: 
 
@@ -95,26 +126,26 @@ To simulate late bilinguals (that are exposed to the L2 later in life), you must
 1. train a monolingual version with the L1
 2. Use the weights of the monolingual model to train a bilingual model.
 
-For instance, if you want to train a late bilingual model with L1 English and L2 Spanish for a total of 40 epochs, you first need to train a *monolingual* English model for the amount of epochs that the speakers are monolingual-only (e.g., 10 for 1/4th of the total epochs). In the monolingual simulation you use the same bilingual lexicon as the final one, but you need to specify that you do not want any L2 input (`--l2_decimal_fraction 0`). In the `--lang` argument the L1 comes first, so in this case provide `--lang en es`, or `--lang es en` for L1 Spanish.
+For instance, if you want to train a late bilingual model with L1 English and L2 Spanish for a total of 40 epochs, you first need to train a *monolingual* English model for the amount of epochs that the speakers are monolingual-only (e.g., 10 for 1/4th of the total epochs). In the monolingual simulation you use the same bilingual lexicon as the final one, but you need to specify that you do not want any L2 input (`--l2-decimal-fraction 0`). In the `--lang` argument the L1 comes first, so in this case provide `--lang en es`, or `--lang es en` for L1 Spanish.
 
 For monolingual English:
 
 ```
-python src/start_dual_path.py --lang en es --lexicon  data/code-switching/lexicon.csv --structures data/code-switching/structures.csv --epochs 10 --sim 4 --l2_decimal_fraction 0 --resdir monolingual_model
+python src/start_dual_path.py --lang en es --lexicon  data/code-switching/lexicon.csv --structures data/code-switching/structures.csv --epochs 10 --sim 4 --l2-decimal-fraction 0 --resdir monolingual_model
 ```
 
 After this model is trained:
-- using the `--sw` (`--set_weights`) flag, provide the trained weights from the previous simulations (folder: `simulations/monolingual_model`)
+- using the `--sw` (`--set-weights`) flag, provide the trained weights from the previous simulations (folder: `simulations/monolingual_model`)
 - provide the same lexicon, structures, and languages as before
-- specify that the L2 epoch (`--l2_epoch`) starts at 10 (the last epoch of the monolingual model)
+- specify that the L2 epoch (`--l2-epoch`) starts at 10 (the last epoch of the monolingual model)
 - If you want the test the model's code-switching behavior already, use the `--cs` flag.
 
 ```
-python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.csv  --structures data/code-switching/structures.csv --sim 4 --l2_epoch 10 --lang en es --sw simulations/monolingual_model --cs
+python src/start_dual_path.py --epochs 40 --lexicon data/code-switching/lexicon.csv  --structures data/code-switching/structures.csv --sim 4 --l2-epoch 10 --lang en es --sw simulations/monolingual_model --cs
 ```
 
-**Note**: The main difference between the `--l2_epoch` and `--swe` flags is that in the latter case, the `swe`-th weight becomes the initial training weight, and training continues for `--epoch` more epochs. Whereas in the case of `--l2_epoch`, the initial model weights stay intact and training continues for `--epoch` minus `--l2_epoch` epochs.
-- For instance, if `epoch` is set to 10, and `l2_epoch` is set to 2, the model will be trained for 8 more epochs. If, instead, `swe` is set to 2, the model will be trained for 10 epochs, using swe 2 as the intial training weights.
+**Note**: The main difference between the `--l2-epoch` and `--swe` flags is that in the latter case, the `swe`-th weight becomes the initial training weight, and training continues for `--epoch` more epochs. Whereas in the case of `--l2-epoch`, the initial model weights stay intact and training continues for `--epoch` minus `--l2-epoch` epochs.
+- For instance, if `epoch` is set to 10, and `l2-epoch` is set to 2, the model will be trained for 8 more epochs. If, instead, `swe` is set to 2, the model will be trained for 10 epochs, using swe 2 as the intial training weights.
 
 ## Continue training a model
 
@@ -185,46 +216,46 @@ python src/start_dual_path.py -h
 
 ```
 usage: start_dual_path.py [-h] [--hidden HIDDEN] [--compress COMPRESS]
-                          [--epochs EPOCHS] [--l2_epoch L2_EPOCH]
-                          [--l2_decimal_fraction L2_DECIMAL_FRACTION]
+                          [--epochs EPOCHS] [--l2-epoch L2_EPOCH]
+                          [--l2-decimal-fraction L2_DECIMAL_FRACTION]
                           [--input INPUT] [--resdir RESDIR]
                           [--lexicon LEXICON] [--structures STRUCTURES]
                           [--trainingset TRAININGSET] [--testset TESTSET]
                           [--primingset PRIMINGSET]
-                          [--languages [LANGUAGES ...]]
-                          [--target_lang [TARGET_LANG ...]] [--lrate LRATE]
-                          [--final_lrate FINAL_LRATE] [--momentum MOMENTUM]
-                          [--set_weights SET_WEIGHTS]
-                          [--set_weights_epoch SET_WEIGHTS_EPOCH] [--fw FW]
+                          [--languages [LANGUAGES [LANGUAGES ...]]]
+                          [--target-lang [TARGET_LANG [TARGET_LANG ...]]]
+                          [--lrate LRATE] [--final-lrate FINAL_LRATE]
+                          [--momentum MOMENTUM] [--set-weights SET_WEIGHTS]
+                          [--set-weights-epoch SET_WEIGHTS_EPOCH] [--fw FW]
                           [--fwi FWI]
-                          [--cognate_decimal_fraction COGNATE_DECIMAL_FRACTION]
-                          [--exclude_cognates EXCLUDE_COGNATES]
-                          [--cognate_list COGNATE_LIST]
-                          [--false_friends_lexicon FALSE_FRIENDS_LEXICON]
-                          [--concepts_to_evaluate CONCEPTS_TO_EVALUATE]
-                          [--pron OVERT_PRONOUNS]
-                          [--messageless_decimal_fraction MESSAGELESS_DECIMAL_FRACTION]
-                          [--generate_training_num GENERATE_TRAINING_NUM]
-                          [--generate_test_num GENERATE_TEST_NUM]
-                          [--training_files_path TRAINING_FILES_PATH]
-                          [--title TITLE] [--sim SIM] [--sim_from SIM_FROM]
-                          [--sim_to SIM_TO] [--threshold THRESHOLD]
-                          [--config_file CONFIG_FILE]
-                          [--generator_timeout GENERATOR_TIMEOUT]
-                          [--hidden_dev HIDDEN_DEV]
-                          [--compress_dev COMPRESS_DEV] [--fw_dev FW_DEV]
-                          [--epoch_dev EPOCH_DEV]
-                          [--l2_decimal_dev L2_DECIMAL_DEV]
-                          [--num_cognate_models_for_test_set NUM_COGNATE_MODELS_FOR_TEST_SET]
-                          [--prodrop] [--crole] [--cinput] [--debug] [--cs]
-                          [--nodlr] [--gender] [--noeval] [--eval_training]
-                          [--evaluate] [--only_generate_test]
-                          [--continue_training] [--allow-free-structure]
-                          [--emb] [--cognates] [--false_friends] [--aux]
-                          [--priming] [--tener] [--synonym]
-                          [--gender_error_experiment] [--flex_eval]
-                          [--separate] [--norandomization] [--defpro]
-                          [--srn_only]
+                          [--cognate-decimal-fraction COGNATE_DECIMAL_FRACTION]
+                          [--exclude-cognates EXCLUDE_COGNATES]
+                          [--cognate-list COGNATE_LIST]
+                          [--false-friends-lexicon FALSE_FRIENDS_LEXICON]
+                          [--concepts-to-evaluate CONCEPTS_TO_EVALUATE]
+                          [--messageless-decimal-fraction MESSAGELESS_DECIMAL_FRACTION]
+                          [--generate-training-num GENERATE_TRAINING_NUM]
+                          [--generate-test-num GENERATE_TEST_NUM]
+                          [--training-files-path TRAINING_FILES_PATH]
+                          [--title TITLE] [--sim SIM] [--sim-from SIM_FROM]
+                          [--sim-to SIM_TO] [--threshold THRESHOLD]
+                          [--config-file CONFIG_FILE]
+                          [--generator-timeout GENERATOR_TIMEOUT]
+                          [--hidden-dev HIDDEN_DEV]
+                          [--compress-dev COMPRESS_DEV] [--fw-dev FW_DEV]
+                          [--epoch-dev EPOCH_DEV]
+                          [--l2-decimal-dev L2_DECIMAL_DEV]
+                          [--num-cognate-models-for-test-set NUM_COGNATE_MODELS_FOR_TEST_SET]
+                          [--L1-overt-pronouns L1_OVERT_PRONOUNS]
+                          [--L2-overt-pronouns L2_OVERT_PRONOUNS] [--crole]
+                          [--cinput] [--debug] [--cs] [--nodlr] [--gender]
+                          [--noeval] [--eval-training] [--evaluate]
+                          [--only-generate-test] [--continue-training]
+                          [--allow-free-structure] [--emb] [--cognates]
+                          [--false-friends] [--aux] [--priming] [--tener]
+                          [--synonym] [--gender-error-experiment]
+                          [--flex-eval] [--separate] [--norandomization]
+                          [--defpro] [--srn-only]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -234,10 +265,12 @@ optional arguments:
                         approximately 2/3 of the hidden one (default: None)
   --epochs EPOCHS       Number of total training set iterations during (full)
                         training. (default: 20)
-  --l2_epoch L2_EPOCH   # of epoch when L2 input gets introduced (default:
+  --l2-epoch L2_EPOCH   # of epoch when L2 input gets introduced (default:
                         None)
-  --l2_decimal_fraction L2_DECIMAL_FRACTION
-                        Decimal fraction of L2 input (0.0-1.0) (default: 0.5)
+  --l2-decimal-fraction L2_DECIMAL_FRACTION
+                        Decimal fraction of L2 input (0.0-1.0). 0 means no L2
+                        input (monolingual only), 1 means only L2 input.
+                        (default: 0.5)
   --input INPUT         (Input) folder that contains all input files (lexicon,
                         concepts etc) (default: None)
   --resdir RESDIR       Name of results folder, where the simulations will be
@@ -253,101 +286,102 @@ optional arguments:
   --primingset PRIMINGSET
                         File name that contains the message-sentence pairs for
                         the priming experiment. (default: None)
-  --languages [LANGUAGES ...]
+  --languages [LANGUAGES [LANGUAGES ...]]
                         To generate a new set, specify the languages (e.g.,
                         en, es) (default: ['en', 'es'])
-  --target_lang [TARGET_LANG ...]
+  --target-lang [TARGET_LANG [TARGET_LANG ...]]
                         Values for the target language node. It may differ
                         from the input languages (e.g., lang=en but
                         target_lang=en es) (default: None)
   --lrate LRATE         Learning rate (default: 0.1)
-  --final_lrate FINAL_LRATE, --flrate FINAL_LRATE
+  --final-lrate FINAL_LRATE, --flrate FINAL_LRATE
                         Final learning rate after linear decrease. If not set,
                         rate does not decrease (default: 0.02)
   --momentum MOMENTUM   Amount of previous weight changes that are taken into
                         account (default: 0.9)
-  --set_weights SET_WEIGHTS, --sw SET_WEIGHTS
+  --set-weights SET_WEIGHTS, --sw SET_WEIGHTS
                         Set a folder that contains pre-trained weights as
                         initial weights for simulations (default: None)
-  --set_weights_epoch SET_WEIGHTS_EPOCH, --swe SET_WEIGHTS_EPOCH
+  --set-weights-epoch SET_WEIGHTS_EPOCH, --swe SET_WEIGHTS_EPOCH
                         In case of pre-trained weights we can also specify num
                         of epochs (stage of training) (default: None)
-  --fw FW, --fixed_weights FW
+  --fw FW, --fixed-weights FW
                         Fixed weight value for concept-role connections
                         (default: 15)
-  --fwi FWI, --fixed_weights_identif FWI
+  --fwi FWI, --fixed-weights-identif FWI
                         Fixed weight value for identif-role connections
                         (default: 10)
-  --cognate_decimal_fraction COGNATE_DECIMAL_FRACTION
+  --cognate-decimal-fraction COGNATE_DECIMAL_FRACTION
                         Amount of sentences with cognates in test/training
                         sets (default: 0.3)
-  --exclude_cognates EXCLUDE_COGNATES
+  --exclude-cognates EXCLUDE_COGNATES
                         Filename with concepts; exclude from cognate selection
                         the concepts of this list (default: None)
-  --cognate_list COGNATE_LIST
+  --cognate-list COGNATE_LIST
                         Filename with concepts; use these instead of ones in
                         lexicon.csv (default: None)
-  --false_friends_lexicon FALSE_FRIENDS_LEXICON
+  --false-friends-lexicon FALSE_FRIENDS_LEXICON
                         Csv file with false friends lexicon; use these in
                         lexicon.csv (default: None)
-  --concepts_to_evaluate CONCEPTS_TO_EVALUATE
+  --concepts-to-evaluate CONCEPTS_TO_EVALUATE
                         Filename with concepts of words that will become the
                         focus around code-switched points (e.g., cognates of
                         all models) (default: None)
-  --pron OVERT_PRONOUNS
-                        Decimal_fraction of overt Spanish pronouns (default:
-                        0)
-  --messageless_decimal_fraction MESSAGELESS_DECIMAL_FRACTION
+  --messageless-decimal-fraction MESSAGELESS_DECIMAL_FRACTION
                         Fraction of messageless sentences in training set
                         (default: 0)
-  --generate_training_num GENERATE_TRAINING_NUM
+  --generate-training-num GENERATE_TRAINING_NUM
                         Sum of test/training sentences to be generated (only
                         if no input was set) (default: 2000)
-  --generate_test_num GENERATE_TEST_NUM
+  --generate-test-num GENERATE_TEST_NUM
                         Total test sentences for experiments (default: 600)
-  --training_files_path TRAINING_FILES_PATH
+  --training-files-path TRAINING_FILES_PATH
                         When generating test sentences, exclude the
                         training.in files under this path. (default: None)
   --title TITLE         Title for the plots (default: None)
   --sim SIM             training several simulations at once to take the
                         results' average (Monte Carlo approach) (default: 2)
-  --sim_from SIM_FROM   To train several simulations with range other than (0,
+  --sim-from SIM_FROM   To train several simulations with range other than (0,
                         number_of_simulations) you need to set the sim_from
                         and sim_to values (the simulations include sim_from
                         and sim_to) (default: None)
-  --sim_to SIM_TO       See sim_from (the simulations include sim_to)
+  --sim-to SIM_TO       See sim_from (the simulations include sim_to)
                         (default: None)
   --threshold THRESHOLD
                         Threshold for performance of simulations. Any
                         simulations that performs has a percentage of correct
                         sentences < threshold are discarded (default: 0)
-  --config_file CONFIG_FILE
+  --config-file CONFIG_FILE
                         Read arguments from file (default: False)
-  --generator_timeout GENERATOR_TIMEOUT
+  --generator-timeout GENERATOR_TIMEOUT
                         Number of seconds before the sentence generation
-                        process times out (default: 60)
-  --hidden_dev HIDDEN_DEV
+                        process times out (default: 120)
+  --hidden-dev HIDDEN_DEV
                         Maximum deviation for the number of hidden layer units
-                        when randomization is used. Defaults to 10. (default:
-                        10)
-  --compress_dev COMPRESS_DEV
+                        when randomization is used. (default: 10)
+  --compress-dev COMPRESS_DEV
                         Maximum deviation for the number of compress layer
-                        units when randomization is used. Defaults to 10.
-                        (default: 10)
-  --fw_dev FW_DEV       Maximum deviation for the fixed weight value for
+                        units when randomization is used. (default: 10)
+  --fw-dev FW_DEV       Maximum deviation for the fixed weight value for
                         concept-role connections when randomization is used.
-                        Defaults to 5. (default: 5)
-  --epoch_dev EPOCH_DEV
+                        (default: 5)
+  --epoch-dev EPOCH_DEV
                         Maximum deviation for the starting epoch/l2_epoch
-                        value. Defaults to 2. (default: 2)
-  --l2_decimal_dev L2_DECIMAL_DEV
+                        value. (default: 0)
+  --l2-decimal-dev L2_DECIMAL_DEV
                         Standard deviation for the decimal fraction of L2
-                        input when randomization is used. Defaults to 0.08.
-                        (default: 0.08)
-  --num_cognate_models_for_test_set NUM_COGNATE_MODELS_FOR_TEST_SET
+                        input when randomization is used. (default: 0.08)
+  --num-cognate-models-for-test-set NUM_COGNATE_MODELS_FOR_TEST_SET
                         Number of cognate models to generate test sets for.
                         (default: 0)
-  --prodrop             Indicates that it is a pro-drop lang (default: False)
+  --L1-overt-pronouns L1_OVERT_PRONOUNS
+                        Decimal fraction of overt L1 pronouns. By default it's
+                        1.0, which indicates that it's a non pro-drop language
+                        (default: 1.0)
+  --L2-overt-pronouns L2_OVERT_PRONOUNS
+                        Decimal fraction of overt L2 pronouns. By default it's
+                        1.0, which indicates that it's a non pro-drop language
+                        (default: 1.0)
   --crole               If (role copy) is set, the produced role layer is
                         copied back to the comprehension layer (default:
                         False)
@@ -361,10 +395,10 @@ optional arguments:
   --nodlr               Keep lrate stable (final_lrate) (default: True)
   --gender              Include semantic gender for nouns (default: False)
   --noeval              Do not evaluate test set (default: True)
-  --eval_training       Evaluate training sets (default: False)
+  --eval-training       Evaluate training sets (default: False)
   --evaluate            Do not train, only evaluate test sets (default: False)
-  --only_generate_test  Do not run simulations (default: False)
-  --continue_training   Continue training for more epochs (default: False)
+  --only-generate-test  Do not run simulations (default: False)
+  --continue-training   Continue training for more epochs (default: False)
   --allow-free-structure, --af
                         The model is not given role information in the event
                         semantics and it is therefore allowed to use any
@@ -373,7 +407,7 @@ optional arguments:
   --emb                 Represent semantics using word embeddings instead of
                         one-hot vectors. (default: False)
   --cognates            Run cognate experiment (default: False)
-  --false_friends, --ff
+  --false-friends, --ff
                         Run false friends experiment (default: False)
   --aux                 Run auxiliary asymmetry experiment (default: False)
   --priming             Run priming experiment (default: False)
@@ -381,9 +415,9 @@ optional arguments:
                         instances of "haber" with "tener" (default: False)
   --synonym             Run auxiliary asymmetry experiment making haber and
                         tener perfect synonyms (default: False)
-  --gender_error_experiment
+  --gender-error-experiment
                         Evaluate pronoun production (default: False)
-  --flex_eval           Ignore mistakes on determiners (definiteness) and
+  --flex-eval           Ignore mistakes on determiners (definiteness) and
                         tense (past, present) (default: False)
   --separate            Two hidden layers instead of one; separate hidden
                         layer of semantic and syntactic path (default: False)
@@ -391,8 +425,8 @@ optional arguments:
                         weight, hidden/compress size, l2 decimal) within a
                         certain standard deviation. Using this flag
                         deactivates this setting. (default: True)
-  --defpro              Merge def/indef/pron into a single unitwith different
+  --defpro              Merge def/indef/pron into a single unit with different
                         activations (default: False)
-  --srn_only            Run the SRN alone, without the semantic path (default:
+  --srn-only            Run the SRN alone, without the semantic path (default:
                         False)
 ```

@@ -23,9 +23,7 @@ class InputFormatter:
         language,
         training_set_name,
         test_set_name,
-        overt_pronouns,
         use_semantic_gender,
-        prodrop,
         use_word_embeddings,
         replace_haber_tener,
         test_haber_frequency,
@@ -144,8 +142,6 @@ class InputFormatter:
         self.event_sem_index = dict(
             zip(self.event_semantics, range(self.event_sem_size))
         )
-        self.prodrop = prodrop
-        self.emphasis_decimal_fraction = overt_pronouns
         self.translation_cache = {}
         self.code_switched_type_cache = {}
         self.switch_points_cache = {}
@@ -891,16 +887,6 @@ class InputFormatter:
                 to_replace=self.false_friends_replacement_dict, regex=True
             )
 
-        if self.prodrop:  # TODO: make pro-drop
-            if self.emphasis_decimal_fraction > 0:  # keep pronoun if emphasized
-                # find num of lines that are in ES. decide on num that will be emphasized:
-                number_emphasized = (
-                    len([]) * self.emphasis_decimal_fraction
-                )  # replace('AGENT=', 'AGENT=EMPH,')
-            else:
-                df.line = df.line.str.replace("(^| )(él|ella) ", " ", regex=True)
-        # elif not self.emphasis: lines = [re.sub(r',EMPH', '', sentence) for sentence in lines]
-
         if not self.use_semantic_gender:
             df.message = df.message.str.replace(",(M|F|M-F);", ";", regex=True)
 
@@ -1079,19 +1065,6 @@ class InputFormatter:
 
         passive_sentence_idx.append(self.period_idx)
 
-        """    
-        # Append transitive verb, '-par' and 'by'  
-        passive_sentence_idx += [active_sentence_idx[trans_verb_idx]] + par_idx + by_idx
-        
-        # Passive sentence ends with subject (and optional adjective) of active sentence and period
-        passive_sentence_idx += active_sentence_idx[:trans_verb_idx] + [active_sentence_idx[-1]]
-                 
-        # Change pronoun from subject to object
-        if passive_sentence_idx[-2] == she_idx[0]:
-            passive_sentence_idx[-2] = her_idx[0]
-        elif passive_sentence_idx[-2] == he_idx[0]:
-            passive_sentence_idx[-2] = him_idx[0]
-        """
         return passive_sentence_idx
 
     def get_sentence_structure(self, sentence_idx):

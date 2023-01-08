@@ -93,9 +93,8 @@ class DualPath:
         self.randomize = randomize
         self.hidden_deviation = hidden_deviation
         self.compress_deviation = compress_deviation
-        self.fw_deviation = (
-            fw_deviation  # the fixed weights are set at the InputFormatter class
-        )
+        # the fixed weights are set at the InputFormatter class
+        self.fw_deviation = fw_deviation
         # Learning rate can be reduced linearly until it reaches the end of the first epoch (then stays stable)
         self.final_lrate = final_learn_rate
         # Compute according to how much the lrate decreases and over how many epochs (num_epochs_decreasing_step)

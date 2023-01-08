@@ -45,7 +45,7 @@ class Plotter:
                 df,
                 fname=f"participle_switches_{m}_{ci}",
                 ylim=ylim,
-                ci=ci,
+                errorbar=("ci", ci),
                 n_boot=n_boot,
                 items=["switched_participle_prog", "switched_participle_perfect"],
             )
@@ -75,7 +75,7 @@ class Plotter:
                 x="epoch",
                 y=item,
                 data=df,
-                ci=ci,
+                errorbar=("ci", ci),
                 n_boot=n_boot,
                 label=self.rename_label[item],
                 color=("#de8f05" if "perfect" in item else "#0173b2"),
@@ -143,7 +143,7 @@ class Plotter:
             y="code_switched_percentage",
             hue="model",
             data=df,
-            ci=68,
+            errorbar=("ci", 68),
             n_boot=1000,
         )
 
@@ -235,7 +235,7 @@ class Plotter:
                         x=xrow,
                         y=f"{label}_percentage",
                         hue=hue,
-                        ci=ci,
+                        errorbar=("ci", ci),
                         n_boot=1000,
                         data=df,
                         palette=["#de8f05", "#0173b2"],
@@ -247,7 +247,7 @@ class Plotter:
                         x=xrow,
                         y=f"{label}",
                         hue=hue,
-                        ci=ci,
+                        errorbar=("ci", ci),
                         n_boot=1000,
                         data=df,
                         palette=["#de8f05", "#0173b2"],
@@ -269,7 +269,7 @@ class Plotter:
                         x=xrow,
                         y=f"{label}_percentage",
                         hue=hue,
-                        ci=ci,
+                        errorbar=("ci", ci),
                         n_boot=1000,
                         data=df,
                         errcolor="gray",
@@ -280,7 +280,7 @@ class Plotter:
                         x=xrow,
                         y=f"{label}_percentage",
                         data=df,
-                        ci=ci,
+                        errorbar=("ci", ci),
                         n_boot=1000,
                         errcolor="gray",
                         errwidth=1.5,
@@ -352,7 +352,7 @@ class Plotter:
                 x="epoch",
                 y=f"{label}_percentage",
                 hue="model",
-                ci=ci,
+                errorbar=("ci", ci),
                 n_boot=1000,
                 data=df,
             )
@@ -892,7 +892,7 @@ class Plotter:
                 y="grammaticality_percentage",
                 data=df,
                 color="#0173b2",
-                size=2,
+                size=1,
                 alpha=0.5,
             )
             sns.swarmplot(
@@ -900,7 +900,7 @@ class Plotter:
                 y="meaning_percentage",
                 data=df,
                 color="#de8f05",
-                size=2,
+                size=1,
                 alpha=0.5,
             )
 
@@ -1087,7 +1087,11 @@ class Plotter:
         plt.ylim([0, 40])
         ci = None if include_swarmplot else 95
         ax = sns.lineplot(
-            x="epoch", y="code_switched_percentage", hue="model", data=df_full, ci=ci
+            x="epoch",
+            y="code_switched_percentage",
+            hue="model",
+            data=df_full,
+            errorbar=("ci", ci),
         )
         handles, labels = ax.get_legend_handles_labels()
         rename_labels = {
