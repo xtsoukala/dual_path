@@ -5,5 +5,5 @@ seaborn==0.12.0
 scipy==1.9.2
 scikits.bootstrap==1.1.0
 joblib==1.2.0
-torch==1.12.1
+torch==1.13.1
 lz4==4.0.2
