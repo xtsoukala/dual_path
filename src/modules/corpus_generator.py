@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import random
 import re
 import sys
 import time
@@ -32,7 +31,8 @@ class SetsGenerator:
         input_dir=None,
         sim_results_dir=None,
         l1_overt_pronouns=1.0,
-        l2_overt_pronouns=1.0
+        l2_overt_pronouns=1.0,
+        event_semantic_string="EVENT-SEM",
     ):
         """
         :param allow_free_structure_production:
@@ -68,14 +68,15 @@ class SetsGenerator:
         self.concepts = self.lexicon_df.concept.dropna().unique()
         # source: https://www.realfastspanish.com/vocabulary/spanish-cognates
         # http://mentalfloss.com/article/57195/50-spanish-english-false-friend-words
-        self.event_semantic_string = "EVENT-SEM"
+        self.event_semantic_string = event_semantic_string
         self.structures_df = self.get_structures(structures_csv)
+        # collect thematic roles based on the messages (e.g., AGENT, PATIENT)
         self.roles = (
             self.structures_df["message"]
             .str.extractall("(;|^)?([A-Z-]*)(=)")[1]
             .unique()
             .tolist()
-        )  # AGENT etc
+        )
         # exclude event semantics from the roles:
         self.roles = [
             role.strip() for role in self.roles if role != self.event_semantic_string
@@ -114,7 +115,8 @@ class SetsGenerator:
                 f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
                 f"L2 decimal fraction: {self.l2_decimal}"
             )
-        test_set, training_set = self.generate_general()
+        _, training_set = self.generate_general()
+
         if self.auxiliary_experiment:
             self.generate_auxiliary_experiment_sentences(
                 excluded_sentences=training_set
@@ -139,27 +141,45 @@ class SetsGenerator:
 
     @staticmethod
     def get_unique_event_semantics(dataset):
-        """1. Extracts the messages from the sentence-message dataset pair
-           2. Extracts all EVENT-SEM contents from the messages
-           3. Returns the unique EVENT-SEM content values"""
+        """
+        1. Extracts the messages from the sentence-message dataset pair
+        2. Extracts all EVENT-SEM contents from the messages
+        3. Returns the unique EVENT-SEM content values
+        """
         message_list = [pair[1] for pair in dataset]
         unique_event_semantics = re.findall(r"EVENT-SEM=(.*?);", "@".join(message_list))
-        return set(",".join(unique_event_semantics).split(','))
+        return set(",".join(unique_event_semantics).split(","))
 
-    def generate_general(self):
+    def generate_general(
+        self, test_set_fname="test.in", training_set_fname="training.in"
+    ):
         sentence_structures_train = self.generate_sentence_structures(self.num_training)
         sentence_structures_test = self.generate_sentence_structures(self.num_test)
         # save only training set if we're selecting sentences for the cognate experiment
-        test_set = self.generate_sentences(sentence_structures_test, fname="test.in")
+        test_set = self.generate_sentences(
+            sentence_structures_test, fname=test_set_fname
+        )
         training_set = self.generate_sentences(
             sentence_structures_train,
-            fname="training.in",
+            fname=training_set_fname,
             exclude_test_sentences=test_set,
         )
+
+        # the following two lines manipulate the percentage of overt pronouns
+        # according to --L1-overt-pronouns and --L2-overt-pronouns
+        test_set = self.manipulate_pronouns(test_set)
+        training_set = self.manipulate_pronouns(training_set)
+
         assert self.num_test == len(test_set) and self.num_training == len(training_set)
+
+        self.save_language_sets(fname=test_set_fname, generated_pairs=test_set)
+        self.save_language_sets(fname=training_set_fname, generated_pairs=training_set)
+
         if self.input_dir_empty:
             self.input_dir_empty = False  # the files are generated in parallel, signal here already & check in function
-            self.save_lexicon_and_structures_to_csv(event_semantics=self.get_unique_event_semantics(training_set))
+            self.save_lexicon_and_structures_to_csv(
+                event_semantics=self.get_unique_event_semantics(training_set)
+            )
         return test_set, training_set
 
     def generate_auxiliary_experiment_sentences(
@@ -244,13 +264,10 @@ class SetsGenerator:
         self.random.shuffle(sentence_structures)
         return sentence_structures
 
-    @staticmethod
-    def get_index_of_pronoun_sentences(structures, lang):
-        """Get all indices of messages that contain a pronoun"""
-        return [idx for idx, message in enumerate(structures) if "=pron" in message[0] and f'={lang}' in message[0]]
-
     def structures_per_lang_and_occurrance(self, df, num_total, lang):
-        occurrences = [self.convert_to_int(x) for x in df[f"percentage_{lang}"] * num_total / 100]
+        occurrences = [
+            self.convert_to_int(x) for x in df[f"percentage_{lang}"] * num_total / 100
+        ]
         df_copy = df.copy()
         if self.use_message_l2 and lang == self.L[2]:
             df_copy.loc[(pd.notnull(df_copy["message_l2"])), "message"] = df_copy.loc[
@@ -283,23 +300,110 @@ class SetsGenerator:
 
         return sentence_structures
 
-    def manipulate_pronouns(self, sentence_structures, lang):
-        # manipulate the occurance of overt pronouns for this language
-        overt_pronouns = 1.0
-        if lang == self.L[1] and self.l1_overt_pronouns < 1.0:
-            overt_pronouns = self.l1_overt_pronouns
-        elif lang == self.L[2] and self.l2_overt_pronouns < 1.0:
-            overt_pronouns = self.l2_overt_pronouns
+    def remove_sentence_pronouns(
+        self, sentence_message_df, overt_pronouns, target_lang, language_pronouns
+    ):
+        """
+        main script that removes non-overt pronouns from a language-specific sentence
+        @sentence_message_df: a pandas dataframe containing (completed) sentence and messages
+        @target_lang: the target language code. E.g., 'en' for English
+        @language_pronouns: a list of language-specific pronouns,
+                            as collected from the lexicon. E.g., ['he', 'she']
+        """
+        agent_thematic_role = "AGENT"
+        if agent_thematic_role not in self.roles:
+            # WARNING: this assumes that if the agent is not called AGENT, it will be the
+            # first thematic role or the message. Currently, this is a safe
+            # assumption, but it could go wrong when more messages and structure types are added
+            agent_thematic_role = self.roles[0]
 
-        if overt_pronouns < 1.0:
-            # keep only the list items that have L1 as the target lang plus pronouns
-            sentences_with_pronoun = len(list(filter(lambda x: '=pron;' in x[0], sentence_structures)))
-            pronouns_to_remove = int(sentences_with_pronoun - (sentences_with_pronoun * overt_pronouns))
-            all_pronoun_sentence_idx = self.get_index_of_pronoun_sentences(sentence_structures, lang=lang)
-            # randomly select x items that will become pro-drop
-            idx_to_remove_pron = random.sample(all_pronoun_sentence_idx, pronouns_to_remove)
-            for idx in idx_to_remove_pron:
-                sentence_structures[idx][1] = sentence_structures[idx][1].replace('pron ', '')
+        # collect language-specific sentences only; check whether the message ends with the
+        # target language code AND if the message contains a pronoun (=pron)
+        sentences_with_pronouns = sentence_message_df[
+            sentence_message_df.message.str.endswith(target_lang)
+            & sentence_message_df.message.str.contains("=pron")
+        ]
+
+        # convert the language-specific pronoun list to a regex OR. For instance,
+        # (he|she) will remove "he" or "she" from sentences
+        pronoun_words = f"({'|'.join(language_pronouns)})"
+
+        # count the number of sentences with pronouns
+        num_pronouns = len(sentences_with_pronouns)
+        # calculate the number of sentences that will become pro-drop
+        pronouns_to_remove = int(num_pronouns - (num_pronouns * overt_pronouns))
+
+        # randomly select a number of sentences based on
+        # "pronouns_to_remove" and collect their indices
+        sentence_indexes_of_pronouns_to_remove = sentences_with_pronouns.sample(
+            n=pronouns_to_remove
+        ).index
+
+        # remove the pronoun_words from selected sentences
+        # (i.e., whose index matches sentence_indexes_of_pronouns_to_remove),
+        # plus an extra space after the word
+        sentence_message_df.loc[
+            sentence_indexes_of_pronouns_to_remove, "sentence"
+        ] = sentence_message_df.loc[
+            sentence_indexes_of_pronouns_to_remove, "sentence"
+        ].str.replace(
+            rf"\b{pronoun_words}\b ", "", regex=True
+        )
+
+        # Additionally, we need to indicate in the event semantics that there is
+        # a difference between overt and dropped pronouns, otherwise pro-drop and overt
+        # pronouns will be used interchangeably.
+        # I have chosen to lower the AGENT activation (AGENT:0.5) in pro-drop sentences,
+        # but there could be alternative implementations. For instance, you could append
+        # "PRODROP" to the event semantics or something similar.
+        # So: same process as above (same indexes), but this time we'll alter teh message:
+        sentence_message_df.loc[
+            sentence_indexes_of_pronouns_to_remove, "message"
+        ] = sentence_message_df.loc[
+            sentence_indexes_of_pronouns_to_remove, "message"
+        ].str.replace(
+            f"{agent_thematic_role},", f"{agent_thematic_role}:0.5,", regex=True
+        )
+
+        # return the dataframe for further manipulation (e.g., for L2 pronouns)
+        return sentence_message_df
+
+    def manipulate_pronouns(self, sentence_message_tuples):
+        """This helper script manipulates the occurance of overt pronouns per language
+        @sentence_message_tuples: the training or test set. It is a list of
+                                  several tuples in the (sentence, message)
+                                  format
+        """
+        if not (self.l1_overt_pronouns < 1.0 or self.l2_overt_pronouns < 1.0):
+            # both languages have fully overt pronouns, no need to manipulate anything
+            return sentence_message_tuples
+
+        # retrieve lexicon rows that refer to pronouns
+        lexicon_pronouns = self.lexicon_df[self.lexicon_df.pos == "pron"]
+
+        # convert the tuples to a pandas dataframe for easier data manipulation
+        df = pd.DataFrame(sentence_message_tuples, columns=["sentence", "message"])
+        if self.l1_overt_pronouns < 1.0:
+            df = self.remove_sentence_pronouns(
+                sentence_message_df=df,
+                overt_pronouns=self.l1_overt_pronouns,
+                target_lang=self.L[1],
+                language_pronouns=lexicon_pronouns[
+                    f"morpheme_{self.L[1]}"
+                ].values.tolist(),
+            )
+        if self.l2_overt_pronouns < 1.0:
+            # repeat the process for L2 pronouns
+            df = self.remove_sentence_pronouns(
+                sentence_message_df=df,
+                overt_pronouns=self.l2_overt_pronouns,
+                target_lang=self.L[2],
+                language_pronouns=lexicon_pronouns[
+                    f"morpheme_{self.L[2]}"
+                ].values.tolist(),
+            )
+        # now convert the dataframe back to a list of tuples
+        return list(df.itertuples(index=False, name=None))
 
     def distribute_percentages_equally_if_not_set(self, df):
         keys = [f"percentage_{self.L[1]}"]
@@ -366,10 +470,10 @@ class SetsGenerator:
                 exclude_eos_cognate,
             )
         self.random.shuffle(generated_pairs)
-        self.save_language_sets(fname, generated_pairs)
         return generated_pairs
 
     def save_language_sets(self, fname, generated_pairs):
+        """Save the list of sentence-message tuples to a file"""
         with open("%s/%s" % (self.results_dir, fname), "w", encoding="utf-8") as f:
             for sentence, message in generated_pairs:
                 f.write("%s## %s\n" % (sentence, message))
@@ -381,7 +485,9 @@ class SetsGenerator:
 
     @staticmethod
     def get_semantic_message_id(messages):
-        sem_id = [idx for idx, mes in enumerate(messages) if mes.startswith('EVENT-SEM=')]
+        sem_id = [
+            idx for idx, mes in enumerate(messages) if mes.startswith("EVENT-SEM=")
+        ]
         if sem_id:
             return sem_id[0]
         return None
@@ -985,13 +1091,16 @@ class SetsGenerator:
         existing_training_set_sentences = self.file_set_to_list(
             f"{self.root_simulations_path}/" f"{simulation_number}/training.in"
         )
+        fname = "test_cog.in"
         test_set = self.generate_sentences(
             sentence_structures_test,
-            fname="test_cog.in",
+            fname=fname,
             exclude_test_sentences=existing_training_set_sentences,
             exclude_eos_cognate=False,
         )
+        test_set = self.manipulate_pronouns(test_set)
         assert num_test_sentences == len(test_set)
+        self.save_language_sets(fname, test_set)
 
     def generate_test_set(
         self, simulation_number, num_test_sentences, path_to_exclude_training_files=None
@@ -1017,12 +1126,15 @@ class SetsGenerator:
             )
         else:
             existing_training_set_sentences = None
+        fname = "test.in"
         test_set = self.generate_sentences(
             sentence_structures_test,
-            fname="test.in",
+            fname=fname,
             exclude_test_sentences=existing_training_set_sentences,
         )
+        test_set = self.manipulate_pronouns(test_set)
         assert num_test_sentences == len(test_set)
+        self.save_language_sets(fname, test_set)
 
     @staticmethod
     def file_set_to_list(fname):

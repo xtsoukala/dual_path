@@ -569,8 +569,8 @@ class DualPath:
                     produced_pos = self.inputs.sentence_pos(produced_idx)
                     debug_specific_sentence = False
                     if debug_specific_sentence:
-                        produced_sentence = "el señor is llevando la silla ."
-                        target_sentence = "el señor está llevando la silla ."
+                        produced_sentence = "él has the book ."
+                        target_sentence = "él empuja el libro ."
                         target_lang = "es"
                         logging.info(
                             f"Debugging sentence pair: {produced_sentence} target: {target_sentence}"
@@ -581,6 +581,30 @@ class DualPath:
                             target_sentence
                         )
                         target_pos = self.inputs.sentence_pos(target_sentence_idx)
+                        (
+                            code_switched,
+                            first_switch_position,
+                        ) = self.inputs.is_code_switched(
+                            sentence_idx=produced_idx,
+                            target_lang=target_lang,
+                            target_sentence_idx=target_sentence_idx,
+                            return_position=True,
+                            srn_only=self.srn_only,
+                        )
+                        (cs_type, cs_pos_point,) = self.inputs.get_code_switched_type(
+                            out_sentence_idx=produced_idx,
+                            out_pos=produced_pos,
+                            trg_sentence_idx=target_sentence_idx,
+                            target_lang=target_lang,
+                            top_down_language_activation=top_down_language_activation,
+                        )
+                        print(
+                            code_switched, first_switch_position, cs_type, cs_pos_point
+                        )
+                        import sys
+
+                        sys.exit()
+                    # end of sentence debug
 
                     (
                         has_wrong_det,
@@ -653,7 +677,7 @@ class DualPath:
                             True,
                             True,
                             False,
-                        )  # Assumption: input isn't code-switched
+                        )  # ASSUMPTION: input isn't already code-switched
                     else:
                         (
                             is_grammatical,
@@ -681,11 +705,11 @@ class DualPath:
                                     cs_type,
                                     cs_pos_point,
                                 ) = self.inputs.get_code_switched_type(
-                                    produced_idx,
-                                    produced_pos,
-                                    target_sentence_idx,
-                                    target_lang,
-                                    top_down_language_activation,
+                                    out_sentence_idx=produced_idx,
+                                    out_pos=produced_pos,
+                                    trg_sentence_idx=target_sentence_idx,
+                                    target_lang=target_lang,
+                                    top_down_language_activation=top_down_language_activation,
                                 )
                                 if (
                                     cs_type == "inter-sentential"

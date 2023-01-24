@@ -35,7 +35,7 @@ def check_given_input_path(input_path):
 def file_to_list(fname_path):
     if fname_path:
         if not os.path.exists(fname_path):
-            sys.exit(f"Wrong path for excluded file: {fname_path}")
+            sys.exit(f"Wrong path given: {fname_path}")
         with open(fname_path, encoding="utf-8") as f:
             return [line.rstrip("\n") for line in f]
     return []
