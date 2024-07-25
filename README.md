@@ -21,12 +21,11 @@ The model is trained on these examples in the following manner: it receives a me
 
 To run this project you need a Python version >= 3.6. To install the requirements, it it recommended that you first create and activate a virtual environment. There are several ways to create a virtual environment; for instance:
 
-```
-python3.8 -m venv env
-source env/bin/activate
-```
+- `conda create -y --name dual python=3.11`, where `dual` is the name of the environment.
+To activate it, run:
+- `conda activate dual`
 
-Once you are in the virtual environment, install the requirements:
+Once you are in the virtual environment, install all Python packages:
 
 ```
 pip install -r requirements.txt
