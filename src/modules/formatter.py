@@ -62,9 +62,9 @@ class InputFormatter:
         )  # 1st line:header
         self.cognate_list = cognate_list
         if cognate_list:
-            self.lexicon_df.loc[
-                :, "is_cognate"
-            ] = False  # reset any preexisting cognates
+            self.lexicon_df.loc[:, "is_cognate"] = (
+                False  # reset any preexisting cognates
+            )
             self.lexicon_df.loc[
                 self.lexicon_df.concept.isin(cognate_list), "is_cognate"
             ] = True
@@ -763,7 +763,7 @@ class InputFormatter:
             )
             logging.debug(
                 f"switched_right_after: "
-                f"{self.sentence_from_indices(sentence_indices[target_idx:target_idx + 2])}, "
+                f"{self.sentence_from_indices(sentence_indices[target_idx : target_idx + 2])}, "
                 f"{switched_right_after}"
             )
             switched_right_after_es_en = (
@@ -777,7 +777,7 @@ class InputFormatter:
             )
             logging.debug(
                 "switched_one_after: "
-                f"{self.sentence_from_indices(sentence_indices[target_idx + 1:target_idx + 3])}"
+                f"{self.sentence_from_indices(sentence_indices[target_idx + 1 : target_idx + 3])}"
                 f"{switched_one_after}"
             )
             switched_one_after_es_en = (
@@ -791,7 +791,7 @@ class InputFormatter:
                 target_sentence_idx=target_sentence_idx,
             )
             logging.debug(
-                f"switched_after_anywhere: {self.sentence_from_indices(sentence_indices[target_idx + 1:])}"
+                f"switched_after_anywhere: {self.sentence_from_indices(sentence_indices[target_idx + 1 :])}"
                 f"{switched_after_anywhere}"
             )
             switched_after_anywhere_es_en = (
@@ -919,9 +919,9 @@ class InputFormatter:
             df.iloc[df_half_idx::2, df.columns.get_loc("target_sentence")] = df.iloc[
                 df_half_idx::2, df.columns.get_loc("alt_sentence")
             ]
-            df.iloc[
-                df_half_idx::2, df.columns.get_loc("target_sentence_idx")
-            ] = df.iloc[df_half_idx::2, df.columns.get_loc("alt_sentence_idx")]
+            df.iloc[df_half_idx::2, df.columns.get_loc("target_sentence_idx")] = (
+                df.iloc[df_half_idx::2, df.columns.get_loc("alt_sentence_idx")]
+            )
 
             df["sentence_structure"] = df.target_sentence_idx.apply(
                 self.get_sentence_structure
@@ -1139,9 +1139,9 @@ class InputFormatter:
                                 logging.error(
                                     f"There is an error in the message: {message}"
                                 )
-                            event_sem_activations[
-                                self.event_sem_index[event]
-                            ] = activation
+                            event_sem_activations[self.event_sem_index[event]] = (
+                                activation
+                            )
                 elif role == "TARGET-LANG":
                     if what in self.target_lang:
                         target_language = what

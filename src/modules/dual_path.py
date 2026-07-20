@@ -241,9 +241,7 @@ class DualPath:
             self.srn.add_layer("input_copy", self.inputs.lexicon_size)
             self.srn.connect_layers("input", "hidden")
 
-        if (
-            self.role_copy
-        ):  # it does not seem to improve performance, set default to False to keep model simple
+        if self.role_copy:  # it does not seem to improve performance, set default to False to keep model simple
             self.srn.add_layer("role_copy", self.inputs.roles_size)
             self.srn.connect_layers("role_copy", "hidden")
 
@@ -394,7 +392,7 @@ class DualPath:
                     logging.warning(
                         f"set_weights_epoch is set to {self.set_weights_epoch}. Will copy the weight of this "
                         "epoch and rename it to 0, to use as initial weights. If you meant to start training "
-                        f"from epoch {self.set_weights_epoch+1} (i.e., for {self.epochs - self.set_weights_epoch} "
+                        f"from epoch {self.set_weights_epoch + 1} (i.e., for {self.epochs - self.set_weights_epoch} "
                         f"more epochs instead of {self.epochs} that you set as total epochs), "
                         "make sure you use the '--l2_epoch' flag."
                     )
@@ -591,7 +589,10 @@ class DualPath:
                             return_position=True,
                             srn_only=self.srn_only,
                         )
-                        (cs_type, cs_pos_point,) = self.inputs.get_code_switched_type(
+                        (
+                            cs_type,
+                            cs_pos_point,
+                        ) = self.inputs.get_code_switched_type(
                             out_sentence_idx=produced_idx,
                             out_pos=produced_pos,
                             trg_sentence_idx=target_sentence_idx,
@@ -718,9 +719,7 @@ class DualPath:
                                     # Assumption: we are not interested in inter-sentential,
                                     # i.e., Spanish sentence when the target language was English
                                     code_switched = False
-                                elif (
-                                    cs_type
-                                ):  # Correct CS only. TODO: check the failed sentences too
+                                elif cs_type:  # Correct CS only. TODO: check the failed sentences too
                                     correct_meaning = True
                                     if (
                                         pos_interest and pos_interest in produced_pos
@@ -1001,8 +1000,8 @@ class DualPath:
                             correct_alternative_meaning = True
 
                 # NOTE: if meaning is flexible we count it as "flex-False", not "flex-True"
-                meaning = f'{"flex-" if has_wrong_det or has_wrong_tense else ""}{correct_meaning}'
-                pos = f'{"flex-" if flexible_order else ""}{has_correct_pos or flexible_order}'
+                meaning = f"{'flex-' if has_wrong_det or has_wrong_tense else ''}{correct_meaning}"
+                pos = f"{'flex-' if flexible_order else ''}{has_correct_pos or flexible_order}"
 
                 target_structure = None
                 if correct_alternative_meaning:
