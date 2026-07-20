@@ -584,7 +584,7 @@ if __name__ == "__main__":
 
         if args.target_lang:  # replace with given target language
             with open(f"{given_input_path}/target_lang.in", "w", encoding="utf-8") as f:
-                f.write(f"%s" % "\n".join(args.target_lang))
+                f.write("%s" % "\n".join(args.target_lang))
 
     if not args.input or (args.input and args.num_cognate_models_for_test_set > 0):
         from modules.corpus_generator import SetsGenerator  # generate a set

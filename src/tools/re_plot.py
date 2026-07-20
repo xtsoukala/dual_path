@@ -126,7 +126,7 @@ def create_model_csv_files(
         ] = -1
 
         # sentences that are correctly produced among all models
-        fname = f'all_epochs_{"_".join(model_pair).replace("/", "_")}.csv'
+        fname = f"all_epochs_{'_'.join(model_pair).replace('/', '_')}.csv"
 
         # remove sentences that have not been produced by both cognate/non-cognate models
         count_correct = sentences_to_test.groupby("sentence_idx").count()
@@ -196,7 +196,7 @@ def group_models(results_dir, fname, make_exclusive=False, per_switch_direction=
             lambda x: 0 if x["switched_before"] == 1 else x["switched_at"], axis=1
         )
     df.to_csv(
-        f'{results_dir}/{"exclusive_" if make_exclusive else ""}{"per_lang" if per_switch_direction else ""}'
+        f"{results_dir}/{'exclusive_' if make_exclusive else ''}{'per_lang' if per_switch_direction else ''}"
         f"{fname}"
     )
 
@@ -239,7 +239,7 @@ def group_models(results_dir, fname, make_exclusive=False, per_switch_direction=
     )
 
     gb.to_csv(
-        f'{results_dir}/{"exclusive_" if make_exclusive else ""}{"per_lang" if per_switch_direction else ""}'
+        f"{results_dir}/{'exclusive_' if make_exclusive else ''}{'per_lang' if per_switch_direction else ''}"
         f"count_{fname}"
     )
 
@@ -353,8 +353,7 @@ def pairwise_cross_model_comparison(
 
 
 def non_pairwise_cross_model_comparison(
-    results_dir="../../simulations/cog_paper/cognate_percentage/"
-    "non_pairwise_training/",
+    results_dir="../../simulations/cog_paper/cognate_percentage/non_pairwise_training/",
     create_csv=True,
     num_simulations=70,
     remove_incorrect_meaning=True,
@@ -416,7 +415,7 @@ def non_pairwise_cross_model_comparison(
         )
         gb.to_csv(
             f"{results_dir}/non_pairwise_test_sets_grouped"
-            f'{f"_include_incorrect" if not remove_incorrect_meaning else ""}.csv'
+            f"{'_include_incorrect' if not remove_incorrect_meaning else ''}.csv"
         )
 
     plt = Plotter(results_dir=results_dir)
@@ -479,7 +478,7 @@ def cognate_simulations(
                 else ("code_switched",)
             )
             plt.plot_cognate_last_epoch(
-                df_name=f'{"per_lang" if per_switch_direction else ""}'
+                df_name=f"{'per_lang' if per_switch_direction else ''}"
                 f"count_{i}_models_merged.csv",
                 ci=68,
                 info_to_plot=info_to_plot,

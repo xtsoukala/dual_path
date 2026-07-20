@@ -3,7 +3,7 @@ from operator import truediv
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scikits.bootstrap as boot
+from scipy.stats import bootstrap
 import seaborn as sns
 
 sns.set(palette="colorblind")
@@ -205,7 +205,7 @@ class Plotter:
         plt.xlabel("Bilingual simulations")
         plt.ylabel(
             f"code-switched percentage "
-            f'{f"(L1 sentences)" if "L1" in df_name else "(L2 sentences)" if "L2" in df_name else ""}'
+            f"{'(L1 sentences)' if 'L1' in df_name else '(L2 sentences)' if 'L2' in df_name else ''}"
         )
         plt.ylim([0, ylim])
         plt.savefig(f"{self.results_dir}/test_{df_name}")
@@ -323,9 +323,9 @@ class Plotter:
             plt.savefig(
                 self.get_plot_path(
                     df.network_num.max(),
-                    f'{label}_{ci}CI_{df_name.replace(".csv", "").replace("_models_merged", "")}'
-                    f'epoch{df.epoch.max()}{"_line" if lineplot else ""}_'
-                    f'sent{int(df.total_sentences.sum())}{hue if hue else ""}',
+                    f"{label}_{ci}CI_{df_name.replace('.csv', '').replace('_models_merged', '')}"
+                    f"epoch{df.epoch.max()}{'_line' if lineplot else ''}_"
+                    f"sent{int(df.total_sentences.sum())}{hue if hue else ''}",
                 )
             )
             plt.close()
@@ -373,7 +373,7 @@ class Plotter:
             plt.ylim([0, 32])
             plt.savefig(
                 self.get_plot_path(
-                    df.network_num.max(), f'{label}_{df_name.replace(".csv", "")}'
+                    df.network_num.max(), f"{label}_{df_name.replace('.csv', '')}"
                 )
             )
             plt.close()
@@ -1141,11 +1141,11 @@ class Plotter:
                 df = df[df.epoch == (l2_epoch if m == "early" else df.epoch.max())]
                 print(df.epoch.max())
                 cs_sum = (
-                    df[f"alternational_percentage"]
-                    + df[f"insertional_percentage"]
-                    + df[f"ambiguous_percentage"]
+                    df["alternational_percentage"]
+                    + df["insertional_percentage"]
+                    + df["ambiguous_percentage"]
                 )
-                low, high = boot.ci(cs_sum, n_samples=n_sample)
+                low, high = bootstrap.ci(cs_sum, n_samples=n_sample)
                 print(
                     "TOTAL",
                     round(cs_sum.mean(), 1),
@@ -1154,7 +1154,9 @@ class Plotter:
                     round(high, 1),
                 )
                 for stype in switch_type:
-                    low, high = boot.ci(df[f"{stype}_percentage"], n_samples=n_sample)
+                    low, high = bootstrap.ci(
+                        df[f"{stype}_percentage"], n_samples=n_sample
+                    )
                     print(
                         stype,
                         round(df[f"{stype}_percentage"].mean(), 1),
@@ -1177,11 +1179,11 @@ class Plotter:
                     df_lang = df[df.switch_from == lang]
 
                     cs_sum = (
-                        df_lang[f"alternational_percentage"]
-                        + df_lang[f"insertional_percentage"]
-                        + df_lang[f"ambiguous_percentage"]
+                        df_lang["alternational_percentage"]
+                        + df_lang["insertional_percentage"]
+                        + df_lang["ambiguous_percentage"]
                     )
-                    low, high = boot.ci(cs_sum, n_samples=n_sample)
+                    low, high = bootstrap.ci(cs_sum, n_samples=n_sample)
                     print(
                         "TOTAL per lang",
                         round(cs_sum.mean(), 1),
@@ -1191,7 +1193,7 @@ class Plotter:
                     )
 
                     for stype in switch_type:
-                        low, high = boot.ci(
+                        low, high = bootstrap.ci(
                             df_lang[f"{stype}_percentage"], n_samples=n_sample
                         )
                         print(
@@ -1207,4 +1209,4 @@ class Plotter:
         alpha = 0.05
         if ci == 68:
             alpha = 0.32
-        return boot.ci(df, n_samples=n_samples, alpha=alpha)
+        return bootstrap.ci(df, n_samples=n_samples, alpha=alpha)

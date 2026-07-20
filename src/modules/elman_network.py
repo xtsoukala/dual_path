@@ -51,9 +51,7 @@ class SimpleRecurrentNetwork:
     def _complete_initialization(self):
         self.feedforward_layers = self.get_feedforward_layers()
         self.backpropagated_layers = self.get_backpropagation_layers()
-        for (
-            layer
-        ) in (
+        for layer in (
             self.layers.values()
         ):  # if there are > 1 layers and if at least one has input weights
             if all(layer.in_weights):
@@ -263,9 +261,7 @@ class SimpleRecurrentNetwork:
         ):  # all layers but "output" (which has error and gradient precomputed)
             # for some layers (hidden and pred_role) there are 2 errors to be backpropagated; sum them
             error_out = stack(self.current_layer.error_out, dim=0).sum(dim=0)
-            self.current_layer.error_out = (
-                []
-            )  # initialize for following gradient computation
+            self.current_layer.error_out = []  # initialize for following gradient computation
             # Calculate derivative (Do) and gradient δo = Eo • Do  (or Do * Eo)
             self.current_layer.gradient = error_out * derivative(
                 self.current_layer.activation, self.current_layer.activation_function

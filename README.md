@@ -33,7 +33,10 @@ pip install -r requirements.txt
 
 It has been tested on MacOS, Ubuntu, and WSL on Windows; it seems to have encoding issues on (non-WSL) Windows.
 
-**Note**: If you have issues installing the dependencies on an M1 Mac, try running: `xcodebuild -runFirstLaunch` and repeat the installation process.
+**Note** for MacOS: 
+- If you have issues installing the dependencies on MacOS, try running: `xcodebuild -runFirstLaunch` and repeat the installation process.
+- If you hit `ssl module not available` errors during `pip install`, your Python build is missing OpenSSL. Fix with `brew install openssl@3`
+
 
 # How to run the simulations
 

@@ -112,7 +112,7 @@ class SetsGenerator:
                 self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2
             )
             print(
-                f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                f"Input for sim. {simulation_number}: L1 decimal fraction: {1.0 - self.l2_decimal:.2}, "
                 f"L2 decimal fraction: {self.l2_decimal}"
             )
         _, training_set = self.generate_general()
@@ -294,9 +294,9 @@ class SetsGenerator:
                 ),
                 axis=0,
             )
-        sentence_structures[
-            :, 0
-        ] += f";TARGET-LANG={lang}"  # append language code at the end
+        sentence_structures[:, 0] += (
+            f";TARGET-LANG={lang}"  # append language code at the end
+        )
 
         return sentence_structures
 
@@ -342,12 +342,10 @@ class SetsGenerator:
         # remove the pronoun_words from selected sentences
         # (i.e., whose index matches sentence_indexes_of_pronouns_to_remove),
         # plus an extra space after the word
-        sentence_message_df.loc[
-            sentence_indexes_of_pronouns_to_remove, "sentence"
-        ] = sentence_message_df.loc[
-            sentence_indexes_of_pronouns_to_remove, "sentence"
-        ].str.replace(
-            rf"\b{pronoun_words}\b ", "", regex=True
+        sentence_message_df.loc[sentence_indexes_of_pronouns_to_remove, "sentence"] = (
+            sentence_message_df.loc[
+                sentence_indexes_of_pronouns_to_remove, "sentence"
+            ].str.replace(rf"\b{pronoun_words}\b ", "", regex=True)
         )
 
         # Additionally, we need to indicate in the event semantics that there is
@@ -357,12 +355,12 @@ class SetsGenerator:
         # but there could be alternative implementations. For instance, you could append
         # "PRODROP" to the event semantics or something similar.
         # So: same process as above (same indexes), but this time we'll alter teh message:
-        sentence_message_df.loc[
-            sentence_indexes_of_pronouns_to_remove, "message"
-        ] = sentence_message_df.loc[
-            sentence_indexes_of_pronouns_to_remove, "message"
-        ].str.replace(
-            f"{agent_thematic_role},", f"{agent_thematic_role}:0.5,", regex=True
+        sentence_message_df.loc[sentence_indexes_of_pronouns_to_remove, "message"] = (
+            sentence_message_df.loc[
+                sentence_indexes_of_pronouns_to_remove, "message"
+            ].str.replace(
+                f"{agent_thematic_role},", f"{agent_thematic_role}:0.5,", regex=True
+            )
         )
 
         # return the dataframe for further manipulation (e.g., for L2 pronouns)
@@ -549,7 +547,7 @@ class SetsGenerator:
                     )
                 elif "modal" in pos and "type" in morpheme_df and event_semantics_id:
                     # add the modal verb's "meaning" to the event-semantics
-                    message[event_semantics_id] += f',{morpheme_df["type"].upper()}'
+                    message[event_semantics_id] += f",{morpheme_df['type'].upper()}"
 
                 concept = self.get_concept(morpheme_df)
                 if concept:
@@ -794,9 +792,9 @@ class SetsGenerator:
             for current_idx, next_idx in pairwise_list_view(
                 random_idx, bidirectional=bidirectional
             ):
-                self.lexicon_df.loc[
-                    current_idx, "morpheme_es"
-                ] = original_morphemes.loc[next_idx]
+                self.lexicon_df.loc[current_idx, "morpheme_es"] = (
+                    original_morphemes.loc[next_idx]
+                )
                 self.lexicon_df.loc[next_idx, "is_false_friend"] = True
         else:
             all_false_friends = []
@@ -966,9 +964,9 @@ class SetsGenerator:
     def add_concept_and_gender_info(message, concept, semantic_gender):
         return (
             f"{message}"
-            f'{"," if message[-1] != "=" else ""}'
+            f"{',' if message[-1] != '=' else ''}"
             f"{concept}"
-            f'{f",{semantic_gender}" if semantic_gender else ""}'
+            f"{f',{semantic_gender}' if semantic_gender else ''}"
         )
 
     @staticmethod
@@ -1084,12 +1082,12 @@ class SetsGenerator:
                 self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2
             )
             print(
-                f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                f"Input for sim. {simulation_number}: L1 decimal fraction: {1.0 - self.l2_decimal:.2}, "
                 f"L2 decimal fraction: {self.l2_decimal}"
             )
         sentence_structures_test = self.generate_sentence_structures(num_test_sentences)
         existing_training_set_sentences = self.file_set_to_list(
-            f"{self.root_simulations_path}/" f"{simulation_number}/training.in"
+            f"{self.root_simulations_path}/{simulation_number}/training.in"
         )
         fname = "test_cog.in"
         test_set = self.generate_sentences(
@@ -1116,13 +1114,13 @@ class SetsGenerator:
                 self.random.normal(self.l2_decimal, self.l2_decimal_dev), decimals=2
             )
             print(
-                f"Input for sim. {simulation_number}: L1 decimal fraction: {1. - self.l2_decimal:.2}, "
+                f"Input for sim. {simulation_number}: L1 decimal fraction: {1.0 - self.l2_decimal:.2}, "
                 f"L2 decimal fraction: {self.l2_decimal}"
             )
         sentence_structures_test = self.generate_sentence_structures(num_test_sentences)
         if path_to_exclude_training_files:
             existing_training_set_sentences = self.file_set_to_list(
-                f"{path_to_exclude_training_files}/" f"{simulation_number}/training.in"
+                f"{path_to_exclude_training_files}/{simulation_number}/training.in"
             )
         else:
             existing_training_set_sentences = None
